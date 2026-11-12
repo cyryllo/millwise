@@ -1,0 +1,29 @@
+[package]
+name = "millwise"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+cam-geom.workspace = true
+cam-io.workspace = true
+cam-ops.workspace = true
+cam-post.workspace = true
+cam-sim.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+dirs.workspace = true
+eframe.workspace = true
+egui-wgpu.workspace = true
+glam.workspace = true
+bytemuck.workspace = true
+rfd.workspace = true
+anyhow.workspace = true
+log.workspace = true
+env_logger.workspace = true
+
+[dev-dependencies]
+manifold-rust = "0.19"
+
+[build-dependencies]
+winresource = "0.1"

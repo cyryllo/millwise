@@ -1,0 +1,9 @@
+[package]
+name = "cam-geom"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+cavalier_contours.workspace = true
+serde.workspace = true

@@ -1,0 +1,10 @@
+[package]
+name = "cam-ops"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+cam-geom.workspace = true
+cavalier_contours.workspace = true
+serde.workspace = true

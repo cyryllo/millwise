@@ -1,0 +1,11 @@
+[package]
+name = "cam-sim"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+cam-geom.workspace = true
+cam-ops.workspace = true
+manifold-rust = "0.19"
+rayon = "1"

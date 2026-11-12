@@ -1,0 +1,1035 @@
+use crate::doc::{AlignMode, Document};
+use crate::sim_panel::SimState;
+use crate::storage;
+use crate::toolbar::{Sub, Toolbar, ToolbarAction};
+use crate::ui_machines::MachinesWindow;
+use crate::ui_ops::{self, OpsAction, OpsUi};
+use crate::ui_tools::ToolsWindow;
+use crate::view2d::{colors, op_color, Interaction, View2D, ViewEvent};
+use crate::view3d::View3D;
+use cam_geom::Vec2;
+use cam_ops::{CutParams, Operation, ToolLibrary};
+use cam_post::{Machine, MachineLibrary};
+use eframe::egui::{self, Color32, RichText};
+use std::path::{Path, PathBuf};
+
+/// Właściciel praw autorskich wyświetlany w „O programie”.
+const COPYRIGHT_HOLDER: &str = "Cyryl Sochacki";
+
+/// Projekt 2D — praca na krzywych i operacjach; Wizualizacja 3D — tylko podgląd.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ViewMode {
+    Project,
+    Visual,
+}
+
+/// Parametry narzędzi edycji (panel nad rysunkiem).
+struct EditParams {
+    dx: f64,
+    dy: f64,
+    angle: f64,
+    scale_pct: f64,
+    cols: usize,
+    rows: usize,
+    gap_x: f64,
+    gap_y: f64,
+}
+
+impl Default for EditParams {
+    fn default() -> Self {
+        Self { dx: 10.0, dy: 0.0, angle: 90.0, scale_pct: 100.0, cols: 2, rows: 1, gap_x: 5.0, gap_y: 5.0 }
+    }
+}
+
+pub struct CamApp {
+    doc: Document,
+    tools: ToolLibrary,
+    tools_window: ToolsWindow,
+    machines: MachineLibrary,
+    machines_window: MachinesWindow,
+    toolbar: Toolbar,
+    /// Operacja, do której kliknięcia dodają krzywe (None = zostanie utworzona przy pierwszym kliknięciu).
+    pick_target: Option<usize>,
+    edit: EditParams,
+    view2d: View2D,
+    view3d: View3D,
+    sim: SimState,
+    mode: ViewMode,
+    ops_ui: OpsUi,
+    error: Option<String>,
+    info: Option<String>,
+    gcode_preview: Option<Vec<String>>,
+    about_open: bool,
+    logo: Option<egui::TextureHandle>,
+}
+
+impl CamApp {
+    pub fn new(cc: &eframe::CreationContext<'_>, initial_file: Option<PathBuf>) -> Self {
+        cc.egui_ctx.set_visuals(egui::Visuals::dark());
+        let (tools, tools_warning) = storage::load_tools();
+        let (machines, machines_warning) = storage::load_machines();
+        let mut app = Self {
+            doc: Document::default(),
+            tools,
+            tools_window: ToolsWindow::default(),
+            machines,
+            machines_window: MachinesWindow::default(),
+            toolbar: Toolbar::default(),
+            pick_target: None,
+            edit: EditParams::default(),
+            view2d: View2D::default(),
+            view3d: View3D::default(),
+            sim: SimState::default(),
+            mode: ViewMode::Project,
+            ops_ui: OpsUi::default(),
+            error: tools_warning.or(machines_warning),
+            info: None,
+            gcode_preview: None,
+            about_open: false,
+            logo: None,
+        };
+        if let Some(p) = initial_file {
+            app.open_any(p);
+        }
+        // dla programisty / zrzutów ekranu: MILLWISE_OPEN=3d,tools,machines
+        if let Ok(v) = std::env::var("MILLWISE_OPEN") {
+            for w in v.split(',') {
+                match w.trim() {
+                    "3d" => app.mode = ViewMode::Visual,
+                    "bottom" => app.view3d.bottom_view = true,
+                    w if w.starts_with("simat=") => {
+                        app.mode = ViewMode::Visual;
+                        app.sim.jump_to_fraction = w[6..].parse().ok();
+                    }
+                    "simend" => {
+                        app.mode = ViewMode::Visual;
+                        app.sim.jump_to_end = true;
+                    }
+                    "tools" => app.tools_window.open = true,
+                    "machines" => app.machines_window.open = true,
+                    "about" => app.about_open = true,
+                    _ => {}
+                }
+            }
+        }
+        app
+    }
+
+    fn machine(&self) -> Machine {
+        self.machines.active().cloned().unwrap_or_default()
+    }
+
+    fn open_any(&mut self, path: PathBuf) {
+        // .camsoft — projekty z wcześniejszej wersji (przed zmianą nazwy)
+        let is_project = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("millwise") || e.eq_ignore_ascii_case("camsoft"));
+        if is_project {
+            self.open_project(&path);
+        } else {
+            self.open_dxf(path);
+        }
+    }
+
+    fn open_dxf(&mut self, path: PathBuf) {
+        match Document::load_dxf(&path) {
+            Ok(mut doc) => {
+                doc.stock = std::mem::take(&mut self.doc.stock);
+                self.set_doc(doc);
+            }
+            Err(e) => self.error = Some(format!("{e:#}")),
+        }
+    }
+
+    fn open_project(&mut self, path: &Path) {
+        match storage::load_project(path, &mut self.tools) {
+            Ok((doc, lib_changed)) => {
+                if lib_changed {
+                    self.save_tools();
+                    self.info = Some("Do biblioteki dodano narzędzia z projektu.".into());
+                }
+                self.set_doc(doc);
+            }
+            Err(e) => self.error = Some(format!("{e:#}")),
+        }
+    }
+
+    fn set_doc(&mut self, doc: Document) {
+        self.doc = doc;
+        self.stop_mode();
+        self.gcode_preview = None;
+        self.view2d.fit_requested = true;
+        self.view3d.fit_requested = true;
+    }
+
+    fn save_tools(&mut self) {
+        if let Err(e) = storage::save_tools(&self.tools) {
+            self.error = Some(format!("Nie można zapisać biblioteki narzędzi: {e:#}"));
+        }
+    }
+
+    fn save_machines(&mut self) {
+        if let Err(e) = storage::save_machines(&self.machines) {
+            self.error = Some(format!("Nie można zapisać maszyn: {e:#}"));
+        }
+    }
+
+    fn open_dialog(&mut self) {
+        let mut dlg = rfd::FileDialog::new()
+            .add_filter("DXF i projekty", &["dxf", "DXF", "millwise", "camsoft"])
+            .add_filter("DXF", &["dxf", "DXF"])
+            .add_filter("Projekt Millwise", &["millwise", "camsoft"]);
+        if let Some(dir) = self.doc.project_path.as_ref().or(self.doc.path.as_ref()).and_then(|p| p.parent()) {
+            dlg = dlg.set_directory(dir);
+        }
+        if let Some(p) = dlg.pick_file() {
+            self.open_any(p);
+        }
+    }
+
+    fn file_stem(&self) -> String {
+        self.doc
+            .project_path
+            .as_ref()
+            .or(self.doc.path.as_ref())
+            .and_then(|p| p.file_stem())
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_else(|| "program".into())
+    }
+
+    fn save_project(&mut self, ask: bool) {
+        let path = match (&self.doc.project_path, ask) {
+            (Some(p), false) => p.clone(),
+            _ => {
+                let mut dlg = rfd::FileDialog::new()
+                    .add_filter("Projekt Millwise", &["millwise"])
+                    .set_file_name(format!("{}.millwise", self.file_stem()));
+                if let Some(dir) = self.doc.path.as_ref().and_then(|p| p.parent()) {
+                    dlg = dlg.set_directory(dir);
+                }
+                let Some(mut p) = dlg.save_file() else { return };
+                if p.extension().is_none() {
+                    p.set_extension("millwise");
+                }
+                p
+            }
+        };
+        match storage::save_project(&self.doc, &self.tools, &path) {
+            Ok(()) => {
+                self.doc.project_path = Some(path.clone());
+                self.info = Some(format!("Zapisano projekt {}", path.display()));
+            }
+            Err(e) => self.error = Some(format!("{e:#}")),
+        }
+    }
+
+    fn export_gcode(&mut self) {
+        self.ensure_generated();
+        let machine = self.machine();
+        let files = match self.doc.gcode(&self.tools, &machine) {
+            Ok(f) => f,
+            Err(e) => {
+                self.error = Some(e);
+                return;
+            }
+        };
+        let ext = machine.extension().to_string();
+        let mut dlg = rfd::FileDialog::new()
+            .add_filter("G-code", &[ext.as_str(), "nc", "ngc", "gcode", "tap"])
+            .set_file_name(format!("{}.{ext}", self.file_stem()));
+        if let Some(dir) = self.doc.project_path.as_ref().or(self.doc.path.as_ref()).and_then(|p| p.parent()) {
+            dlg = dlg.set_directory(dir);
+        }
+        let Some(p) = dlg.save_file() else { return };
+        let mut written = Vec::new();
+        for (suffix, text) in &files {
+            let path = if suffix.is_empty() {
+                p.clone()
+            } else {
+                let stem = p.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+                p.with_file_name(format!("{stem}_{suffix}.{ext}"))
+            };
+            if let Err(e) = std::fs::write(&path, text) {
+                self.error = Some(format!("Nie można zapisać {}: {e}", path.display()));
+                return;
+            }
+            written.push(path.display().to_string());
+        }
+        self.info = Some(format!("Zapisano G-code:\n{}", written.join("\n")));
+    }
+
+    fn ensure_generated(&mut self) {
+        if self.doc.ops_dirty {
+            let machine = self.machine();
+            self.doc.regenerate(&self.tools, Some(&machine));
+            if self.gcode_preview.is_some() {
+                self.gcode_preview = self.preview_lines().ok();
+            }
+        }
+    }
+
+    fn preview_lines(&self) -> Result<Vec<String>, String> {
+        let files = self.doc.gcode(&self.tools, &self.machine())?;
+        let mut lines = Vec::new();
+        for (suffix, text) in files {
+            if !suffix.is_empty() {
+                lines.push(format!("(===== plik {suffix} =====)"));
+            }
+            lines.extend(text.lines().map(String::from));
+        }
+        Ok(lines)
+    }
+
+    // ---------- tryby paska narzędzi ----------
+
+    fn stop_mode(&mut self) {
+        self.toolbar.reset();
+        self.pick_target = None;
+    }
+
+    fn now(ctx: &egui::Context) -> f64 {
+        ctx.input(|i| i.time)
+    }
+
+    fn handle_toolbar(&mut self, action: ToolbarAction, ctx: &egui::Context) {
+        match action {
+            ToolbarAction::Changed => self.pick_target = None,
+            ToolbarAction::Preview => self.mode = ViewMode::Visual,
+            ToolbarAction::Command(sub) => {
+                let ok = match sub {
+                    Sub::FlipH => self.doc.flip_selected(true),
+                    Sub::FlipV => self.doc.flip_selected(false),
+                    Sub::ZeroBL | Sub::ZeroCenter | Sub::ZeroTL => {
+                        if let Some(sb) = self.doc.stock_box() {
+                            let p = match sub {
+                                Sub::ZeroBL => sb.min,
+                                Sub::ZeroTL => Vec2::new(sb.min.x, sb.max.y),
+                                _ => sb.center(),
+                            };
+                            self.doc.set_zero(p);
+                            self.view2d.fit_requested = true;
+                            self.view2d.flash(format!("Zero programu: {}", sub.label().to_lowercase()), Self::now(ctx));
+                        }
+                        true
+                    }
+                    _ => true,
+                };
+                if !ok {
+                    self.view2d.flash("Najpierw zaznacz krzywe", Self::now(ctx));
+                }
+            }
+        }
+    }
+
+    /// Operacja docelowa dla klikania; tworzy nową z szablonu wariantu, jeśli trzeba.
+    fn ensure_target(&mut self) -> Option<usize> {
+        if let Some(t) = self.pick_target.filter(|&t| t < self.doc.ops.len()) {
+            return Some(t);
+        }
+        let machine = self.machine();
+        let (kind, depth, label) = self.toolbar.current().op_template(self.doc.stock.thickness)?;
+        let tool = self.ops_ui.palette_tool.and_then(|id| self.tools.get(id)).or(self.tools.tools.first())?;
+        let mut cut = CutParams { depth, safe_z: machine.safe_z, ..Default::default() };
+        cut.apply_tool(tool, &self.doc.stock.material);
+        let n = self.doc.ops.iter().filter(|o| o.name.starts_with(label)).count() + 1;
+        let op = Operation { name: format!("{label} {n}"), enabled: true, kind, tool_id: tool.id, cut, contours: vec![] };
+        let i = self.doc.add_op(op);
+        self.pick_target = Some(i);
+        Some(i)
+    }
+
+    fn handle_view_events(&mut self, events: Vec<ViewEvent>, ctx: &egui::Context) {
+        for ev in events {
+            match ev {
+                ViewEvent::Contour(i) => {
+                    if let Some(t) = self.ensure_target() {
+                        if let Err(e) = self.doc.toggle_op_contour(t, i) {
+                            self.view2d.flash(e, Self::now(ctx));
+                        }
+                    } else {
+                        self.error = Some("Biblioteka narzędzi jest pusta — dodaj narzędzie.".into());
+                    }
+                }
+                ViewEvent::Box(found) => {
+                    if let Some(t) = self.ensure_target() {
+                        self.doc.add_op_contours(t, &found);
+                    }
+                }
+                ViewEvent::Point(p) => {
+                    if self.toolbar.current() == Sub::ZeroPick {
+                        self.doc.set_zero(p);
+                        self.view2d.fit_requested = true;
+                        self.view2d.flash(format!("Nowe zero w punkcie X {:.3} Y {:.3}", p.x, p.y), Self::now(ctx));
+                        self.stop_mode();
+                    }
+                }
+                ViewEvent::Moved(d) => {
+                    self.doc.move_selected(d);
+                }
+            }
+        }
+    }
+
+    /// Panel opcji aktywnego narzędzia nad rysunkiem 2D.
+    fn tool_options(&mut self, ctx: &egui::Context, view: egui::Rect) {
+        let sub = self.toolbar.current();
+        if sub == Sub::Select {
+            return;
+        }
+        let color = if sub.op_template(1.0).is_some() {
+            self.pick_target.map_or(sub.group().color(), op_color)
+        } else {
+            sub.group().color()
+        };
+        let mut close = false;
+        let now = Self::now(ctx);
+        let mut nothing_selected = false;
+        egui::Area::new(egui::Id::unique("tool_options"))
+            .fixed_pos(view.min + egui::vec2(10.0, 10.0))
+            .order(egui::Order::Middle)
+            .show(ctx, |ui| {
+                egui::Frame::new()
+                    .fill(Color32::from_rgba_unmultiplied(17, 19, 22, 235))
+                    .stroke(egui::Stroke::new(1.5, color))
+                    .corner_radius(8.0)
+                    .inner_margin(10.0)
+                    .show(ui, |ui| {
+                        ui.set_max_width((view.width() - 40.0).max(200.0));
+                        let e = &mut self.edit;
+                        let doc = &mut self.doc;
+                        let mut apply = |ok: bool| {
+                            if !ok {
+                                nothing_selected = true;
+                            }
+                        };
+                        match sub {
+                            Sub::Move => {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.strong("Przesuń");
+                                    ui.label(RichText::new("przeciągnij zaznaczone myszą lub:").weak());
+                                    ui.label("ΔX");
+                                    ui.add(egui::DragValue::new(&mut e.dx).speed(0.1).suffix(" mm"));
+                                    ui.label("ΔY");
+                                    ui.add(egui::DragValue::new(&mut e.dy).speed(0.1).suffix(" mm"));
+                                    if ui.button("Przesuń").clicked() {
+                                        apply(doc.move_selected(Vec2::new(e.dx, e.dy)));
+                                    }
+                                });
+                            }
+                            Sub::Rotate => {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.strong("Obróć zaznaczone wokół ich środka");
+                                    ui.add(egui::DragValue::new(&mut e.angle).speed(0.5).suffix("°"));
+                                    if ui.button("Obróć").clicked() {
+                                        apply(doc.rotate_selected(e.angle));
+                                    }
+                                    for a in [-90.0, 90.0, 180.0] {
+                                        if ui.button(format!("{a:+.0}°")).clicked() {
+                                            apply(doc.rotate_selected(a));
+                                        }
+                                    }
+                                });
+                            }
+                            Sub::Scale => {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.strong("Skaluj zaznaczone");
+                                    ui.add(egui::DragValue::new(&mut e.scale_pct).range(0.1..=10000.0).speed(0.5).suffix(" %"));
+                                    if ui.button("Skaluj").clicked() {
+                                        apply(doc.scale_selected(e.scale_pct / 100.0));
+                                    }
+                                });
+                            }
+                            Sub::Align => {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.strong("Wyrównaj zaznaczone");
+                                    for (m, l) in [
+                                        (AlignMode::Left, "Do lewej"),
+                                        (AlignMode::CenterX, "Środek X"),
+                                        (AlignMode::Right, "Do prawej"),
+                                        (AlignMode::Top, "Do góry"),
+                                        (AlignMode::CenterY, "Środek Y"),
+                                        (AlignMode::Bottom, "Do dołu"),
+                                    ] {
+                                        if ui.button(l).clicked() {
+                                            apply(doc.align_selected(m));
+                                        }
+                                    }
+                                });
+                            }
+                            Sub::Array => {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.strong("Szyk");
+                                    ui.label("kolumny");
+                                    ui.add(egui::DragValue::new(&mut e.cols).range(1..=100));
+                                    ui.label("wiersze");
+                                    ui.add(egui::DragValue::new(&mut e.rows).range(1..=100));
+                                    ui.label("odstęp X");
+                                    ui.add(egui::DragValue::new(&mut e.gap_x).speed(0.1).suffix(" mm"));
+                                    ui.label("Y");
+                                    ui.add(egui::DragValue::new(&mut e.gap_y).speed(0.1).suffix(" mm"));
+                                    if ui.button("Utwórz szyk").clicked() {
+                                        match doc.selection_bbox() {
+                                            Some(bb) => {
+                                                let s = bb.size();
+                                                doc.array_selected(e.cols, e.rows, s.x + e.gap_x, s.y + e.gap_y);
+                                            }
+                                            None => nothing_selected = true,
+                                        }
+                                    }
+                                });
+                                ui.label(RichText::new("Odstęp liczony między krawędziami kopii; kopie trafiają też do operacji oryginału.").small().weak());
+                            }
+                            Sub::ZeroPick => {
+                                ui.horizontal_wrapped(|ui| {
+                                    ui.strong("Zero programu:");
+                                    ui.label("kliknij punkt (przyciąga do środków okręgów i wierzchołków)");
+                                    if ui.button("Anuluj").clicked() {
+                                        close = true;
+                                    }
+                                });
+                            }
+                            s if s.op_template(1.0).is_some() => {
+                                let target = self.pick_target.filter(|&t| t < doc.ops.len());
+                                ui.horizontal_wrapped(|ui| {
+                                    let title = match target {
+                                        Some(t) => format!("Dodawanie do: {}", doc.ops[t].name),
+                                        None => format!("{} › {} — kliknij krzywą, aby utworzyć operację", s.group().label(), s.label()),
+                                    };
+                                    ui.label(RichText::new(title).strong().color(Color32::WHITE));
+                                    ui.label(RichText::new("klik = dodaj/usuń · ramka = wiele").weak());
+                                    if ui.button("Zakończ (Enter)").clicked() {
+                                        close = true;
+                                    }
+                                });
+                            }
+                            _ => {}
+                        }
+                    });
+            });
+        if nothing_selected {
+            self.view2d.flash("Najpierw zaznacz krzywe", now);
+        }
+        if close {
+            self.stop_mode();
+        }
+    }
+
+    fn shortcuts(&mut self, ctx: &egui::Context) {
+        use egui::{Key, KeyboardShortcut, Modifiers};
+        let open = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
+        let save = KeyboardShortcut::new(Modifiers::COMMAND, Key::S);
+        let export = KeyboardShortcut::new(Modifiers::COMMAND, Key::E);
+        let all = KeyboardShortcut::new(Modifiers::COMMAND, Key::A);
+        if ctx.input_mut(|i| i.consume_shortcut(&open)) {
+            self.open_dialog();
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&save)) {
+            self.save_project(false);
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&export)) {
+            self.export_gcode();
+        }
+        if ctx.egui_wants_keyboard_input() {
+            return;
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&all)) {
+            for i in 0..self.doc.contours.len() {
+                if self.doc.is_visible(i) {
+                    self.doc.set_selected(i, true);
+                }
+            }
+        }
+        let (esc, enter, tab, f, del) = ctx.input(|i| {
+            (
+                i.key_pressed(Key::Escape),
+                i.key_pressed(Key::Enter),
+                i.key_pressed(Key::Tab),
+                i.key_pressed(Key::F),
+                i.key_pressed(Key::Delete),
+            )
+        });
+        if self.mode == ViewMode::Visual {
+            if esc || tab {
+                self.mode = ViewMode::Project;
+                self.sim.playing = false;
+            }
+            if ctx.input(|i| i.key_pressed(Key::Space)) {
+                self.sim.playing = !self.sim.playing;
+            }
+        } else {
+            if esc || enter {
+                if self.toolbar.current() != Sub::Select || self.pick_target.is_some() {
+                    self.stop_mode();
+                } else if esc {
+                    self.doc.clear_selection();
+                }
+            }
+            if tab {
+                self.mode = ViewMode::Visual;
+            }
+        }
+        if f {
+            self.view2d.fit_requested = true;
+            self.view3d.fit_requested = true;
+        }
+        if del && self.mode == ViewMode::Project {
+            if let Some(i) = self.doc.selected_op.filter(|_| self.doc.selected_count() == 0) {
+                self.doc.remove_op(i);
+                self.stop_mode();
+            }
+        }
+    }
+
+    fn menu(&mut self, ui: &mut egui::Ui) {
+        let machine = self.machine();
+        egui::MenuBar::new().ui(ui, |ui| {
+            ui.menu_button("Plik", |ui| {
+                if ui.button("Otwórz DXF / projekt…  (Ctrl+O)").clicked() {
+                    self.open_dialog();
+                }
+                ui.separator();
+                if ui.button("Zapisz projekt  (Ctrl+S)").clicked() {
+                    self.save_project(false);
+                }
+                if ui.button("Zapisz projekt jako…").clicked() {
+                    self.save_project(true);
+                }
+                ui.separator();
+                if ui.button("Eksportuj G-code…  (Ctrl+E)").clicked() {
+                    self.export_gcode();
+                }
+                ui.separator();
+                if ui.button("Zakończ").clicked() {
+                    ui.send_viewport_cmd(egui::ViewportCommand::Close);
+                }
+            });
+            ui.menu_button("Widok", |ui| {
+                ui.radio_value(&mut self.mode, ViewMode::Project, "Projekt 2D  (Tab)");
+                ui.radio_value(&mut self.mode, ViewMode::Visual, "Wizualizacja 3D  (Tab)");
+                ui.separator();
+                if ui.button("Dopasuj  (F)").clicked() {
+                    self.view2d.fit_requested = true;
+                    self.view3d.fit_requested = true;
+                }
+            });
+            ui.menu_button("Narzędzia", |ui| {
+                if ui.button("Biblioteka narzędzi…").clicked() {
+                    self.tools_window.open = true;
+                }
+            });
+            ui.menu_button("Maszyny", |ui| {
+                if ui.button("Maszyny…").clicked() {
+                    self.machines_window.open = true;
+                }
+                ui.separator();
+                let ids: Vec<(u32, String)> = self.machines.machines.iter().map(|m| (m.id, m.name.clone())).collect();
+                for (id, name) in ids {
+                    if ui.radio(self.machines.active == id, name).clicked() {
+                        self.machines.active = id;
+                        self.save_machines();
+                        self.doc.ops_dirty = true;
+                    }
+                }
+            });
+            ui.menu_button("Pomoc", |ui| {
+                if ui.button("O programie").clicked() {
+                    self.about_open = true;
+                }
+            });
+            ui.separator();
+            ui.selectable_value(&mut self.mode, ViewMode::Project, RichText::new("  Projekt 2D  ").strong());
+            ui.selectable_value(&mut self.mode, ViewMode::Visual, RichText::new("  Wizualizacja 3D  ").strong());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let text = format!("{}  ·  {} mm", machine.name, machine.summary());
+                if ui.button(text).on_hover_text("Aktywna maszyna — kliknij, aby edytować").clicked() {
+                    self.machines_window.open = true;
+                }
+            });
+        });
+    }
+
+    fn side_panel(&mut self, ui: &mut egui::Ui) {
+        let doc = &mut self.doc;
+        ui.add_space(4.0);
+        ui.heading(doc.file_name());
+        if doc.path.is_some() {
+            ui.label(RichText::new(format!("Jednostki pliku: {}", doc.unit_name)).small().weak());
+        }
+        for w in &doc.warnings {
+            ui.label(RichText::new(format!("Uwaga: {w}")).small().color(Color32::from_rgb(230, 180, 80)));
+        }
+
+        ui.separator();
+        ui.strong("Półfabrykat");
+        let mut materials: Vec<String> = vec!["Drewno".into()];
+        for t in &self.tools.tools {
+            for p in &t.presets {
+                if !materials.contains(&p.material) {
+                    materials.push(p.material.clone());
+                }
+            }
+        }
+        if !materials.contains(&doc.stock.material) {
+            materials.push(doc.stock.material.clone());
+        }
+        egui::Grid::new("stock").num_columns(2).show(ui, |ui| {
+            ui.label("Grubość");
+            let a = ui.add(egui::DragValue::new(&mut doc.stock.thickness).range(0.1..=500.0).speed(0.1).suffix(" mm"));
+            ui.end_row();
+            ui.label("Naddatek XY");
+            let b = ui.add(egui::DragValue::new(&mut doc.stock.margin).range(0.0..=500.0).speed(0.1).suffix(" mm"));
+            ui.end_row();
+            ui.label("Materiał");
+            egui::ComboBox::from_id_salt("material").selected_text(doc.stock.material.clone()).show_ui(ui, |ui| {
+                for m in &materials {
+                    ui.selectable_value(&mut doc.stock.material, m.clone(), m);
+                }
+            });
+            ui.end_row();
+            if a.changed() || b.changed() {
+                doc.revision += 1;
+            }
+        });
+        if !doc.ops.is_empty()
+            && ui
+                .small_button("Zastosuj parametry materiału do operacji")
+                .on_hover_text("Obroty, posuwy i krok w dół z biblioteki narzędzi dla wybranego materiału")
+                .clicked()
+        {
+            let m = doc.stock.material.clone();
+            for op in &mut doc.ops {
+                if let Some(t) = self.tools.get(op.tool_id) {
+                    op.cut.apply_tool(t, &m);
+                }
+            }
+            doc.ops_dirty = true;
+        }
+        if let Some(sb) = doc.stock_box() {
+            let s = sb.size();
+            let m = self.machines.active();
+            let fits = m.is_none_or(|m| s.x <= m.travel_x && s.y <= m.travel_y);
+            let text = format!(
+                "{:.1} × {:.1} × {:.1} mm, Z0 = góra materiału{}",
+                s.x,
+                s.y,
+                doc.stock.thickness,
+                if fits { "" } else { " — WIĘKSZY NIŻ POLE ROBOCZE" }
+            );
+            ui.label(RichText::new(text).small().color(if fits { Color32::from_gray(150) } else { Color32::LIGHT_RED }));
+        }
+
+        ui.separator();
+        ui.strong("Warstwy");
+        let mut layers_changed = false;
+        for l in &mut doc.layers {
+            layers_changed |= ui.checkbox(&mut l.visible, &l.name).changed();
+        }
+        if layers_changed {
+            doc.revision += 1;
+        }
+
+        ui.separator();
+        ui.horizontal(|ui| {
+            ui.strong("Krzywe");
+            ui.label(RichText::new(format!("({} / zazn. {})", doc.contours.len(), doc.selected_count())).weak());
+        });
+        ui.horizontal_wrapped(|ui| {
+            if ui.small_button("Zamknięte").on_hover_text("Zaznacz wszystkie zamknięte krzywe").clicked() {
+                for i in 0..doc.contours.len() {
+                    let v = doc.is_visible(i) && doc.contours[i].contour.closed;
+                    doc.set_selected(i, v);
+                }
+            }
+            if ui.small_button("Okręgi").on_hover_text("Zaznacz wszystkie okręgi (do wiercenia)").clicked() {
+                for i in 0..doc.contours.len() {
+                    let v = doc.is_visible(i) && doc.contours[i].contour.as_circle().is_some();
+                    doc.set_selected(i, v);
+                }
+            }
+            if ui.small_button("Wszystkie").clicked() {
+                for i in 0..doc.contours.len() {
+                    let v = doc.is_visible(i);
+                    doc.set_selected(i, v);
+                }
+            }
+            if ui.small_button("Odznacz").clicked() {
+                doc.clear_selection();
+            }
+        });
+
+        let hovered = self.view2d.hovered;
+        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show_rows(
+            ui,
+            ui.text_style_height(&egui::TextStyle::Body) + 4.0,
+            doc.contours.len(),
+            |ui, range| {
+                for i in range {
+                    let c = &doc.contours[i];
+                    let kind_color = if c.contour.closed { colors::CLOSED } else { colors::OPEN };
+                    let shape = match c.contour.as_circle() {
+                        Some((_, r)) => format!("Ø{:.2}", r * 2.0),
+                        None if c.contour.closed => "●".into(),
+                        None => "○".into(),
+                    };
+                    let text = RichText::new(format!(
+                        "#{:<3}{:<7}{:>7.1}  {}",
+                        i + 1,
+                        shape,
+                        c.length,
+                        doc.layers[c.layer].name
+                    ))
+                    .monospace()
+                    .color(if Some(i) == hovered { Color32::WHITE } else { kind_color });
+                    let visible = doc.is_visible(i);
+                    let r = ui.add_enabled(visible, egui::Button::selectable(doc.selected[i], text));
+                    if r.clicked() {
+                        let additive = ui.input(|inp| inp.modifiers.command || inp.modifiers.shift);
+                        if additive {
+                            let v = !doc.selected[i];
+                            doc.set_selected(i, v);
+                        } else {
+                            doc.clear_selection();
+                            doc.set_selected(i, true);
+                        }
+                    }
+                }
+            },
+        );
+    }
+
+    fn status_bar(&self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            match self.view2d.cursor_world {
+                Some(p) => ui.monospace(format!("X {:>9.3}  Y {:>9.3}", p.x, p.y)),
+                None => ui.monospace("X        —  Y        —"),
+            };
+            ui.separator();
+            let sub = self.toolbar.current();
+            ui.label(format!("Aktywne: {} › {}", sub.group().label(), sub.label()));
+            ui.separator();
+            ui.label(format!("Zaznaczone: {}", self.doc.selected_count()));
+            ui.separator();
+            ui.label(
+                RichText::new(
+                    "Tab = Projekt 2D / Wizualizacja 3D · Esc/Enter = koniec trybu · PPM = przesuń widok · kółko = zoom · F = dopasuj",
+                )
+                .weak()
+                .small(),
+            );
+        });
+    }
+
+    fn about_window(&mut self, ctx: &egui::Context) {
+        if !self.about_open {
+            return;
+        }
+        let logo = self
+            .logo
+            .get_or_insert_with(|| {
+                let img = egui::ColorImage::from_rgba_unmultiplied(
+                    [700, 200],
+                    include_bytes!("../../assets/logo/millwise-logo-dark-700x200.rgba"),
+                );
+                ctx.load_texture("millwise-logo", img, egui::TextureOptions::LINEAR)
+            })
+            .clone();
+        let mut open = true;
+        egui::Window::new("O programie").open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
+            ui.image((logo.id(), egui::vec2(490.0, 140.0)));
+            ui.add_space(6.0);
+            ui.label(format!("Wersja {}", env!("CARGO_PKG_VERSION")));
+            ui.label("Ścieżki narzędzia i G-code dla frezarek CNC 3-osiowych (GRBL, FluidNC, LinuxCNC).");
+            ui.add_space(6.0);
+            ui.label(format!("Copyright © 2026 {}", COPYRIGHT_HOLDER));
+            ui.label(
+                RichText::new(
+                    "Ten program jest wolnym oprogramowaniem: możesz go rozpowszechniać i/lub modyfikować \
+                     na warunkach Powszechnej Licencji Publicznej GNU (GPL) w wersji 3 lub (według \
+                     Twojego wyboru) dowolnej późniejszej.\n\
+                     Program jest rozpowszechniany BEZ JAKIEJKOLWIEK GWARANCJI. Sprawdzaj G-code \
+                     przed uruchomieniem na maszynie.",
+                )
+                .small(),
+            );
+            ui.horizontal(|ui| {
+                ui.hyperlink_to("Tekst licencji GPL-3.0", "https://www.gnu.org/licenses/gpl-3.0.html");
+                ui.label(RichText::new("· biblioteki zewnętrzne: THIRD-PARTY.md").small().weak());
+            });
+        });
+        if !open {
+            self.about_open = false;
+        }
+    }
+
+    fn gcode_window(&mut self, ctx: &egui::Context) {
+        let Some(lines) = &self.gcode_preview else { return };
+        let mut open = true;
+        let mut export = false;
+        egui::Window::new(format!("G-code · {}", self.machine().name))
+            .open(&mut open)
+            .default_size([520.0, 600.0])
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(format!("{} linii", lines.len()));
+                    if ui.button("Kopiuj").clicked() {
+                        ui.ctx().copy_text(lines.join("\n"));
+                    }
+                    if ui.button("Eksportuj…").clicked() {
+                        export = true;
+                    }
+                });
+                ui.separator();
+                let h = ui.text_style_height(&egui::TextStyle::Monospace);
+                egui::ScrollArea::both().auto_shrink([false, false]).show_rows(ui, h, lines.len(), |ui, range| {
+                    for i in range {
+                        let l = &lines[i];
+                        let color = if l.starts_with('(') {
+                            Color32::from_rgb(120, 160, 120)
+                        } else if l.starts_with("G0") {
+                            Color32::from_rgb(220, 120, 120)
+                        } else if l.starts_with('M') || l.starts_with('T') {
+                            Color32::from_rgb(220, 190, 100)
+                        } else {
+                            Color32::from_gray(210)
+                        };
+                        ui.label(RichText::new(format!("{:>6}  {l}", i + 1)).monospace().color(color));
+                    }
+                });
+            });
+        if !open {
+            self.gcode_preview = None;
+        }
+        if export {
+            self.export_gcode();
+        }
+    }
+}
+
+impl eframe::App for CamApp {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        let ctx = ui.ctx().clone();
+        self.shortcuts(&ctx);
+        self.ensure_generated();
+
+        egui::Panel::top("menu").show(ui, |ui| self.menu(ui));
+        egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
+
+        if self.mode == ViewMode::Visual {
+            // wizualizacja: tylko podgląd + symulacja
+            let machine = self.machine();
+            self.sim.sync(&ctx, &self.doc, &self.tools, &machine);
+            self.sim.tick(&ctx);
+            egui::Panel::left("sim").resizable(false).exact_size(300.0).show(ui, |ui| self.sim.panel(ui));
+            let mut close = false;
+            egui::CentralPanel::no_frame().show(ui, |ui| {
+                let rect = ui.available_rect_before_wrap();
+                let display = self.sim.display(&self.doc, &self.tools);
+                close = self.view3d.ui(ui, rect, frame, &self.doc, display.as_ref());
+            });
+            if close {
+                self.mode = ViewMode::Project;
+                self.sim.playing = false;
+            }
+        } else {
+            let mut tb_action = None;
+            egui::Panel::left("tb_groups").resizable(false).exact_size(88.0).show(ui, |ui| {
+                tb_action = self.toolbar.groups_ui(ui);
+            });
+            egui::Panel::left("tb_subs").resizable(false).exact_size(96.0).show(ui, |ui| {
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    if let Some(a) = self.toolbar.subs_ui(ui) {
+                        tb_action = Some(a);
+                    }
+                });
+            });
+            if let Some(a) = tb_action {
+                self.handle_toolbar(a, &ctx);
+            }
+
+            let machine_label = self.machine().controller.label().to_string();
+            let picking = self.pick_target.filter(|_| self.toolbar.current().op_template(1.0).is_some());
+            let mut action = OpsAction::None;
+            egui::Panel::left("ops").resizable(true).default_size(310.0).show(ui, |ui| {
+                action = ui_ops::ops_panel(ui, &mut self.doc, &self.tools, &mut self.ops_ui, picking, &machine_label);
+            });
+            egui::Panel::right("geometry").resizable(true).default_size(260.0).show(ui, |ui| self.side_panel(ui));
+            match action {
+                OpsAction::None => {}
+                OpsAction::ExportGcode => self.export_gcode(),
+                OpsAction::PreviewGcode => {
+                    self.ensure_generated();
+                    match self.preview_lines() {
+                        Ok(l) => self.gcode_preview = Some(l),
+                        Err(e) => self.error = Some(e),
+                    }
+                }
+                OpsAction::EditCurves(i) => {
+                    if let Some(op) = self.doc.ops.get(i) {
+                        self.toolbar.set(Sub::for_op(&op.kind));
+                        self.pick_target = Some(i);
+                        self.doc.selected_op = Some(i);
+                    }
+                }
+                OpsAction::StopPicking => self.stop_mode(),
+            }
+            self.ensure_generated();
+
+            let tool_d: Vec<f64> =
+                self.doc.ops.iter().map(|op| self.tools.get(op.tool_id).map_or(0.0, |t| t.diameter)).collect();
+            let machine = self.machine();
+            let sub = self.toolbar.current();
+            let template = sub.op_template(self.doc.stock.thickness);
+            let target = self.pick_target.filter(|&t| t < self.doc.ops.len());
+            let target_kind = target.map(|t| self.doc.ops[t].kind.clone());
+            let members: Vec<usize> = target.map(|t| self.doc.ops[t].contours.clone()).unwrap_or_default();
+            let mut view_rect = egui::Rect::NOTHING;
+            let mut events = Vec::new();
+            egui::CentralPanel::no_frame().show(ui, |ui| {
+                let rect = ui.available_rect_before_wrap();
+                view_rect = rect;
+                let inter = match (&template, sub) {
+                    (Some((kind, _, _)), _) => Interaction::Op {
+                        kind: target_kind.as_ref().unwrap_or(kind),
+                        members: &members,
+                        color: target.map_or(sub.group().color(), op_color),
+                    },
+                    (None, Sub::Move) => Interaction::Move,
+                    (None, Sub::ZeroPick) => Interaction::PickPoint,
+                    _ => Interaction::Select,
+                };
+                events = self.view2d.ui(ui, rect, &mut self.doc, &tool_d, inter, Some((machine.travel_x, machine.travel_y)));
+            });
+            self.handle_view_events(events, &ctx);
+            self.tool_options(&ctx, view_rect);
+            // kliknięcia w widoku 2D mogły zmienić krzywe operacji
+            self.ensure_generated();
+        }
+
+        let used: Vec<u32> = self.doc.ops.iter().map(|o| o.tool_id).collect();
+        if self.tools_window.show(&ctx, &mut self.tools, &used) {
+            self.save_tools();
+            self.doc.ops_dirty = true;
+        }
+        let part = self.doc.stock_box().map(|b| (b.size().x, b.size().y));
+        if self.machines_window.show(&ctx, &mut self.machines, part) {
+            self.save_machines();
+            self.doc.ops_dirty = true;
+        }
+        self.gcode_window(&ctx);
+        self.about_window(&ctx);
+
+        for (title, msg, color) in [("Błąd", &mut self.error, Color32::LIGHT_RED), ("Informacja", &mut self.info, Color32::LIGHT_GREEN)] {
+            if let Some(text) = msg.clone() {
+                egui::Window::new(title)
+                    .collapsible(false)
+                    .resizable(false)
+                    .anchor(egui::Align2::CENTER_TOP, [0.0, 60.0])
+                    .show(&ctx, |ui| {
+                        ui.label(RichText::new(text).color(color));
+                        if ui.button("OK").clicked() {
+                            *msg = None;
+                        }
+                    });
+            }
+        }
+    }
+}

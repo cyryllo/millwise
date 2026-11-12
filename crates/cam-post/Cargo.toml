@@ -1,0 +1,13 @@
+[package]
+name = "cam-post"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+cam-geom.workspace = true
+cam-ops.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+cam-io.workspace = true

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Millwise
+GenericName=CAM dla frezarek CNC
+Comment=Ścieżki narzędzia i G-code dla frezarek CNC (GRBL, FluidNC, LinuxCNC)
+Exec=millwise %f
+Icon=millwise
+Terminal=false
+Categories=Graphics;Engineering;
+MimeType=application/x-millwise;image/vnd.dxf;
+StartupWMClass=millwise

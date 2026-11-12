@@ -1,0 +1,5 @@
+# Pliki próbne porównywane bajt po bajcie i pliki binarne — bez konwersji końców linii.
+samples/** -text
+*.rgba binary
+*.ico binary
+*.sh text eol=lf

@@ -1,0 +1,10 @@
+[package]
+name = "cam-io"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+cam-geom.workspace = true
+dxf.workspace = true
+anyhow.workspace = true
