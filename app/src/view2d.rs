@@ -325,6 +325,7 @@ impl View2D {
         }
 
         self.draw_toolpaths(&painter, rect, doc, tool_diameters);
+        self.draw_zero(&painter, rect);
 
         if let Some((a, b)) = box_rect {
             let r = Rect::from_two_pos(a, b);
@@ -383,6 +384,40 @@ impl View2D {
             }
         }
         events
+    }
+
+    /// Znacznik zera programu (X0 Y0); poza widokiem — wskaźnik przy krawędzi.
+    fn draw_zero(&self, painter: &egui::Painter, rect: Rect) {
+        let o = self.to_screen(rect, Vec2::ZERO);
+        let inner = rect.shrink(28.0);
+        if inner.contains(o) {
+            draw_axis_arrow(painter, o, egui::vec2(1.0, 0.0), 64.0, colors::AXIS_X, "X");
+            draw_axis_arrow(painter, o, egui::vec2(0.0, -1.0), 64.0, colors::AXIS_Y, "Y");
+            draw_zero_symbol(painter, o, 10.0);
+            painter.text(
+                o + egui::vec2(-10.0, 10.0),
+                egui::Align2::RIGHT_TOP,
+                "X0 Y0",
+                egui::FontId::proportional(11.0),
+                Color32::from_gray(225),
+            );
+        } else {
+            // zero poza widokiem: symbol przy krawędzi w jego kierunku
+            let c = rect.center();
+            let d = o - c;
+            let k = ((inner.width() * 0.5) / d.x.abs().max(1e-3)).min((inner.height() * 0.5) / d.y.abs().max(1e-3));
+            let p = c + d * k;
+            draw_zero_symbol(painter, p, 7.0);
+            let dir = d.normalized();
+            let tip = p + dir * 18.0;
+            let n = egui::vec2(-dir.y, dir.x);
+            painter.add(egui::Shape::convex_polygon(
+                vec![tip, tip - dir * 8.0 + n * 5.0, tip - dir * 8.0 - n * 5.0],
+                Color32::WHITE,
+                Stroke::NONE,
+            ));
+            painter.text(p - dir * 14.0, egui::Align2::CENTER_CENTER, "zero", egui::FontId::proportional(10.0), Color32::from_gray(210));
+        }
     }
 
     pub fn flash(&mut self, msg: impl Into<String>, now: f64) {
@@ -556,4 +591,36 @@ pub fn op_color(i: usize) -> Color32 {
         Color32::from_rgb(230, 230, 110),
     ];
     P[i % P.len()]
+}
+
+/// Symbol zera programu: koło z dwiema zamalowanymi ćwiartkami.
+pub fn draw_zero_symbol(painter: &egui::Painter, c: Pos2, r: f32) {
+    use std::f32::consts::FRAC_PI_2;
+    painter.circle_filled(c, r + 1.5, Color32::from_rgb(17, 19, 22));
+    painter.circle_filled(c, r, Color32::from_rgb(245, 245, 245));
+    // ćwiartki I i III (w ekranie: prawa-górna i lewa-dolna)
+    for q in [0, 2] {
+        let a0 = -FRAC_PI_2 * (q as f32 + 1.0);
+        let mut pts = vec![c];
+        for i in 0..=8 {
+            let a = a0 + FRAC_PI_2 * i as f32 / 8.0;
+            pts.push(c + egui::vec2(a.cos(), a.sin()) * r);
+        }
+        painter.add(egui::Shape::convex_polygon(pts, Color32::from_rgb(17, 19, 22), Stroke::NONE));
+    }
+    painter.circle_stroke(c, r, Stroke::new(1.5, Color32::from_rgb(245, 245, 245)));
+}
+
+/// Strzałka osi z podpisem (kierunek w pikselach ekranu).
+pub fn draw_axis_arrow(painter: &egui::Painter, o: Pos2, dir: egui::Vec2, len: f32, color: Color32, label: &str) {
+    let dir = dir.normalized();
+    let tip = o + dir * len;
+    let n = egui::vec2(-dir.y, dir.x);
+    painter.line_segment([o, tip - dir * 8.0], Stroke::new(2.5, color));
+    painter.add(egui::Shape::convex_polygon(
+        vec![tip, tip - dir * 11.0 + n * 5.5, tip - dir * 11.0 - n * 5.5],
+        color,
+        Stroke::NONE,
+    ));
+    painter.text(tip + dir * 9.0, egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(13.0), color);
 }

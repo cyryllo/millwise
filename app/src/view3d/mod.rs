@@ -158,6 +158,40 @@ impl View3D {
             Color32::WHITE,
         );
 
+        // --- zero programu: symbol i podpisane osie (nakładka 2D) ---
+        let project = |p: Vec3| -> Option<egui::Pos2> {
+            let c = vp * p.extend(1.0);
+            if c.w <= 1e-6 {
+                return None;
+            }
+            let ndc = c.truncate() / c.w;
+            Some(egui::pos2(rect.left() + (ndc.x + 1.0) * 0.5 * rect.width(), rect.top() + (1.0 - ndc.y) * 0.5 * rect.height()))
+        };
+        if let Some(o) = project(Vec3::ZERO).filter(|o| rect.contains(*o)) {
+            let painter = ui.painter_at(rect);
+            for (axis, col, label) in [
+                (Vec3::X, crate::view2d::colors::AXIS_X, "X"),
+                (Vec3::Y, crate::view2d::colors::AXIS_Y, "Y"),
+                (Vec3::Z, Color32::from_rgb(90, 130, 235), "Z"),
+            ] {
+                // długość osi ~ 60 px na ekranie niezależnie od powiększenia
+                if let Some(e) = project(axis * (self.scene_radius * 0.1).max(5.0)) {
+                    let d = e - o;
+                    if d.length() > 0.5 {
+                        crate::view2d::draw_axis_arrow(&painter, o, d, 60.0, col, label);
+                    }
+                }
+            }
+            crate::view2d::draw_zero_symbol(&painter, o, 9.0);
+            painter.text(
+                o + egui::vec2(-10.0, 10.0),
+                egui::Align2::RIGHT_TOP,
+                "X0 Y0 Z0",
+                egui::FontId::proportional(11.0),
+                Color32::from_gray(225),
+            );
+        }
+
         // --- pasek widoków ---
         let bar = Rect::from_min_size(rect.min + egui::vec2(10.0, 10.0), egui::vec2(rect.width() - 20.0, 40.0));
         ui.scope_builder(egui::UiBuilder::new().max_rect(bar), |ui| {

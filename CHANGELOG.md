@@ -9,6 +9,13 @@ Version numbers:
 
 ## Unreleased
 
+### Added
+
+- **Program zero is clearly marked:** the zero symbol (a circle with two filled
+  quarters), X and Y arrows and an "X0 Y0" label in the 2D view; X, Y and Z in
+  the 3D view. When the zero is outside the 2D view, a marker at the edge
+  shows which way it is.
+
 ## 0.1.0 (2026-11-13)
 
 First version. **Early development: not ready for running a machine.**
