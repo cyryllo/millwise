@@ -30,11 +30,31 @@ not build exactly.
 | `crates/cam-post` | G-code for GRBL/FluidNC and LinuxCNC, machine profiles |
 | `crates/cam-sim` | material removal simulation: solid engine (manifold-rust: tool sweeps as convex hulls, Boolean difference) and the fast height map engine; rapid-move collision checks |
 | `app` | the window (egui + wgpu): toolbar, 2D and 3D views, operations, tool library, machines, projects |
-| `assets` | icon (SVG, PNG, ICO), logo, Linux `.desktop` file and local install script |
+| `assets` | icon (SVG, PNG, ICO) and logo |
+| `packaging/linux` | AppImage build (Dockerfile, scripts), `.desktop` file, AppStream metadata, local install script |
 
 User data: `~/.config/millwise/` on Linux, `%APPDATA%\millwise\` on Windows
 (`tools.json`, `machines.json`). On the first start after the rename they are
 copied from the old `camsoft` folder; projects saved as `.camsoft` still open.
+
+## Linux AppImage
+
+Built on this computer with Docker:
+
+```sh
+packaging/linux/build-appimage-docker.sh            # the last commit (HEAD)
+packaging/linux/build-appimage-docker.sh v0.1.0     # a tag or another commit
+```
+
+The program is compiled in an Ubuntu 22.04 container (`packaging/linux/Dockerfile`,
+Rust pinned to the version used here) so it needs only glibc 2.35: it runs on
+Debian 12 and 13 and Ubuntu 22.04 or newer. Built straight on a newer system it
+would not start on older ones. The script builds from a clean copy of the commit
+(`git archive`), so commit first. Crates and build results are kept in
+`target/docker` for the next build; `appimagetool` is downloaded once to
+`target/tools`. The result goes to `dist/Millwise-<version>-x86_64.AppImage` and is
+checked with `--version`. `packaging/linux/build-appimage.sh` alone packs an
+already built program.
 
 ## Versions and releases
 

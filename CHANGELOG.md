@@ -11,6 +11,9 @@ Version numbers:
 
 ### Added
 
+- **AppImage for Linux** (Debian 12 / 13, Ubuntu 22.04 or newer): one file,
+  nothing to install; made with `packaging/linux/build-appimage-docker.sh`.
+- `--version` and `--help` on the command line.
 - **Program zero is clearly marked:** the zero symbol (a circle with two filled
   quarters), X and Y arrows and an "X0 Y0" label in the 2D view; X, Y and Z in
   the 3D view. When the zero is outside the 2D view, a marker at the edge
@@ -28,7 +31,7 @@ First version. **Early development: not ready for running a machine.**
 - **2D project view** with the drawing, the stock and the toolpaths; select
   curves by clicking or with a box (to the right: whole curves inside, to the
   left: curves crossing it).
-- **Toolbar in two columns** (as in Estlcam): the groups Select, Profile,
+- **Toolbar in two columns:** the groups Select, Profile,
   Pocket, Drilling, Engraving and Zero, each opening its variants. Pick a tool
   and an operation, then click curves: the first click creates the operation,
   the next ones add or remove curves.

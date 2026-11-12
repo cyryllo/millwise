@@ -18,8 +18,8 @@ tworzy ścieżki narzędzia i zapisuje G-code dla **GRBL / FluidNC** oraz
 
 - **Import DXF:** linie, łuki, okręgi, polilinie z łukami, splajny, elipsy i
   bloki; luźne elementy są łączone w kontury, cale przeliczane na milimetry.
-- **Operacje jak w Estlcam:** wybierasz narzędzie i operację na pasku po
-  lewej, potem klikasz krzywe w widoku 2D.
+- **Operacje:** wybierasz narzędzie i operację na pasku po lewej, potem
+  klikasz krzywe w widoku 2D.
   - **Profil** zewnętrzny / wewnętrzny, z mostkami, rampą i naddatkiem.
   - **Kieszeń** offsetowa albo zygzak, z wyspami.
   - **Wiercenie:** pojedyncze, z wycofaniem albo frezowanie otworu po helisie.
@@ -57,8 +57,10 @@ cd millwise
 cargo run --release -p millwise -- samples/demo.millwise
 ```
 
-Na Linuksie `assets/linux/install-local.sh` instaluje zbudowany program,
-ikonę i skrót w menu dla bieżącego użytkownika.
+Na Linuksie `packaging/linux/install-local.sh` instaluje zbudowany program,
+ikonę i skrót w menu dla bieżącego użytkownika. AppImage można zbudować
+skryptem `packaging/linux/build-appimage-docker.sh` (potrzebny Docker, szczegóły
+w [DEVELOPMENT.md](DEVELOPMENT.md)).
 
 ## Licencja
 

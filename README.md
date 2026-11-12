@@ -20,8 +20,8 @@ interface is in Polish for now.
 - **DXF import:** lines, arcs, circles, polylines with arcs, splines,
   ellipses and blocks; loose pieces are joined into contours, inches are
   converted to millimetres.
-- **Operations, Estlcam-style:** pick a tool and an operation on the left
-  toolbar, then click the curves in the 2D view.
+- **Operations:** pick a tool and an operation on the left toolbar, then
+  click the curves in the 2D view.
   - **Profile** outside / inside, with tabs, ramp entry and stock to leave.
   - **Pocket** offset or zigzag, with islands.
   - **Drilling:** single, peck, or helical hole milling.
@@ -58,8 +58,10 @@ cd millwise
 cargo run --release -p millwise -- samples/demo.millwise
 ```
 
-On Linux, `assets/linux/install-local.sh` installs the built program, its icon
-and a menu entry for the current user.
+On Linux, `packaging/linux/install-local.sh` installs the built program, its
+icon and a menu entry for the current user. An AppImage can be built with
+`packaging/linux/build-appimage-docker.sh` (needs Docker, see
+[DEVELOPMENT.md](DEVELOPMENT.md)).
 
 ## License
 
