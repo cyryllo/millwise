@@ -7,5 +7,5 @@ Exec=millwise %f
 Icon=millwise
 Terminal=false
 Categories=Graphics;Engineering;
-MimeType=application/x-millwise;image/vnd.dxf;
+MimeType=image/vnd.dxf;
 StartupWMClass=millwise

@@ -2,3 +2,4 @@
 *.nc
 *.ngc
 *.gcode
+/dist

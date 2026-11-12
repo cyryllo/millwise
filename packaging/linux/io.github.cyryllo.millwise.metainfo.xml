@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.cyryllo.millwise</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>Millwise</name>
+  <summary>CAM for 3-axis CNC routers: DXF to G-code</summary>
+  <description>
+    <p>Millwise turns DXF drawings into toolpaths and writes G-code for GRBL, FluidNC and LinuxCNC.
+    Early development: not ready for running a machine yet.</p>
+  </description>
+  <launchable type="desktop-id">millwise.desktop</launchable>
+  <url type="homepage">https://github.com/cyryllo/millwise</url>
+  <releases>
+    <release version="@VERSION@"/>
+  </releases>
+</component>

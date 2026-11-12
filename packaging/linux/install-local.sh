@@ -1,6 +1,6 @@
 #!/bin/sh
 # Instaluje Millwise dla bieżącego użytkownika (Linux): program, ikonę i skrót w menu.
-# Użycie: assets/linux/install-local.sh   (z katalogu projektu, po `cargo build --release`)
+# Użycie: packaging/linux/install-local.sh   (z katalogu projektu, po `cargo build --release`)
 set -e
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 BIN="${XDG_BIN_HOME:-$HOME/.local/bin}"
@@ -13,7 +13,7 @@ for s in 16 32 48 64 128 256 512; do
 done
 mkdir -p "$DATA/icons/hicolor/scalable/apps"
 install -m 644 "$ROOT/assets/icon/millwise.svg" "$DATA/icons/hicolor/scalable/apps/millwise.svg"
-install -m 644 "$ROOT/assets/linux/millwise.desktop" "$DATA/applications/millwise.desktop"
+install -m 644 "$ROOT/packaging/linux/millwise.desktop" "$DATA/applications/millwise.desktop"
 command -v update-desktop-database >/dev/null && update-desktop-database "$DATA/applications" || true
 command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q "$DATA/icons/hicolor" || true
 echo "Zainstalowano: $BIN/millwise, ikona i skrót „Millwise” w menu."

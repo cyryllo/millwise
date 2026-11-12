@@ -16,6 +16,24 @@ mod view3d;
 fn main() -> eframe::Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
 
+    // parametry wiersza poleceń (bez okna) — m.in. do sprawdzania paczek
+    if let Some(a) = std::env::args().nth(1) {
+        match a.as_str() {
+            "--version" | "-V" => {
+                println!("Millwise {}", env!("CARGO_PKG_VERSION"));
+                return Ok(());
+            }
+            "--help" | "-h" => {
+                println!(
+                    "Millwise {} — CAM dla frezarek CNC\n\nUżycie: millwise [plik.dxf | projekt.millwise]\n  --version   wersja programu\n  --help      ta pomoc",
+                    env!("CARGO_PKG_VERSION")
+                );
+                return Ok(());
+            }
+            _ => {}
+        }
+    }
+
     let initial_file = std::env::args().nth(1).map(std::path::PathBuf::from);
 
     let options = eframe::NativeOptions {
