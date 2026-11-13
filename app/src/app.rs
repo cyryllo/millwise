@@ -1049,7 +1049,7 @@ impl CamApp {
             });
             ui.menu_button("Widok", |ui| {
                 ui.radio_value(&mut self.mode, ViewMode::Project, "Projekt 2D  (Tab)");
-                ui.radio_value(&mut self.mode, ViewMode::Visual, "Wizualizacja 3D  (Tab)");
+                ui.radio_value(&mut self.mode, ViewMode::Visual, "Symulacja  (Tab)");
                 ui.separator();
                 if ui.button("Dopasuj  (F)").clicked() {
                     self.view2d.fit_requested = true;
@@ -1087,7 +1087,7 @@ impl CamApp {
             });
             ui.separator();
             ui.selectable_value(&mut self.mode, ViewMode::Project, RichText::new("  Projekt 2D  ").strong());
-            ui.selectable_value(&mut self.mode, ViewMode::Visual, RichText::new("  Wizualizacja 3D  ").strong());
+            ui.selectable_value(&mut self.mode, ViewMode::Visual, RichText::new("  Symulacja  ").strong());
         });
     }
 
@@ -1448,7 +1448,7 @@ impl CamApp {
             ui.separator();
             ui.label(
                 RichText::new(
-                    "Tab = Projekt 2D / Wizualizacja 3D · Ctrl+Z / Ctrl+Y = cofnij / ponów · Esc/Enter = koniec trybu · PPM = przesuń widok · kółko = zoom · F = dopasuj",
+                    "Tab = Projekt 2D / Symulacja · Ctrl+Z / Ctrl+Y = cofnij / ponów · Esc/Enter = koniec trybu · PPM = przesuń widok · kółko = zoom · F = dopasuj",
                 )
                 .weak()
                 .small(),
@@ -1474,9 +1474,9 @@ impl CamApp {
             ("Esc", "zakończ tryb / odznacz"),
             ("Enter", "zakończ tryb"),
             ("", ""),
-            ("Tab", "przełącz Projekt 2D / Wizualizacja 3D"),
+            ("Tab", "przełącz Projekt 2D / Symulacja"),
             ("F", "dopasuj widok"),
-            ("Spacja", "odtwarzanie symulacji (w wizualizacji)"),
+            ("Spacja", "odtwarzanie symulacji"),
             ("kółko myszy", "powiększenie"),
             ("prawy / środkowy przycisk", "przesuwanie widoku"),
             ("Shift / Ctrl + klik", "dodaj do zaznaczenia"),

@@ -273,8 +273,8 @@ impl Toolbar {
             }
         }
         ui.separator();
-        if icons::tool_button(ui, Icon::Preview3D, "Podgląd 3D", false, true, Color32::WHITE)
-            .on_hover_text("Wizualizacja 3D (Tab)")
+        if icons::tool_button(ui, Icon::Preview3D, "Symulacja", false, true, Color32::WHITE)
+            .on_hover_text("Symulacja obróbki w 3D (Tab)")
             .clicked()
         {
             action = Some(ToolbarAction::Preview);

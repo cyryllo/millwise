@@ -197,7 +197,7 @@ impl View3D {
         ui.scope_builder(egui::UiBuilder::new().max_rect(bar), |ui| {
             ui.horizontal(|ui| {
                 let b = egui::Button::new(
-                    egui::RichText::new("Zamknij wizualizację  (Esc)").strong().color(Color32::WHITE).size(14.0),
+                    egui::RichText::new("Zamknij symulację  (Esc)").strong().color(Color32::WHITE).size(14.0),
                 )
                 .fill(Color32::from_rgb(61, 127, 224))
                 .min_size(egui::vec2(0.0, 38.0))
