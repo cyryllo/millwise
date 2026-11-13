@@ -66,6 +66,8 @@ pub struct CamApp {
     logo: Option<egui::TextureHandle>,
     history: History,
     show_history: bool,
+    /// Edycja zmiany z parametrami (szyk, skala, obrót) wybranej w historii: krok sprzed niej.
+    param_edit: Option<usize>,
     /// Element projektu rozwinięty na liście po prawej.
     open_source: Option<usize>,
     /// Krok historii, do którego panel ostatnio przewinął listę.
@@ -103,6 +105,7 @@ impl CamApp {
             logo: None,
             history,
             show_history: true,
+            param_edit: None,
             open_source: None,
             history_seen: u64::MAX,
             clipboard: Vec::new(),
@@ -183,6 +186,7 @@ impl CamApp {
 
     fn set_doc(&mut self, doc: Document) {
         self.doc = doc;
+        self.param_edit = None;
         self.open_source = None;
         self.history.reset(&self.doc, format!("Otwarto {}", self.doc.file_name()));
         self.stop_mode();
@@ -423,6 +427,91 @@ impl CamApp {
         self.view2d.flash(format!("Zapisano: {name}"), Self::now(ctx));
     }
 
+    /// Edycja zmiany wybranej w historii (szyk, skala, obrót): nowe wartości od razu ją przebudowują.
+    fn param_edit_panel(&mut self, ctx: &egui::Context, view: egui::Rect) {
+        use crate::doc::ParamEdit;
+        let Some(base) = self.param_edit else { return };
+        // historia poszła gdzie indziej (cofnięcie, inny krok) — koniec edycji
+        let pos = self.history.pos();
+        let Some(info) = self.history.param_edit(base + 1).cloned().filter(|_| pos == base || pos == base + 1) else {
+            self.param_edit = None;
+            return;
+        };
+        let later = self.history.len().saturating_sub(base + 2);
+        let e = &mut self.edit;
+        let mut changed = false;
+        let mut close = false;
+        egui::Area::new(egui::Id::unique("param_edit"))
+            .fixed_pos(view.min + egui::vec2(10.0, 10.0))
+            .order(egui::Order::Middle)
+            .show(ctx, |ui| {
+                egui::Frame::new()
+                    .fill(Color32::from_rgba_unmultiplied(17, 19, 22, 235))
+                    .stroke(egui::Stroke::new(1.5, Color32::from_rgb(61, 127, 224)))
+                    .corner_radius(8.0)
+                    .inner_margin(10.0)
+                    .show(ui, |ui| {
+                        ui.horizontal_wrapped(|ui| match info {
+                            ParamEdit::Array { .. } => {
+                                ui.strong("Edycja szyku");
+                                ui.label("kolumny");
+                                changed |= ui.add(egui::DragValue::new(&mut e.cols).range(1..=100)).changed();
+                                ui.label("wiersze");
+                                changed |= ui.add(egui::DragValue::new(&mut e.rows).range(1..=100)).changed();
+                                ui.label("odstęp X");
+                                changed |= ui.add(egui::DragValue::new(&mut e.gap_x).speed(0.1).suffix(" mm")).changed();
+                                ui.label("Y");
+                                changed |= ui.add(egui::DragValue::new(&mut e.gap_y).speed(0.1).suffix(" mm")).changed();
+                                close = ui.button("Gotowe").clicked();
+                            }
+                            ParamEdit::Scale { .. } => {
+                                ui.strong("Edycja skalowania");
+                                changed |= ui.add(egui::DragValue::new(&mut e.scale_pct).range(1.0..=10000.0).speed(0.5).suffix(" %")).changed();
+                                close = ui.button("Gotowe").clicked();
+                            }
+                            ParamEdit::Rotate { .. } => {
+                                ui.strong("Edycja obrotu");
+                                changed |= ui.add(egui::DragValue::new(&mut e.angle).speed(0.5).suffix("°")).changed();
+                                close = ui.button("Gotowe").clicked();
+                            }
+                        });
+                        let note = if later > 0 {
+                            format!("Uwaga: zmiana usunie {later} późniejszych kroków historii (jak cofnięcie i zrobienie od nowa).")
+                        } else {
+                            "Nowe wartości od razu przebudowują zmianę; w historii zostaje jeden krok.".to_string()
+                        };
+                        ui.label(RichText::new(note).small().color(if later > 0 { Color32::from_rgb(230, 180, 80) } else { ui_kit::LABEL }));
+                    });
+            });
+        if changed {
+            self.history.revert_to(&mut self.doc, base);
+            self.doc.selected = vec![false; self.doc.contours.len()];
+            for &i in info.selection() {
+                if let Some(s) = self.doc.selected.get_mut(i) {
+                    *s = true;
+                }
+            }
+            let e = &self.edit;
+            match info {
+                ParamEdit::Array { .. } => {
+                    if self.doc.array_with_gaps(e.cols, e.rows, e.gap_x, e.gap_y) {
+                        let (c, r) = (e.cols, e.rows);
+                        self.doc.label(crate::history::Mark::new(crate::icons::Icon::Array), format!("Szyk {c} × {r}"));
+                    }
+                }
+                ParamEdit::Scale { .. } => {
+                    self.doc.scale_selected(e.scale_pct / 100.0);
+                }
+                ParamEdit::Rotate { .. } => {
+                    self.doc.rotate_selected(e.angle);
+                }
+            }
+        }
+        if close || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            self.param_edit = None;
+        }
+    }
+
     /// Operacja docelowa dla klikania; tworzy nową z szablonu wariantu, jeśli trzeba.
     fn ensure_target(&mut self) -> Option<usize> {
         if let Some(t) = self.pick_target.filter(|&t| t < self.doc.ops.len()) {
@@ -570,14 +659,8 @@ impl CamApp {
                                     ui.add(egui::DragValue::new(&mut e.gap_x).speed(0.1).suffix(" mm"));
                                     ui.label("Y");
                                     ui.add(egui::DragValue::new(&mut e.gap_y).speed(0.1).suffix(" mm"));
-                                    if ui.button("Utwórz szyk").clicked() {
-                                        match doc.selection_bbox() {
-                                            Some(bb) => {
-                                                let s = bb.size();
-                                                doc.array_selected(e.cols, e.rows, s.x + e.gap_x, s.y + e.gap_y);
-                                            }
-                                            None => nothing_selected = true,
-                                        }
+                                    if ui.button("Utwórz szyk").clicked() && !doc.array_with_gaps(e.cols, e.rows, e.gap_x, e.gap_y) {
+                                        nothing_selected = doc.selected_count() == 0;
                                     }
                                 });
                                 ui.label(RichText::new("Odstęp liczony między krawędziami kopii; kopie trafiają też do operacji oryginału.").small().weak());
@@ -848,7 +931,9 @@ impl CamApp {
                             tip.push('\n');
                         }
                         let open = g.mark.op.is_some() && g.mark.badge != crate::history::Badge::Remove;
-                        tip.push_str(match (pos == g.last, undone || current, open) {
+                        let param = self.history.param_edit(g.last).is_some();
+                        tip.push_str(match (pos == g.last, undone || current, open || param) {
+                            (_, _, true) if param => "kliknij, aby zmienić parametry",
                             (true, _, true) => "(stan obecny) — kliknij, aby edytować operację",
                             (true, _, false) => "(stan obecny)",
                             (false, true, _) => "kliknij, aby przywrócić",
@@ -875,6 +960,18 @@ impl CamApp {
                 self.stop_mode();
                 self.doc.selected_op = Some(op);
                 self.doc.revision += 1;
+            }
+            // szyk, skala, obrót: otwórz parametry do zmiany
+            if let Some(p) = self.history.param_edit(step).cloned() {
+                self.stop_mode();
+                match p {
+                    crate::doc::ParamEdit::Array { cols, rows, gap_x, gap_y, .. } => {
+                        (self.edit.cols, self.edit.rows, self.edit.gap_x, self.edit.gap_y) = (cols, rows, gap_x, gap_y);
+                    }
+                    crate::doc::ParamEdit::Scale { pct, .. } => self.edit.scale_pct = pct,
+                    crate::doc::ParamEdit::Rotate { deg, .. } => self.edit.angle = deg,
+                }
+                self.param_edit = Some(step - 1);
             }
         }
     }
@@ -1614,7 +1711,11 @@ impl eframe::App for CamApp {
                 events = self.view2d.ui(ui, rect, &mut self.doc, &tool_d, inter, Some((machine.travel_x, machine.travel_y)));
             });
             self.handle_view_events(events, &ctx);
-            self.tool_options(&ctx, view_rect);
+            if self.param_edit.is_some() {
+                self.param_edit_panel(&ctx, view_rect);
+            } else {
+                self.tool_options(&ctx, view_rect);
+            }
             // kliknięcia w widoku 2D mogły zmienić krzywe operacji
             self.ensure_generated();
         }

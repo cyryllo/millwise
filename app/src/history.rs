@@ -6,7 +6,7 @@
 //! historia łapie każdą edycję bez wpisywania jej w każdym miejscu programu.
 //! Krzywe są współdzielone między krokami, w których się nie zmieniły.
 
-use crate::doc::{DocContour, Document, Stock};
+use crate::doc::{DocContour, Document, ParamEdit, Stock};
 use crate::icons::Icon;
 use crate::toolbar::Sub;
 use cam_ops::Operation;
@@ -55,6 +55,8 @@ impl Mark {
 struct Step {
     label: String,
     mark: Mark,
+    /// Parametry zmiany (szyk, skala, obrót), jeśli ten krok ją zrobił — do późniejszej edycji.
+    param: Option<ParamEdit>,
     contours: Rc<Vec<DocContour>>,
     /// `geom_revision` dokumentu, przy którym zapisano krzywe.
     geom: u64,
@@ -110,6 +112,7 @@ impl History {
     pub fn track(&mut self, doc: &mut Document, settled: bool) {
         if !self.changed(doc) {
             doc.edit_label = None;
+            doc.step_param = None;
             return;
         }
         if settled {
@@ -125,7 +128,9 @@ impl History {
             Rc::new(doc.contours.clone())
         };
         self.steps.truncate(self.pos + 1);
-        self.steps.push(step(doc, label, contours));
+        let mut st = step(doc, label, contours);
+        st.param = doc.step_param.take();
+        self.steps.push(st);
         if self.steps.len() > MAX_STEPS {
             self.steps.remove(0);
         }
@@ -208,6 +213,27 @@ impl History {
     pub fn pos(&self) -> usize {
         self.pos
     }
+
+    /// Liczba kroków.
+    pub fn len(&self) -> usize {
+        self.steps.len()
+    }
+
+    /// Parametry zmiany zrobionej w kroku `i` (szyk, skala, obrót).
+    pub fn param_edit(&self, i: usize) -> Option<&ParamEdit> {
+        self.steps.get(i)?.param.as_ref()
+    }
+
+    /// Przywraca krok `i` bez zapisywania bieżących zmian jako kroku — do
+    /// przebudowy ostatniej zmiany z innymi parametrami (edycja szyku).
+    pub fn revert_to(&mut self, doc: &mut Document, i: usize) {
+        let Some(s) = self.steps.get(i) else { return };
+        doc.restore_state((*s.contours).clone(), &s.layers, s.sources.clone(), s.ops.clone(), s.stock.clone(), s.post.clone());
+        doc.step_param = None;
+        self.pos = i;
+        self.steps[i].geom = doc.geom_revision;
+        self.serial += 1;
+    }
 }
 
 fn same_subject(a: &Mark, b: &Mark) -> bool {
@@ -222,6 +248,7 @@ fn step(doc: &Document, (mark, label): (Mark, String), contours: Rc<Vec<DocConto
     Step {
         label,
         mark,
+        param: None,
         contours,
         geom: doc.geom_revision,
         layers: doc.layers.iter().map(|l| l.name.clone()).collect(),
@@ -373,6 +400,36 @@ mod tests {
         assert_eq!(g, vec![(0, 0), (1, 3), (4, 5)], "start | operacja: 3 kroki | przesunięcia: 2 kroki");
         h.undo(&mut d);
         assert_eq!(h.pos(), 4, "cofanie dalej po jednym kroku");
+    }
+
+    #[test]
+    fn array_can_be_rebuilt_with_new_parameters() {
+        let mut d = doc_with_square();
+        let mut h = History::new(&d, "Start");
+        assert!(d.array_with_gaps(3, 1, 5.0, 5.0));
+        h.track(&mut d, true);
+        assert_eq!(d.contours.len(), 3);
+        let info = h.param_edit(1).cloned().unwrap();
+        assert!(matches!(info, ParamEdit::Array { cols: 3, rows: 1, .. }));
+        assert_eq!(info.selection(), &[0]);
+
+        // edycja: powrót do stanu sprzed szyku i szyk z nowymi parametrami
+        h.revert_to(&mut d, 0);
+        d.selected = vec![false; d.contours.len()];
+        for &i in info.selection() {
+            d.selected[i] = true;
+        }
+        assert!(d.array_with_gaps(2, 2, 1.0, 1.0));
+        h.track(&mut d, true);
+        assert_eq!(d.contours.len(), 4);
+        assert_eq!(h.len(), 2, "nowy szyk zastąpił stary krok");
+        assert!(matches!(h.param_edit(1), Some(ParamEdit::Array { cols: 2, rows: 2, .. })));
+
+        // skalowanie też da się przebudować
+        d.selected = vec![true, false, false, false];
+        d.scale_selected(2.0);
+        h.track(&mut d, true);
+        assert!(matches!(h.param_edit(2), Some(ParamEdit::Scale { pct, .. }) if *pct == 200.0));
     }
 
     fn test_op() -> Operation {

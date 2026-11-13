@@ -41,6 +41,27 @@ impl DocContour {
     }
 }
 
+/// Zmiana z parametrami zapamiętana w historii, żeby można ją było później
+/// przebudować z innymi wartościami (klik w historii).
+#[derive(Clone, Debug, PartialEq)]
+pub enum ParamEdit {
+    /// Szyk; odstępy między krawędziami kopii [mm].
+    Array { selection: Vec<usize>, cols: usize, rows: usize, gap_x: f64, gap_y: f64 },
+    /// Skalowanie wokół środka zaznaczenia [%].
+    Scale { selection: Vec<usize>, pct: f64 },
+    /// Obrót wokół środka zaznaczenia [°].
+    Rotate { selection: Vec<usize>, deg: f64 },
+}
+
+impl ParamEdit {
+    /// Krzywe, na których zrobiono zmianę (numery w stanie sprzed niej).
+    pub fn selection(&self) -> &[usize] {
+        match self {
+            ParamEdit::Array { selection, .. } | ParamEdit::Scale { selection, .. } | ParamEdit::Rotate { selection, .. } => selection,
+        }
+    }
+}
+
 /// Krzywa w schowku: kontur, nazwa warstwy i nazwa elementu (pliku).
 #[derive(Clone)]
 pub struct ClipItem {
@@ -119,6 +140,8 @@ pub struct Document {
     pub geom_revision: u64,
     /// Opis ostatniej zmiany dla historii (np. „Obrót 90°”) z ikoną; bez opisu historia nazwie zmianę sama.
     pub edit_label: Option<(Mark, String)>,
+    /// Parametry zmiany zrobionej teraz (szyk, skala, obrót) — trafiają do historii.
+    pub step_param: Option<ParamEdit>,
 }
 
 impl Document {
@@ -562,13 +585,16 @@ impl Document {
         let Some(bb) = self.selection_bbox() else { return false };
         let c = bb.center();
         self.label(Mark::new(Icon::Rotate), format!("Obrót {deg}°"));
+        self.step_param = Some(ParamEdit::Rotate { selection: self.selected_indices(), deg });
         self.transform_selected(|k| k.rotate(c, deg.to_radians()))
     }
 
     pub fn scale_selected(&mut self, factor: f64) -> bool {
         let Some(bb) = self.selection_bbox() else { return false };
         let c = bb.center();
-        self.label(Mark::new(Icon::Scale), format!("Skalowanie {}%", (factor * 1e4).round() / 1e2));
+        let pct = (factor * 1e4).round() / 1e2;
+        self.label(Mark::new(Icon::Scale), format!("Skalowanie {pct}%"));
+        self.step_param = Some(ParamEdit::Scale { selection: self.selected_indices(), pct });
         self.transform_selected(|k| k.scale(c, factor))
     }
 
@@ -606,6 +632,18 @@ impl Document {
         }
         self.geometry_changed();
         true
+    }
+
+    /// Szyk z odstępami między krawędziami kopii; parametry trafiają do historii.
+    pub fn array_with_gaps(&mut self, cols: usize, rows: usize, gap_x: f64, gap_y: f64) -> bool {
+        let Some(bb) = self.selection_bbox() else { return false };
+        let selection = self.selected_indices();
+        let s = bb.size();
+        let ok = self.array_selected(cols, rows, s.x + gap_x, s.y + gap_y);
+        if ok {
+            self.step_param = Some(ParamEdit::Array { selection, cols, rows, gap_x, gap_y });
+        }
+        ok
     }
 
     /// Szyk: kopiuje zaznaczenie w siatkę `cols` × `rows` z odstępem (dx, dy).
