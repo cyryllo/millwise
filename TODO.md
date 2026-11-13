@@ -6,9 +6,6 @@ weszło do programu, jest w [CHANGELOG.md](CHANGELOG.md) i w historii gita.
 
 ## 1. Teraz: dopracowanie frezowania 2D / 2.5D
 
-**Usterki zgłoszone przez użytkowników** (do opisania — co, w której operacji, jak
-powinno być):
-
 - [ ] …
 
 ## 2. Wydania
