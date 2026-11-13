@@ -19,8 +19,19 @@ Version numbers:
   value rebuilds it at once and the history keeps one step. Editing an older
   one warns that the later steps will be dropped.
 
+- **Finishing pass** for profiles and pockets: the roughing passes leave a
+  small allowance (0.3 mm to start with), and at the end one pass at full
+  depth takes it off to size, for smoother walls. Tabs are kept.
+- **Arc lead-in and lead-out** for profiles: the tool goes down in the waste,
+  away from the wall, reaches the wall along a tangent arc, goes round and
+  leaves the same way, so the entry leaves no mark. If the arc does not fit
+  (a small hole), its radius is reduced or the tool plunges as before.
+
 ### Changed
 
+- **Shorter rapid moves inside an operation:** each contour starts at the
+  corner nearest to where the tool is (with lead-in: in the middle of the
+  nearest edge), and open contours are cut from the nearer end.
 - Layers on the right are folded at start, like the list of curves.
 
 ## 0.2.0 (2026-11-13)

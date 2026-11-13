@@ -1,7 +1,7 @@
 //! Grawer / prowadzenie po linii: środek narzędzia na linii albo narzędzie
 //! z lewej / prawej strony linii (offset o promień).
 
-use crate::operation::{order_inside_first, CutParams, EngraveParams, EngraveSide, OpResult};
+use crate::operation::{order_inside_first, start_near, CutParams, EngraveParams, EngraveSide, OpResult};
 use crate::path::z_levels;
 use crate::profile::{cut_closed, cut_open};
 use crate::tool::Tool;
@@ -25,7 +25,9 @@ pub(crate) fn generate(cut: &CutParams, p: &EngraveParams, tool: &Tool, contours
                 out
             }
         };
-        for path in paths {
+        for mut path in paths {
+            let pos = res.toolpath.pos().map_or(cam_geom::Vec2::ZERO, |q| q.xy());
+            start_near(&mut path, pos, false);
             if path.closed {
                 cut_closed(&mut res.toolpath, &path, &levels, cut, p.entry, None, &mut res.warnings);
             } else {

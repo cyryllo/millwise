@@ -43,8 +43,9 @@ pub(crate) fn generate(cut: &CutParams, p: &PocketParams, tool: &Tool, contours:
     let opts = ShapeOffsetOptions::new();
 
     let stepover = p.stepover.clamp(0.05, 1.0) * tool.diameter;
+    let finish = p.finish.filter(|a| *a > 1e-6);
     let mut by_level: Vec<Vec<Contour>> = Vec::new();
-    let mut d = tool.radius() + p.stock_to_leave;
+    let mut d = tool.radius() + p.stock_to_leave + finish.unwrap_or(0.0);
     while by_level.len() < 10_000 {
         let sh = shape.parallel_offset(d, &opts);
         let loops: Vec<Contour> = sh
@@ -71,6 +72,9 @@ pub(crate) fn generate(cut: &CutParams, p: &PocketParams, tool: &Tool, contours:
             boundary.iter_mut().for_each(|c| c.reverse());
         }
         zigzag(cut, p, &boundary, stepover, res);
+        if finish.is_some() {
+            finish_walls(cut, p, &shape.parallel_offset(tool.radius() + p.stock_to_leave, &opts), res);
+        }
         return;
     }
 
@@ -180,6 +184,59 @@ pub(crate) fn generate(cut: &CutParams, p: &PocketParams, tool: &Tool, contours:
         }
         prev = z;
     }
+    if finish.is_some() {
+        finish_walls(cut, p, &shape.parallel_offset(tool.radius() + p.stock_to_leave, &opts), res);
+    }
+}
+
+/// Przejście wykańczające ścian kieszeni i wysp: jedno okrążenie każdej pętli
+/// na pełnej głębokości, wejście pionowe w wybranym już obszarze.
+fn finish_walls(cut: &CutParams, p: &PocketParams, sh: &cavalier_contours::shape_algorithms::Shape<f64>, res: &mut OpResult) {
+    let mut loops: Vec<Contour> = sh
+        .ccw_plines
+        .iter()
+        .chain(sh.cw_plines.iter())
+        .map(|ip| Contour::from_cavc(&ip.polyline))
+        .filter(|c| c.verts.len() >= 2)
+        .collect();
+    if p.direction == Direction::Conventional {
+        loops.iter_mut().for_each(|c| c.reverse());
+    }
+    let z = cut.bottom_z();
+    let tp = &mut res.toolpath;
+    while !loops.is_empty() {
+        let pos = tp.pos().map_or(Vec2::ZERO, |q| q.xy());
+        let (k, _) = loops
+            .iter()
+            .enumerate()
+            .map(|(k, c)| (k, c.distance_to(pos)))
+            .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+            .unwrap();
+        let mut lp = loops.swap_remove(k);
+        if let Some((seg, q)) = lp.closest_point(pos) {
+            lp.rotate_start_to(seg, q);
+        }
+        let walk = PathWalk::new(&lp);
+        if walk.is_empty() {
+            continue;
+        }
+        tp.travel_to(P3::from_xy(walk.point_at(0.0), cut.top_z + cut.retract_clearance), cut.safe_z);
+        let z_of = move |_t: f64| z;
+        walk.emit(
+            tp,
+            &WalkSpec {
+                s_start: 0.0,
+                travel: walk.total,
+                z_of: &z_of,
+                tabs: &[],
+                tab_z: f64::NEG_INFINITY,
+                feed: cut.feed,
+                plunge_feed: cut.plunge_feed,
+                ramp_end: 0.0,
+                reverse: false,
+            },
+        );
+    }
 }
 
 /// Czy odcinek a–b przecina którąś z łamanych granicy.
@@ -247,6 +304,22 @@ mod tests {
         }
         let min_z = pts.iter().map(|(p, _)| p.z).fold(f64::MAX, f64::min);
         assert!((min_z + 3.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn finishing_pass_cleans_the_walls_at_full_depth() {
+        let tool = Tool { diameter: 6.0, ..Default::default() };
+        for strategy in [PocketStrategy::Offset, PocketStrategy::Zigzag] {
+            let mut o = pocket_op();
+            o.kind = OpKind::Pocket(PocketParams { strategy, finish: Some(0.5), ..Default::default() });
+            let res = generate(&o, &tool, &[rect(0.0, 0.0, 60.0, 40.0)]);
+            assert!(res.warnings.is_empty(), "{:?}", res.warnings);
+            let pts: Vec<_> = res.toolpath.polyline(0.01).into_iter().filter(|(p, r)| !r && p.z < -0.01).map(|(p, _)| p).collect();
+            let min_x = |z: f64| pts.iter().filter(|p| (p.z - z).abs() < 1e-9).map(|p| p.x).fold(f64::MAX, f64::min);
+            assert!((min_x(-1.5) - 3.5).abs() < 1e-3, "{strategy:?}: zgrubnie zostaje 0,5 mm ({})", min_x(-1.5));
+            assert!((min_x(-3.0) - 3.0).abs() < 1e-3, "{strategy:?}: wykańczanie do wymiaru ({})", min_x(-3.0));
+            assert!(pts.iter().all(|p| p.x >= 3.0 - 1e-6), "{strategy:?}: nie wcina się w ścianę");
+        }
     }
 
     #[test]

@@ -1894,7 +1894,8 @@
               "angle": 3.0
             }
           },
-          "stock_to_leave": 0.0
+          "stock_to_leave": 0.0,
+          "finish": null
         }
       },
       "tool_id": 1,
@@ -1931,7 +1932,9 @@
             "count": 4,
             "width": 6.0,
             "height": 2.0
-          }
+          },
+          "finish": null,
+          "lead": null
         }
       },
       "tool_id": 2,

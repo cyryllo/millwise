@@ -125,6 +125,15 @@ impl PathWalk {
         self.segs.is_empty() || self.total <= 1e-9
     }
 
+    /// Kierunek ruchu (jednostkowy) na początku konturu.
+    pub fn start_tangent(&self) -> Vec2 {
+        match self.segs.first() {
+            Some(Seg::Line { a, b }) => (*b - *a).normalized(),
+            Some(Seg::Arc { a0, sweep, .. }) => Vec2::from_angle(*a0).perp() * sweep.signum(),
+            None => Vec2::new(1.0, 0.0),
+        }
+    }
+
     pub fn point_at(&self, s: f64) -> Vec2 {
         let s = if self.closed { s.rem_euclid(self.total) } else { s.clamp(0.0, self.total) };
         let i = self.seg_index(s);

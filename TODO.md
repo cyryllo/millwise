@@ -13,14 +13,8 @@ powinno być):
 
 - [ ] …
 
-**Brakujące funkcje 2D** (propozycje, do potwierdzenia):
+**Brakujące funkcje 2D:** (zrobione — w „Zrobione” niżej)
 
-- [ ] Przejście wykańczające w profilu i kieszeni (naddatek zbierany na końcu
-      na pełnej głębokości).
-- [ ] Wejście i wyjście po łuku / stycznie (lead-in, lead-out) w profilu.
-- [ ] Kolejność konturów w operacji tak, żeby jałowe przejazdy były krótkie
-      (ręczna zmiana kolejności operacji już jest).
-- [ ] Profil po konturze otwartym (linia, łuk) — sprawdzić zachowanie.
 
 ## 2. Pierwsze wydanie
 
@@ -78,3 +72,14 @@ Plan ustalony, start dopiero po dopracowaniu 2D. Szczegóły w
 - [x] Plan STL / 3D zapisany w ROADMAP.md.
 - [x] Historia zmian (panel na dole, Ctrl+Z / Ctrl+Y), schowek krzywych
       (Ctrl+X / C / V), usuwanie krzywych (Delete), okno skrótów klawiszowych.
+
+**Po 0.2.0 (jeszcze bez wersji)**
+
+- [x] Kolejność obróbki: numery operacji, przeciąganie na liście.
+- [x] Szyk, skalowanie i obrót do zmiany z historii.
+- [x] Przejście wykańczające w profilu i kieszeni.
+- [x] Wejście i wyjście po łuku w profilu.
+- [x] Krótsze jałowe przejazdy: start konturu w najbliższym narożniku, otwarte
+      od bliższego końca.
+- [x] Profil po konturze otwartym sprawdzony testem (tam i z powrotem po
+      linii, bez podnoszenia między poziomami).

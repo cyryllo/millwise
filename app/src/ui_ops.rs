@@ -234,6 +234,26 @@ pub fn ops_panel(
     action
 }
 
+/// Przejście wykańczające: włącznik i naddatek zostawiany przez obróbkę zgrubną.
+fn finish_ui(ui: &mut egui::Ui, finish: &mut Option<f64>) -> bool {
+    let mut changed = false;
+    ui_kit::label(ui, "Przejście wykańczające");
+    let mut on = finish.is_some();
+    if ui
+        .checkbox(&mut on, "")
+        .on_hover_text("Zgrubnie zostaje mały naddatek, a na końcu jedno przejście na pełnej głębokości zbiera go do wymiaru — gładsza ścianka")
+        .changed()
+    {
+        *finish = on.then_some(0.3);
+        changed = true;
+    }
+    ui.end_row();
+    if let Some(a) = finish {
+        changed |= num(ui, "   zostaw do wykończenia", a, 0.05..=5.0, 0.01, " mm");
+    }
+    changed
+}
+
 fn entry_ui(ui: &mut egui::Ui, entry: &mut Entry) -> bool {
     let mut changed = false;
     ui_kit::label(ui, "Wejście");
@@ -438,6 +458,7 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
     });
 
     // --- ustawienia rodzaju operacji ---
+    let tool_r = lib.get(op.tool_id).map_or(3.0, |t| t.radius());
     ui_kit::subtitle(ui, op.kind.label());
     egui::Grid::new("op_kind").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| match &mut op.kind {
         OpKind::Profile(p) => {
@@ -451,6 +472,26 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
             changed |= direction_ui(ui, &mut p.direction);
             changed |= entry_ui(ui, &mut p.entry);
             changed |= num(ui, "Naddatek", &mut p.stock_to_leave, -10.0..=50.0, 0.01, " mm");
+            changed |= finish_ui(ui, &mut p.finish);
+            ui_kit::label(ui, "Wejście po łuku");
+            let mut on = p.lead.is_some();
+            if ui
+                .checkbox(&mut on, "")
+                .on_hover_text("Zejście w odpadzie, obok ścianki; narzędzie dochodzi i odchodzi łukiem stycznym — bez śladu w miejscu wejścia")
+                .changed()
+            {
+                p.lead = on.then_some(tool_r);
+                changed = true;
+            }
+            ui.end_row();
+            if let Some(l) = &mut p.lead {
+                changed |= num(ui, "   promień łuku", l, 0.2..=100.0, 0.05, " mm");
+                if matches!(p.entry, Entry::Ramp { .. }) {
+                    ui.label("");
+                    ui.label(RichText::new("z łukiem zejście jest pionowe, w odpadzie").small().color(ui_kit::LABEL));
+                    ui.end_row();
+                }
+            }
             ui_kit::label(ui, "Mostki");
             let mut on = p.tabs.is_some();
             if ui.checkbox(&mut on, "").changed() {
@@ -490,6 +531,7 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
             changed |= direction_ui(ui, &mut p.direction);
             changed |= entry_ui(ui, &mut p.entry);
             changed |= num(ui, "Naddatek ścian", &mut p.stock_to_leave, 0.0..=50.0, 0.01, " mm");
+            changed |= finish_ui(ui, &mut p.finish);
         }
         OpKind::Drill(p) => {
             ui_kit::label(ui, "Frezowanie po helisie");

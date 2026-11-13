@@ -95,6 +95,11 @@ pub struct ProfileParams {
     /// Naddatek na ściance [mm].
     pub stock_to_leave: f64,
     pub tabs: Option<Tabs>,
+    /// Przejście wykańczające: zgrubne przejścia zostawiają tyle [mm], a na końcu
+    /// jedno przejście na pełnej głębokości zbiera to do wymiaru.
+    pub finish: Option<f64>,
+    /// Wejście i wyjście po łuku stycznym o tym promieniu [mm] (zejście w odpadzie, obok ścianki).
+    pub lead: Option<f64>,
 }
 
 impl Default for ProfileParams {
@@ -105,6 +110,8 @@ impl Default for ProfileParams {
             entry: Entry::Ramp { angle: 5.0 },
             stock_to_leave: 0.0,
             tabs: None,
+            finish: None,
+            lead: None,
         }
     }
 }
@@ -129,6 +136,8 @@ pub struct PocketParams {
     pub direction: Direction,
     pub entry: Entry,
     pub stock_to_leave: f64,
+    /// Przejście wykańczające ścian (i wysp) na pełnej głębokości; zgrubna obróbka zostawia tyle [mm].
+    pub finish: Option<f64>,
 }
 
 impl Default for PocketParams {
@@ -140,6 +149,7 @@ impl Default for PocketParams {
             direction: Direction::Climb,
             entry: Entry::Ramp { angle: 3.0 },
             stock_to_leave: 0.0,
+            finish: None,
         }
     }
 }
@@ -259,8 +269,63 @@ pub(crate) fn ramp_length(entry: Entry, dz: f64) -> Option<f64> {
     }
 }
 
+/// Odległość od `pos` do miejsca, w którym narzędzie zacznie kontur: najbliższy
+/// wierzchołek konturu zamkniętego albo bliższy koniec otwartego.
+fn entry_distance(c: &Contour, pos: cam_geom::Vec2) -> f64 {
+    if c.closed {
+        c.verts.iter().map(|v| v.p.distance(pos)).fold(f64::MAX, f64::min)
+    } else {
+        let a = c.start().unwrap_or_default().distance(pos);
+        let b = c.end().unwrap_or_default().distance(pos);
+        a.min(b)
+    }
+}
+
+/// Ustawia początek konturu blisko `pos`, żeby jałowy przejazd był krótki.
+/// Kontur zamknięty: start w najbliższym wierzchołku (narożniku), a przy
+/// `mid_edge` — w środku najbliższej krawędzi (tam mieści się wejście po łuku).
+/// Kontur otwarty: odwrócony, jeśli koniec jest bliżej niż początek.
+pub(crate) fn start_near(c: &mut Contour, pos: cam_geom::Vec2, mid_edge: bool) {
+    if c.verts.len() < 2 {
+        return;
+    }
+    if !c.closed {
+        let a = c.start().unwrap_or_default().distance(pos);
+        let b = c.end().unwrap_or_default().distance(pos);
+        if b < a {
+            c.reverse();
+        }
+        return;
+    }
+    if mid_edge {
+        let segs = crate::path::segments(c);
+        let longest = segs.iter().map(|s| s.len()).fold(0.0, f64::max);
+        let best = segs
+            .iter()
+            .filter(|s| s.len() >= longest * 0.25)
+            .map(|s| s.point_at(s.len() * 0.5))
+            .min_by(|a, b| a.distance(pos).partial_cmp(&b.distance(pos)).unwrap());
+        if let Some(q) = best {
+            if let Some((seg, q)) = c.closest_point(q) {
+                c.rotate_start_to(seg, q);
+            }
+        }
+        return;
+    }
+    let (k, _) = c
+        .verts
+        .iter()
+        .enumerate()
+        .map(|(k, v)| (k, v.p.distance(pos)))
+        .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+        .unwrap();
+    let q = c.verts[k].p;
+    c.rotate_start_to(k, q);
+}
+
 /// Porządkuje kontury: najpierw najgłębiej zagnieżdżone (otwory przed obrysem),
-/// w obrębie poziomu — najbliższy sąsiad.
+/// w obrębie poziomu — najbliższy sąsiad (licząc do miejsca, w którym
+/// narzędzie zacznie kontur).
 pub(crate) fn order_inside_first(contours: &[Contour]) -> Vec<usize> {
     let depth: Vec<usize> = contours
         .iter()
@@ -279,12 +344,44 @@ pub(crate) fn order_inside_first(contours: &[Contour]) -> Vec<usize> {
             .iter()
             .enumerate()
             .filter(|(_, i)| depth[**i] == max_d)
-            .map(|(k, &i)| (k, contours[i].start().unwrap_or_default().distance(pos)))
+            .map(|(k, &i)| (k, entry_distance(&contours[i], pos)))
             .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
             .unwrap();
         let i = remaining.remove(k);
-        pos = contours[i].end().unwrap_or_default();
+        let mut c = contours[i].clone();
+        start_near(&mut c, pos, false);
+        pos = c.end().unwrap_or_default();
+        if c.closed {
+            pos = c.start().unwrap_or(pos);
+        }
         out.push(i);
     }
     out
+}
+
+#[cfg(test)]
+mod order_tests {
+    use super::*;
+    use cam_geom::{Vec2, Vertex};
+
+    fn square() -> Contour {
+        Contour {
+            verts: vec![Vertex::new(0.0, 0.0, 0.0), Vertex::new(20.0, 0.0, 0.0), Vertex::new(20.0, 20.0, 0.0), Vertex::new(0.0, 20.0, 0.0)],
+            closed: true,
+        }
+    }
+
+    #[test]
+    fn start_moves_to_the_nearest_corner_or_edge_middle() {
+        let mut c = square();
+        start_near(&mut c, Vec2::new(25.0, 24.0), false);
+        assert_eq!(c.start(), Some(Vec2::new(20.0, 20.0)));
+        let mut c = square();
+        start_near(&mut c, Vec2::new(30.0, 8.0), true);
+        assert_eq!(c.start(), Some(Vec2::new(20.0, 10.0)), "środek prawej krawędzi");
+        assert!((c.signed_area() - 400.0).abs() < 1e-9, "kształt bez zmian");
+        let mut l = Contour { verts: vec![Vertex::new(0.0, 0.0, 0.0), Vertex::new(10.0, 0.0, 0.0)], closed: false };
+        start_near(&mut l, Vec2::new(12.0, 0.0), false);
+        assert_eq!(l.start(), Some(Vec2::new(10.0, 0.0)), "otwarta: od bliższego końca");
+    }
 }
