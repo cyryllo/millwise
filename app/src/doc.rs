@@ -7,6 +7,7 @@ use cam_post::{Machine, PostSettings};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+#[derive(Clone)]
 pub struct DocContour {
     pub contour: Contour,
     pub layer: usize,
@@ -35,7 +36,7 @@ pub struct Layer {
     pub visible: bool,
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Stock {
     /// Grubość materiału [mm]. Góra półfabrykatu to Z=0.
@@ -94,6 +95,10 @@ pub struct Document {
     pub post: PostSettings,
     /// Zwiększany przy każdym przeliczeniu ścieżek (symulacja startuje od nowa).
     pub paths_revision: u64,
+    /// Zwiększany przy każdej zmianie krzywych (historia zmian porównuje go zamiast krzywych).
+    pub geom_revision: u64,
+    /// Opis ostatniej zmiany dla historii (np. „Obrót 90°”); bez opisu historia nazwie zmianę sama.
+    pub edit_label: Option<String>,
 }
 
 impl Document {
@@ -317,6 +322,82 @@ impl Document {
         self.bbox = self.contours.iter().map(|c| c.bbox).reduce(|a, b| a.union(&b));
         self.ops_dirty = true;
         self.revision += 1;
+        self.geom_revision += 1;
+    }
+
+    fn label(&mut self, text: impl Into<String>) {
+        self.edit_label = Some(text.into());
+    }
+
+    /// Usuwa zaznaczone krzywe; operacje tracą odwołania do nich. Zwraca liczbę usuniętych.
+    pub fn delete_selected(&mut self) -> usize {
+        let sel = self.selected_indices();
+        if sel.is_empty() {
+            return 0;
+        }
+        // nowy numer każdej pozostającej krzywej
+        let mut map = vec![None; self.contours.len()];
+        let mut n = 0;
+        for (i, m) in map.iter_mut().enumerate() {
+            if !self.selected[i] {
+                *m = Some(n);
+                n += 1;
+            }
+        }
+        let mut k = 0;
+        self.contours.retain(|_| {
+            k += 1;
+            map[k - 1].is_some()
+        });
+        self.selected = vec![false; self.contours.len()];
+        for op in &mut self.ops {
+            op.contours = op.contours.iter().filter_map(|&i| map.get(i).copied().flatten()).collect();
+        }
+        self.geometry_changed();
+        self.label(format!("Usunięto krzywe ({})", sel.len()));
+        sel.len()
+    }
+
+    /// Dodaje krzywe (np. ze schowka) przesunięte o `d`; zaznaczone zostają tylko nowe.
+    pub fn add_contours(&mut self, items: &[(Contour, String)], d: Vec2) {
+        if items.is_empty() {
+            return;
+        }
+        self.selected.iter_mut().for_each(|s| *s = false);
+        for (c, layer) in items {
+            let mut c = c.clone();
+            c.translate(d);
+            let layer = self.layers.iter().position(|l| &l.name == layer).unwrap_or(0);
+            self.contours.push(DocContour::new(c, layer));
+            self.selected.push(true);
+        }
+        self.geometry_changed();
+        self.label(format!("Wklejono krzywe ({})", items.len()));
+    }
+
+    /// Kopia zaznaczonych krzywych do schowka: kontur i nazwa warstwy.
+    pub fn copy_selected(&self) -> Vec<(Contour, String)> {
+        self.selected_indices()
+            .into_iter()
+            .map(|i| {
+                let c = &self.contours[i];
+                let layer = self.layers.get(c.layer).map(|l| l.name.clone()).unwrap_or_default();
+                (c.contour.clone(), layer)
+            })
+            .collect()
+    }
+
+    /// Przywraca stan z historii zmian (krzywe, operacje, półfabrykat, ustawienia G-code).
+    pub fn restore_state(&mut self, contours: Vec<DocContour>, ops: Vec<Operation>, stock: Stock, post: PostSettings) {
+        self.contours = contours;
+        self.selected = vec![false; self.contours.len()];
+        self.op_cache = ops.iter().map(|_| None).collect();
+        self.ops = ops;
+        self.selected_op = self.selected_op.filter(|&i| i < self.ops.len());
+        self.stock = stock;
+        self.post = post;
+        self.edit_label = None;
+        self.geometry_changed();
     }
 
     /// Wykonuje przekształcenie na zaznaczonych krzywych. Zwraca false, gdy nic nie zaznaczono.
@@ -334,24 +415,31 @@ impl Document {
     }
 
     pub fn move_selected(&mut self, d: Vec2) -> bool {
-        self.transform_selected(|c| c.translate(d))
+        let ok = self.transform_selected(|c| c.translate(d));
+        if ok {
+            self.label("Przesunięcie");
+        }
+        ok
     }
 
     pub fn rotate_selected(&mut self, deg: f64) -> bool {
         let Some(bb) = self.selection_bbox() else { return false };
         let c = bb.center();
+        self.label(format!("Obrót {deg}°"));
         self.transform_selected(|k| k.rotate(c, deg.to_radians()))
     }
 
     pub fn scale_selected(&mut self, factor: f64) -> bool {
         let Some(bb) = self.selection_bbox() else { return false };
         let c = bb.center();
+        self.label(format!("Skalowanie {}%", (factor * 1e4).round() / 1e2));
         self.transform_selected(|k| k.scale(c, factor))
     }
 
     pub fn flip_selected(&mut self, horizontal: bool) -> bool {
         let Some(bb) = self.selection_bbox() else { return false };
         let c = bb.center();
+        self.label(if horizontal { "Odbicie w poziomie" } else { "Odbicie w pionie" });
         if horizontal {
             self.transform_selected(|k| k.mirror_x(c.x))
         } else {
@@ -362,6 +450,7 @@ impl Document {
     /// Wyrównuje każdą zaznaczoną krzywą do krawędzi/środka całego zaznaczenia.
     pub fn align_selected(&mut self, mode: AlignMode) -> bool {
         let Some(all) = self.selection_bbox() else { return false };
+        self.label("Wyrównanie");
         for i in self.selected_indices() {
             let bb = self.contours[i].bbox;
             let d = match mode {
@@ -407,6 +496,7 @@ impl Document {
             }
         }
         self.geometry_changed();
+        self.label(format!("Szyk {cols} × {rows}"));
         true
     }
 
@@ -417,6 +507,7 @@ impl Document {
             self.rebuild(i);
         }
         self.geometry_changed();
+        self.label("Zero programu");
     }
 
     /// Punkt przyciągania do wskazywania: środek okręgu lub wierzchołek w promieniu `tol`.

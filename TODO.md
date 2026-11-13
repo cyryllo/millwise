@@ -8,7 +8,7 @@ etapów są w [ROADMAP.md](ROADMAP.md). Odhaczone punkty przenosimy na dół do
 
 Najpierw poprawki istniejących operacji, potem nowe funkcje.
 
-**Usterki zgłoszone przez Cyryla** (do opisania — co, w której operacji, jak
+**Usterki zgłoszone przez użytkowników** (do opisania — co, w której operacji, jak
 powinno być):
 
 - [ ] …
@@ -21,7 +21,6 @@ powinno być):
 - [ ] Kolejność konturów w operacji tak, żeby jałowe przejazdy były krótkie;
       ręczna zmiana kolejności operacji.
 - [ ] Profil po konturze otwartym (linia, łuk) — sprawdzić zachowanie.
-- [ ] Historia cofania (Ctrl+Z / Ctrl+Y).
 
 ## 2. Pierwsze wydanie
 
@@ -78,3 +77,5 @@ Plan ustalony, start dopiero po dopracowaniu 2D. Szczegóły w
 - [x] Znacznik zera programu w widoku 2D i 3D.
 - [x] AppImage budowany lokalnie w Dockerze; `--version` / `--help`.
 - [x] Plan STL / 3D zapisany w ROADMAP.md.
+- [x] Historia zmian (panel na dole, Ctrl+Z / Ctrl+Y), schowek krzywych
+      (Ctrl+X / C / V), usuwanie krzywych (Delete), okno skrótów klawiszowych.

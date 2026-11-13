@@ -10,6 +10,7 @@ mod storage;
 mod ui_ops;
 mod ui_tools;
 mod doc;
+mod history;
 mod view2d;
 mod view3d;
 

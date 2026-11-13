@@ -18,6 +18,17 @@ Version numbers:
   quarters), X and Y arrows and an "X0 Y0" label in the 2D view; X, Y and Z in
   the 3D view. When the zero is outside the 2D view, a marker at the edge
   shows which way it is.
+- **Undo and redo** (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z) for every change to the
+  curves, operations, stock and G-code settings. A drag or a slider move is
+  one step.
+- **History panel** at the bottom of the 2D view: every change with a short
+  description; click a step to go back to that state (Widok → Historia zmian
+  hides it).
+- **Cut, copy and paste curves** (Ctrl+X, Ctrl+C, Ctrl+V); pasted curves land
+  under the mouse pointer. **Delete** removes the selected curves (operations
+  forget them); with no curves selected it removes the selected operation.
+- **Edycja** menu with these commands, **Ctrl+Shift+S** for "save as", and a
+  list of all keyboard shortcuts under Pomoc → Skróty klawiszowe.
 
 ## 0.1.0 (2026-11-13)
 

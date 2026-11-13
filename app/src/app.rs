@@ -1,4 +1,5 @@
 use crate::doc::{AlignMode, Document};
+use crate::history::History;
 use crate::sim_panel::SimState;
 use crate::storage;
 use crate::toolbar::{Sub, Toolbar, ToolbarAction};
@@ -7,7 +8,7 @@ use crate::ui_ops::{self, OpsAction, OpsUi};
 use crate::ui_tools::ToolsWindow;
 use crate::view2d::{colors, op_color, Interaction, View2D, ViewEvent};
 use crate::view3d::View3D;
-use cam_geom::Vec2;
+use cam_geom::{Contour, Vec2};
 use cam_ops::{CutParams, Operation, ToolLibrary};
 use cam_post::{Machine, MachineLibrary};
 use eframe::egui::{self, Color32, RichText};
@@ -60,7 +61,14 @@ pub struct CamApp {
     info: Option<String>,
     gcode_preview: Option<Vec<String>>,
     about_open: bool,
+    shortcuts_open: bool,
     logo: Option<egui::TextureHandle>,
+    history: History,
+    show_history: bool,
+    /// Krok historii, do którego panel ostatnio przewinął listę.
+    history_seen: u64,
+    /// Schowek krzywych (Ctrl+C / Ctrl+X → Ctrl+V): kontur i nazwa warstwy.
+    clipboard: Vec<(Contour, String)>,
 }
 
 impl CamApp {
@@ -68,8 +76,10 @@ impl CamApp {
         cc.egui_ctx.set_visuals(egui::Visuals::dark());
         let (tools, tools_warning) = storage::load_tools();
         let (machines, machines_warning) = storage::load_machines();
+        let doc = Document::default();
+        let history = History::new(&doc, "Nowy projekt");
         let mut app = Self {
-            doc: Document::default(),
+            doc,
             tools,
             tools_window: ToolsWindow::default(),
             machines,
@@ -86,7 +96,12 @@ impl CamApp {
             info: None,
             gcode_preview: None,
             about_open: false,
+            shortcuts_open: false,
             logo: None,
+            history,
+            show_history: true,
+            history_seen: u64::MAX,
+            clipboard: Vec::new(),
         };
         if let Some(p) = initial_file {
             app.open_any(p);
@@ -108,6 +123,7 @@ impl CamApp {
                     "tools" => app.tools_window.open = true,
                     "machines" => app.machines_window.open = true,
                     "about" => app.about_open = true,
+                    "keys" => app.shortcuts_open = true,
                     _ => {}
                 }
             }
@@ -154,6 +170,7 @@ impl CamApp {
 
     fn set_doc(&mut self, doc: Document) {
         self.doc = doc;
+        self.history.reset(&self.doc, format!("Otwarto {}", self.doc.file_name()));
         self.stop_mode();
         self.gcode_preview = None;
         self.view2d.fit_requested = true;
@@ -514,27 +531,45 @@ impl CamApp {
 
     fn shortcuts(&mut self, ctx: &egui::Context) {
         use egui::{Key, KeyboardShortcut, Modifiers};
-        let open = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
-        let save = KeyboardShortcut::new(Modifiers::COMMAND, Key::S);
-        let export = KeyboardShortcut::new(Modifiers::COMMAND, Key::E);
-        let all = KeyboardShortcut::new(Modifiers::COMMAND, Key::A);
-        if ctx.input_mut(|i| i.consume_shortcut(&open)) {
+        let cmd = |k| KeyboardShortcut::new(Modifiers::COMMAND, k);
+        let cmd_shift = |k| KeyboardShortcut::new(Modifiers::COMMAND | Modifiers::SHIFT, k);
+        let pressed = |s: KeyboardShortcut| ctx.input_mut(|i| i.consume_shortcut(&s));
+        if pressed(cmd(Key::O)) {
             self.open_dialog();
         }
-        if ctx.input_mut(|i| i.consume_shortcut(&save)) {
+        // z Shiftem najpierw: Ctrl+S pasuje też do Ctrl+Shift+S
+        if pressed(cmd_shift(Key::S)) {
+            self.save_project(true);
+        }
+        if pressed(cmd(Key::S)) {
             self.save_project(false);
         }
-        if ctx.input_mut(|i| i.consume_shortcut(&export)) {
+        if pressed(cmd(Key::E)) {
             self.export_gcode();
         }
+        // w polu tekstowym skróty edycji należą do pola (cofanie tekstu, kopiowanie)
         if ctx.egui_wants_keyboard_input() {
             return;
         }
-        if ctx.input_mut(|i| i.consume_shortcut(&all)) {
-            for i in 0..self.doc.contours.len() {
-                if self.doc.is_visible(i) {
-                    self.doc.set_selected(i, true);
-                }
+        let now = Self::now(ctx);
+        if pressed(cmd_shift(Key::Z)) || pressed(cmd(Key::Y)) {
+            self.redo(now);
+        }
+        if pressed(cmd(Key::Z)) {
+            self.undo(now);
+        }
+        if self.mode == ViewMode::Project {
+            if pressed(cmd(Key::A)) {
+                self.select_all();
+            }
+            if pressed(cmd(Key::C)) {
+                self.copy(now);
+            }
+            if pressed(cmd(Key::X)) {
+                self.cut(now);
+            }
+            if pressed(cmd(Key::V)) {
+                self.paste(now);
             }
         }
         let (esc, enter, tab, f, del) = ctx.input(|i| {
@@ -571,8 +606,119 @@ impl CamApp {
             self.view3d.fit_requested = true;
         }
         if del && self.mode == ViewMode::Project {
-            if let Some(i) = self.doc.selected_op.filter(|_| self.doc.selected_count() == 0) {
-                self.doc.remove_op(i);
+            self.delete(now);
+        }
+    }
+
+    // ---------- edycja: historia i schowek ----------
+
+    fn undo(&mut self, now: f64) {
+        match self.history.undo(&mut self.doc) {
+            Some(label) => {
+                self.stop_mode();
+                self.view2d.flash(format!("Cofnięto: {label}"), now);
+            }
+            None => self.view2d.flash("Nie ma czego cofnąć", now),
+        }
+    }
+
+    fn redo(&mut self, now: f64) {
+        match self.history.redo(&mut self.doc) {
+            Some(label) => {
+                self.stop_mode();
+                self.view2d.flash(format!("Ponowiono: {label}"), now);
+            }
+            None => self.view2d.flash("Nie ma czego ponowić", now),
+        }
+    }
+
+    fn select_all(&mut self) {
+        for i in 0..self.doc.contours.len() {
+            if self.doc.is_visible(i) {
+                self.doc.set_selected(i, true);
+            }
+        }
+    }
+
+    fn copy(&mut self, now: f64) -> bool {
+        let items = self.doc.copy_selected();
+        if items.is_empty() {
+            self.view2d.flash("Najpierw zaznacz krzywe", now);
+            return false;
+        }
+        self.view2d.flash(format!("Skopiowano krzywe: {}", items.len()), now);
+        self.clipboard = items;
+        true
+    }
+
+    fn cut(&mut self, now: f64) {
+        if self.copy(now) {
+            let n = self.doc.delete_selected();
+            self.doc.edit_label = Some(format!("Wycięto krzywe ({n})"));
+            self.stop_mode();
+            self.view2d.flash(format!("Wycięto krzywe: {n}"), now);
+        }
+    }
+
+    /// Wkleja schowek: środkiem w miejsce kursora, gdy jest nad rysunkiem, inaczej w to samo miejsce.
+    fn paste(&mut self, now: f64) {
+        if self.clipboard.is_empty() {
+            self.view2d.flash("Schowek jest pusty", now);
+            return;
+        }
+        let d = match (self.view2d.cursor_world, self.clipboard.iter().map(|(c, _)| c.bbox()).reduce(|a, b| a.union(&b))) {
+            (Some(p), Some(bb)) => p - bb.center(),
+            _ => Vec2::new(0.0, 0.0),
+        };
+        self.stop_mode();
+        self.doc.add_contours(&self.clipboard, d);
+        self.view2d.flash(format!("Wklejono krzywe: {}", self.clipboard.len()), now);
+    }
+
+    /// Delete: zaznaczone krzywe, a gdy żadnej nie ma — zaznaczona operacja.
+    fn delete(&mut self, now: f64) {
+        if self.doc.selected_count() > 0 {
+            let n = self.doc.delete_selected();
+            self.stop_mode();
+            self.view2d.flash(format!("Usunięto krzywe: {n}"), now);
+        } else if let Some(i) = self.doc.selected_op {
+            self.doc.remove_op(i);
+            self.stop_mode();
+        }
+    }
+
+    fn history_panel(&mut self, ui: &mut egui::Ui) {
+        let now = Self::now(ui.ctx());
+        ui.horizontal(|ui| {
+            ui.strong("Historia zmian");
+            if ui.add_enabled(self.history.can_undo(), egui::Button::new("Cofnij").small()).on_hover_text("Ctrl+Z").clicked() {
+                self.undo(now);
+            }
+            if ui.add_enabled(self.history.can_redo(), egui::Button::new("Ponów").small()).on_hover_text("Ctrl+Y").clicked() {
+                self.redo(now);
+            }
+            ui.label(RichText::new("kliknij krok, aby wrócić do tego stanu").small().weak());
+        });
+        let serial = self.history.serial;
+        let mut jump = None;
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            for (i, label, current, undone) in self.history.entries() {
+                let mut text = RichText::new(format!("{:>3}.  {label}", i + 1)).monospace();
+                if undone {
+                    text = text.weak().italics();
+                }
+                let r = ui.selectable_label(current, text);
+                if current && self.history_seen != serial {
+                    r.scroll_to_me(Some(egui::Align::Center));
+                    self.history_seen = serial;
+                }
+                if r.clicked() && !current {
+                    jump = Some(i);
+                }
+            }
+        });
+        if let Some(i) = jump {
+            if self.history.jump(&mut self.doc, i) {
                 self.stop_mode();
             }
         }
@@ -589,7 +735,7 @@ impl CamApp {
                 if ui.button("Zapisz projekt  (Ctrl+S)").clicked() {
                     self.save_project(false);
                 }
-                if ui.button("Zapisz projekt jako…").clicked() {
+                if ui.button("Zapisz projekt jako…  (Ctrl+Shift+S)").clicked() {
                     self.save_project(true);
                 }
                 ui.separator();
@@ -601,6 +747,37 @@ impl CamApp {
                     ui.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             });
+            ui.menu_button("Edycja", |ui| {
+                let now = Self::now(ui.ctx());
+                let sel = self.doc.selected_count() > 0;
+                let project = self.mode == ViewMode::Project;
+                if ui.add_enabled(self.history.can_undo(), egui::Button::new("Cofnij  (Ctrl+Z)")).clicked() {
+                    self.undo(now);
+                }
+                if ui.add_enabled(self.history.can_redo(), egui::Button::new("Ponów  (Ctrl+Y)")).clicked() {
+                    self.redo(now);
+                }
+                ui.separator();
+                if ui.add_enabled(project && sel, egui::Button::new("Wytnij  (Ctrl+X)")).clicked() {
+                    self.cut(now);
+                }
+                if ui.add_enabled(project && sel, egui::Button::new("Kopiuj  (Ctrl+C)")).clicked() {
+                    self.copy(now);
+                }
+                if ui.add_enabled(project && !self.clipboard.is_empty(), egui::Button::new("Wklej  (Ctrl+V)")).clicked() {
+                    self.paste(now);
+                }
+                if ui.add_enabled(project && sel, egui::Button::new("Usuń krzywe  (Delete)")).clicked() {
+                    self.delete(now);
+                }
+                ui.separator();
+                if ui.add_enabled(project, egui::Button::new("Zaznacz wszystko  (Ctrl+A)")).clicked() {
+                    self.select_all();
+                }
+                if ui.add_enabled(project && sel, egui::Button::new("Odznacz  (Esc)")).clicked() {
+                    self.doc.clear_selection();
+                }
+            });
             ui.menu_button("Widok", |ui| {
                 ui.radio_value(&mut self.mode, ViewMode::Project, "Projekt 2D  (Tab)");
                 ui.radio_value(&mut self.mode, ViewMode::Visual, "Wizualizacja 3D  (Tab)");
@@ -609,6 +786,8 @@ impl CamApp {
                     self.view2d.fit_requested = true;
                     self.view3d.fit_requested = true;
                 }
+                ui.separator();
+                ui.checkbox(&mut self.show_history, "Historia zmian");
             });
             ui.menu_button("Narzędzia", |ui| {
                 if ui.button("Biblioteka narzędzi…").clicked() {
@@ -630,6 +809,9 @@ impl CamApp {
                 }
             });
             ui.menu_button("Pomoc", |ui| {
+                if ui.button("Skróty klawiszowe").clicked() {
+                    self.shortcuts_open = true;
+                }
                 if ui.button("O programie").clicked() {
                     self.about_open = true;
                 }
@@ -810,12 +992,55 @@ impl CamApp {
             ui.separator();
             ui.label(
                 RichText::new(
-                    "Tab = Projekt 2D / Wizualizacja 3D · Esc/Enter = koniec trybu · PPM = przesuń widok · kółko = zoom · F = dopasuj",
+                    "Tab = Projekt 2D / Wizualizacja 3D · Ctrl+Z / Ctrl+Y = cofnij / ponów · Esc/Enter = koniec trybu · PPM = przesuń widok · kółko = zoom · F = dopasuj",
                 )
                 .weak()
                 .small(),
             );
         });
+    }
+
+    fn shortcuts_window(&mut self, ctx: &egui::Context) {
+        const KEYS: &[(&str, &str)] = &[
+            ("Ctrl+O", "otwórz DXF lub projekt"),
+            ("Ctrl+S", "zapisz projekt"),
+            ("Ctrl+Shift+S", "zapisz projekt jako…"),
+            ("Ctrl+E", "eksportuj G-code"),
+            ("", ""),
+            ("Ctrl+Z", "cofnij"),
+            ("Ctrl+Y, Ctrl+Shift+Z", "ponów"),
+            ("Ctrl+X", "wytnij zaznaczone krzywe"),
+            ("Ctrl+C", "kopiuj zaznaczone krzywe"),
+            ("Ctrl+V", "wklej (w miejsce kursora)"),
+            ("Delete", "usuń zaznaczone krzywe, a bez nich — zaznaczoną operację"),
+            ("Ctrl+A", "zaznacz wszystkie krzywe"),
+            ("Esc", "zakończ tryb / odznacz"),
+            ("Enter", "zakończ tryb"),
+            ("", ""),
+            ("Tab", "przełącz Projekt 2D / Wizualizacja 3D"),
+            ("F", "dopasuj widok"),
+            ("Spacja", "odtwarzanie symulacji (w wizualizacji)"),
+            ("kółko myszy", "powiększenie"),
+            ("prawy / środkowy przycisk", "przesuwanie widoku"),
+            ("Shift / Ctrl + klik", "dodaj do zaznaczenia"),
+        ];
+        egui::Window::new("Skróty klawiszowe")
+            .open(&mut self.shortcuts_open)
+            .collapsible(false)
+            .resizable(false)
+            .show(ctx, |ui| {
+                egui::Grid::new("keys").num_columns(2).spacing([24.0, 4.0]).show(ui, |ui| {
+                    for (k, what) in KEYS {
+                        if k.is_empty() {
+                            ui.end_row();
+                            continue;
+                        }
+                        ui.label(RichText::new(*k).monospace().strong());
+                        ui.label(*what);
+                        ui.end_row();
+                    }
+                });
+            });
     }
 
     fn about_window(&mut self, ctx: &egui::Context) {
@@ -952,6 +1177,13 @@ impl eframe::App for CamApp {
                 action = ui_ops::ops_panel(ui, &mut self.doc, &self.tools, &mut self.ops_ui, picking, &machine_label);
             });
             egui::Panel::right("geometry").resizable(true).default_size(260.0).show(ui, |ui| self.side_panel(ui));
+            if self.show_history {
+                egui::Panel::bottom("history")
+                    .resizable(true)
+                    .default_size(120.0)
+                    .min_size(60.0)
+                    .show(ui, |ui| self.history_panel(ui));
+            }
             match action {
                 OpsAction::None => {}
                 OpsAction::ExportGcode => self.export_gcode(),
@@ -1016,6 +1248,11 @@ impl eframe::App for CamApp {
         }
         self.gcode_window(&ctx);
         self.about_window(&ctx);
+        self.shortcuts_window(&ctx);
+
+        // zakończona edycja (mysz puszczona, żadne pole nie jest edytowane) = krok historii
+        let settled = !ctx.input(|i| i.pointer.any_down()) && !ctx.egui_wants_keyboard_input();
+        self.history.track(&mut self.doc, settled);
 
         for (title, msg, color) in [("Błąd", &mut self.error, Color32::LIGHT_RED), ("Informacja", &mut self.info, Color32::LIGHT_GREEN)] {
             if let Some(text) = msg.clone() {

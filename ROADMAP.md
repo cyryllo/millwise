@@ -46,6 +46,6 @@ for the simulation.
 
 ## Other ideas
 
-Adaptive (HSM) pocketing, V-carving, undo history, Windows installer and
+Adaptive (HSM) pocketing, V-carving, Windows installer and
 GitHub Actions builds, Linux packages from CI, update check, double-sided
 machining.

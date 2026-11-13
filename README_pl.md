@@ -44,8 +44,8 @@ tworzy ścieżki narzędzia i zapisuje G-code dla **GRBL / FluidNC** oraz
 
 ## Plany
 
-Import STL i obróbka 3D (drop-cutter), kieszeń adaptacyjna, V-carve, historia
-cofania, instalatory dla Windows i Linuksa. Co jest gotowe — w CHANGELOG.
+Import STL i obróbka 3D (drop-cutter), kieszeń adaptacyjna, V-carve,
+instalatory dla Windows i Linuksa. Co jest gotowe — w CHANGELOG.
 
 ## Budowanie ze źródeł
 

@@ -44,9 +44,8 @@ interface is in Polish for now.
 
 ## Planned
 
-STL import and 3D machining (drop-cutter), adaptive pocketing, V-carving, an
-undo history, installers for Windows and Linux. See the changelog for what is
-done.
+STL import and 3D machining (drop-cutter), adaptive pocketing, V-carving,
+installers for Windows and Linux. See the changelog for what is done.
 
 ## Building from source
 
