@@ -1633,7 +1633,25 @@ impl eframe::App for CamApp {
             let machine = self.machine();
             self.sim.sync(&ctx, &self.doc, &self.tools, &machine);
             self.sim.tick(&ctx);
-            egui::Panel::left("sim").resizable(false).exact_size(300.0).show(ui, |ui| self.sim.panel(ui));
+            let machine_label = machine.controller.label().to_string();
+            let mut gcode_action = None;
+            egui::Panel::left("sim").resizable(false).exact_size(320.0).show(ui, |ui| {
+                self.sim.panel(ui, |ui| {
+                    gcode_action = ui_ops::gcode_buttons(ui, &machine_label);
+                    ui.separator();
+                })
+            });
+            match gcode_action {
+                Some(OpsAction::ExportGcode) => self.export_gcode(),
+                Some(OpsAction::PreviewGcode) => {
+                    self.ensure_generated();
+                    match self.preview_lines() {
+                        Ok(l) => self.gcode_preview = Some(l),
+                        Err(e) => self.error = Some(e),
+                    }
+                }
+                _ => {}
+            }
             let mut close = false;
             egui::CentralPanel::no_frame().show(ui, |ui| {
                 let rect = ui.available_rect_before_wrap();

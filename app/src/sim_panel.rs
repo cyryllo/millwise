@@ -335,7 +335,8 @@ impl SimState {
         })
     }
 
-    pub fn panel(&mut self, ui: &mut egui::Ui) {
+    /// `bottom` rysuje dodatkowe przyciski na samym dole panelu (G-code).
+    pub fn panel(&mut self, ui: &mut egui::Ui, bottom: impl FnOnce(&mut egui::Ui)) {
         ui.add_space(6.0);
         ui.heading("Symulacja");
         if self.worker.is_none() {
@@ -469,6 +470,7 @@ impl SimState {
         }
 
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
+            bottom(ui);
             ui.add_space(6.0);
             if let Some((p, _)) = self.frame.as_ref().and_then(|f| f.pos) {
                 ui.label(RichText::new(format!("X {:.3}  Y {:.3}  Z {:.3}", p.x, p.y, p.z)).monospace());

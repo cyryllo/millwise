@@ -43,7 +43,8 @@ Version numbers:
   operations panel, as a green „Symulacja obróbki” button above the G-code
   buttons: operations, then simulation, then export. The two G-code buttons
   are side by side, each half as wide, in their own colours (preview amber,
-  export blue).
+  export blue). The same two buttons are at the bottom of the simulation
+  panel, so the G-code can be checked or saved right after the simulation.
 - The window opens maximized (1600 × 1000 when restored).
 - Layers on the right are folded at start, like the list of curves.
 
