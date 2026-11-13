@@ -18,8 +18,8 @@ powinno być):
 - [ ] Przejście wykańczające w profilu i kieszeni (naddatek zbierany na końcu
       na pełnej głębokości).
 - [ ] Wejście i wyjście po łuku / stycznie (lead-in, lead-out) w profilu.
-- [ ] Kolejność konturów w operacji tak, żeby jałowe przejazdy były krótkie;
-      ręczna zmiana kolejności operacji.
+- [ ] Kolejność konturów w operacji tak, żeby jałowe przejazdy były krótkie
+      (ręczna zmiana kolejności operacji już jest).
 - [ ] Profil po konturze otwartym (linia, łuk) — sprawdzić zachowanie.
 
 ## 2. Pierwsze wydanie
