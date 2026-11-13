@@ -47,7 +47,7 @@ Plan ustalony, start dopiero po dopracowaniu 2D. Szczegóły w
 
 - [ ] Kieszeń adaptacyjna (HSM).
 - [ ] V-carving.
-- [ ] Instalator dla Windows; budowanie w GitHub Actions (Windows, AppImage).
+- [ ] Budowanie AppImage w GitHub Actions.
 - [ ] Paczki dla Linuksa z CI (deb).
 - [ ] Sprawdzanie aktualizacji.
 - [ ] Obróbka dwustronna.

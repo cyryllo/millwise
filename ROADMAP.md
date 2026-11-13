@@ -46,6 +46,6 @@ for the simulation.
 
 ## Other ideas
 
-Adaptive (HSM) pocketing, V-carving, Windows installer and
-GitHub Actions builds, Linux packages from CI, update check, double-sided
+Adaptive (HSM) pocketing, V-carving, GitHub Actions builds (AppImage),
+Linux packages from CI, update check, double-sided
 machining.

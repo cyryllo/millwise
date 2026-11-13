@@ -33,8 +33,9 @@ not build exactly.
 | `assets` | icon (SVG, PNG, ICO) and logo |
 | `packaging/linux` | AppImage build (Dockerfile, scripts), `.desktop` file, AppStream metadata, local install script |
 
-User data: `~/.config/millwise/` on Linux, `%APPDATA%\millwise\` on Windows
-(`tools.json`, `machines.json`). On the first start after the rename they are
+Millwise targets Linux only for now; Windows is not built or tested.
+
+User data: `~/.config/millwise/` (`tools.json`, `machines.json`). On the first start after the rename they are
 copied from the old `camsoft` folder; projects saved as `.camsoft` still open.
 
 ## Linux AppImage
