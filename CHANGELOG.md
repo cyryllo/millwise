@@ -7,7 +7,10 @@ Version numbers:
   when a new module is added);
 - the **third number** goes up for releases that only fix bugs.
 
-## Unreleased
+## 0.2.0 (2026-11-13)
+
+First version to download: an AppImage for Linux. **Still early development:
+not ready for running a machine.**
 
 ### Added
 

@@ -3,10 +3,10 @@
 **English:** [README.md](README.md) · **Zmiany:** [CHANGELOG.md](CHANGELOG.md) · **Dla programistów:** [DEVELOPMENT.md](DEVELOPMENT.md)
 
 > **Wczesny etap rozwoju — jeszcze nie do użytku.** Millwise jest na bardzo
-> wczesnym etapie (wersja 0.1.0). Zmienia się codziennie, nie ma jeszcze wydań
-> ani instalatorów, a tworzony G-code nie był testowany na prawdziwych
-> maszynach. **Na razie nie zalecamy używania go do sterowania frezarką.**
-> Uwagi i pomysły chętnie przyjmujemy w zgłoszeniach (Issues).
+> wczesnym etapie (wersja 0.2.0). Zmienia się codziennie, a tworzony G-code
+> nie był testowany na prawdziwych maszynach. **Na razie nie zalecamy używania
+> go do sterowania frezarką.** Pierwszą wersję testową dla Linuksa można
+> pobrać (niżej). Uwagi i pomysły chętnie przyjmujemy w zgłoszeniach (Issues).
 
 Millwise to darmowy program CAM dla 3-osiowych frezarek CNC. Z rysunków DXF
 tworzy ścieżki narzędzia i zapisuje G-code dla **GRBL / FluidNC** oraz
@@ -15,7 +15,7 @@ razie nie planujemy).
 
 ![Główne okno Millwise](docs/screenshot.png)
 
-## Co potrafi (0.1.0)
+## Co potrafi (0.2.0)
 
 - **Import DXF:** linie, łuki, okręgi, polilinie z łukami, splajny, elipsy i
   bloki; luźne elementy są łączone w kontury, cale przeliczane na milimetry.
@@ -25,13 +25,18 @@ razie nie planujemy).
   - **Kieszeń** offsetowa albo zygzak, z wyspami.
   - **Wiercenie:** pojedyncze, z wycofaniem albo frezowanie otworu po helisie.
   - **Grawer** po linii, z lewej albo z prawej strony linii.
-- **Edycja:** przesuń, obróć, odbij, skaluj, wyrównaj, szyk; zero programu w
-  rogu półfabrykatu, w jego środku albo we wskazanym punkcie.
+- **Edycja:** przesuń, obróć, odbij, skaluj, wyrównaj, szyk, wytnij / kopiuj /
+  wklej; zero programu w rogu półfabrykatu, w jego środku albo we wskazanym
+  punkcie. **Cofanie i ponawianie** z paskiem historii: jedna ikona na
+  czynność, kliknięcie wraca do niej.
+- **Kilka plików w jednym projekcie:** do bieżącego projektu można dodać
+  kolejne rysunki DXF i inne projekty (z ich operacjami); lista elementów
+  pokazuje, z czego składa się projekt.
 - **Biblioteka narzędzi** wspólna dla wszystkich projektów, z graficznym
   wyborem rodzaju freza (płaski, kulowy, z promieniem naroża, V, grawerski,
   wiertło) i parametrami skrawania dla materiałów (drewno, MDF, aluminium,
   plexi).
-- **Maszyny:** pole robocze, narożnik bazowania, sterownik, posuwy maksymalne
+- **Maszyny** z rysunkiem rodzaju maszyny: pole robocze, narożnik bazowania, sterownik, posuwy maksymalne
   i szybkie, wrzeciono, zmiana narzędzia (pauza M0, M6 albo osobne pliki),
   chłodzenie, własny początek i koniec programu. Operacje są sprawdzane
   względem maszyny.
@@ -48,9 +53,20 @@ razie nie planujemy).
 Import STL i obróbka 3D (drop-cutter), kieszeń adaptacyjna, V-carve, paczki
 dla Linuksa. Co jest gotowe — w CHANGELOG.
 
+## Pobieranie (Linux)
+
+Na stronie [Releases](https://github.com/cyryllo/millwise/releases) jest
+**AppImage**: jeden plik, bez instalacji. Działa na Debianie 12 / 13, Ubuntu
+22.04 lub nowszym i innych dystrybucjach z tego okresu.
+
+```sh
+chmod +x Millwise-0.2.0-x86_64.AppImage
+./Millwise-0.2.0-x86_64.AppImage
+```
+
 ## Budowanie ze źródeł
 
-Paczek jeszcze nie ma. Potrzebny jest aktualny stabilny Rust (testowane na 1.99):
+Potrzebny jest aktualny stabilny Rust (testowane na 1.99):
 
 ```sh
 git clone https://github.com/cyryllo/millwise.git

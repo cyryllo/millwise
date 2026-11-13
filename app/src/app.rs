@@ -1482,11 +1482,13 @@ impl CamApp {
 /// (po kilkudziesięciu klatkach) i zamyka program.
 fn dev_screenshot(ctx: &egui::Context) {
     let Ok(path) = std::env::var("MILLWISE_SCREENSHOT") else { return };
+    // MILLWISE_SCREENSHOT_AT: numer klatki zrzutu (np. później, gdy symulacja musi się przeliczyć)
+    let at: u64 = std::env::var("MILLWISE_SCREENSHOT_AT").ok().and_then(|v| v.parse().ok()).unwrap_or(40);
     let n = ctx.cumulative_frame_nr();
-    if n < 300 {
+    if n <= at + 300 {
         ctx.request_repaint();
     }
-    if n == 40 {
+    if n == at {
         let c = ctx.clone();
         let cb = egui::ScreenshotCallback::new(move |img| {
             let [w, h] = img.size;

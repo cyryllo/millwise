@@ -24,9 +24,8 @@ powinno być):
 
 ## 2. Pierwsze wydanie
 
-- [ ] Wysłać na GitHub zaległe commity (tylko na prośbę).
-- [ ] Wersja z poprawkami 2D (0.2.0 lub 0.1.x) + sekcja w CHANGELOG.
-- [ ] Tag `vX.Y.Z` i wydanie na GitHubie z AppImage.
+- [x] 0.2.0: pierwsze wydanie z AppImage na GitHubie (wersja wstępna).
+- [ ] Kolejna wersja z poprawkami frezowania 2D.
 - [ ] Sprawdzić G-code na prawdziwej maszynie (GRBL/FluidNC, LinuxCNC), potem
       złagodzić ostrzeżenie w README.
 
@@ -72,7 +71,7 @@ Plan ustalony, start dopiero po dopracowaniu 2D. Szczegóły w
       szybkich w materiale.
 - [x] Projekty `.millwise`.
 
-**Po 0.1.0 (jeszcze bez wersji)**
+**0.2.0** (2026-11-13)
 
 - [x] Znacznik zera programu w widoku 2D i 3D.
 - [x] AppImage budowany lokalnie w Dockerze; `--version` / `--help`.
