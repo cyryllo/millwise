@@ -800,7 +800,7 @@ impl CamApp {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 3.0;
                     let pos = self.history.pos();
-                    for g in self.history.groups() {
+                    for (gi, g) in self.history.groups().into_iter().enumerate() {
                         let current = (g.first..=g.last).contains(&pos);
                         let undone = g.first > pos;
                         let count = g.last - g.first + 1;
@@ -833,10 +833,15 @@ impl CamApp {
                             p.circle(c, 6.5, Color32::from_rgb(17, 19, 22), egui::Stroke::new(1.0, Color32::from_gray(120)));
                             p.text(c, egui::Align2::CENTER_CENTER, count.to_string(), egui::FontId::proportional(9.5), Color32::WHITE);
                         }
+                        // numer ikony, a kroki w niej jako 4.1, 4.2, …
                         let mut tip = String::new();
                         for (k, label) in g.labels.iter().enumerate() {
                             let n = g.first + k;
-                            tip.push_str(&format!("{}. {label}", n + 1));
+                            if count == 1 {
+                                tip.push_str(&format!("{}. {label}", gi + 1));
+                            } else {
+                                tip.push_str(&format!("{}.{}  {label}", gi + 1, k + 1));
+                            }
                             if n > pos {
                                 tip.push_str("  (cofnięte)");
                             }
