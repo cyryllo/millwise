@@ -1,24 +1,18 @@
 # TODO
 
-Lista tego, co jest w planie, w kolejności. Szczegóły techniczne większych
-etapów są w [ROADMAP.md](ROADMAP.md). Odhaczone punkty przenosimy na dół do
-„Zrobione” (z wersją, w której weszły).
+Lista tego, co jest jeszcze w planie, w kolejności. Szczegóły techniczne
+większych etapów są w [ROADMAP.md](ROADMAP.md). Zrobione punkty usuwamy — co
+weszło do programu, jest w [CHANGELOG.md](CHANGELOG.md) i w historii gita.
 
 ## 1. Teraz: dopracowanie frezowania 2D / 2.5D
-
-Najpierw poprawki istniejących operacji, potem nowe funkcje.
 
 **Usterki zgłoszone przez użytkowników** (do opisania — co, w której operacji, jak
 powinno być):
 
 - [ ] …
 
-**Brakujące funkcje 2D:** (zrobione — w „Zrobione” niżej)
+## 2. Wydania
 
-
-## 2. Pierwsze wydanie
-
-- [x] 0.2.0: pierwsze wydanie z AppImage na GitHubie (wersja wstępna).
 - [ ] Kolejna wersja z poprawkami frezowania 2D.
 - [ ] Sprawdzić G-code na prawdziwej maszynie (GRBL/FluidNC, LinuxCNC), potem
       złagodzić ostrzeżenie w README.
@@ -44,42 +38,3 @@ Plan ustalony, start dopiero po dopracowaniu 2D. Szczegóły w
 - [ ] Paczki dla Linuksa z CI (deb).
 - [ ] Sprawdzanie aktualizacji.
 - [ ] Obróbka dwustronna.
-
-## Zrobione
-
-**0.1.0** (2026-11-13)
-
-- [x] Import DXF (linie, łuki, okręgi, polilinie z łukami, splajny, elipsy,
-      bloki), łączenie w kontury, cale → mm.
-- [x] Operacje: profil (zewn./wewn./po linii, mostki, rampa, naddatek), kieszeń
-      (offset, zygzak, wyspy), wiercenie (proste, z wycofaniem, helisa), grawer
-      (po linii / z lewej / z prawej).
-- [x] Edycja rysunku: przesuń, obróć, odbij, skaluj, wyrównaj, szyk; zero
-      programu.
-- [x] Biblioteka narzędzi z graficznym wyborem typu freza i ustawieniami dla
-      materiałów.
-- [x] Maszyny: pole robocze, sterownik, posuwy, wrzeciono, zmiana narzędzia,
-      chłodzenie, własny początek/koniec programu; sprawdzanie operacji.
-- [x] G-code dla GRBL/FluidNC i LinuxCNC (G54–G59, osobne pliki na narzędzie).
-- [x] Symulacja 3D na bryle + szybki silnik mapy wysokości, wykrywanie ruchów
-      szybkich w materiale.
-- [x] Projekty `.millwise`.
-
-**0.2.0** (2026-11-13)
-
-- [x] Znacznik zera programu w widoku 2D i 3D.
-- [x] AppImage budowany lokalnie w Dockerze; `--version` / `--help`.
-- [x] Plan STL / 3D zapisany w ROADMAP.md.
-- [x] Historia zmian (panel na dole, Ctrl+Z / Ctrl+Y), schowek krzywych
-      (Ctrl+X / C / V), usuwanie krzywych (Delete), okno skrótów klawiszowych.
-
-**Po 0.2.0 (jeszcze bez wersji)**
-
-- [x] Kolejność obróbki: numery operacji, przeciąganie na liście.
-- [x] Szyk, skalowanie i obrót do zmiany z historii.
-- [x] Przejście wykańczające w profilu i kieszeni.
-- [x] Wejście i wyjście po łuku w profilu.
-- [x] Krótsze jałowe przejazdy: start konturu w najbliższym narożniku, otwarte
-      od bliższego końca.
-- [x] Profil po konturze otwartym sprawdzony testem (tam i z powrotem po
-      linii, bez podnoszenia między poziomami).
