@@ -21,10 +21,16 @@ Version numbers:
 - **Undo and redo** (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z) for every change to the
   curves, operations, stock and G-code settings. A drag or a slider move is
   one step.
-- **History bar** at the bottom of the 2D view: one icon per change (what was
-  changed, with a small mark for added / removed / edited); the pointer over
-  an icon shows the description, a click goes back to that state (Widok →
-  Historia zmian hides it).
+- **History bar** at the bottom of the 2D view: one icon per action, with a
+  small mark for added / removed / edited. Steps that belong together share
+  one icon with their number in the corner — creating an operation, adding
+  its curves and setting its depth, or several moves in a row. The pointer
+  over an icon lists the steps; a click goes back to that state and, for an
+  operation, opens its settings. Ctrl+Z still undoes one step at a time.
+  Widok → Historia zmian hides the bar.
+- **Clicking an empty spot of the drawing** finishes the operation being made
+  and closes its settings; it opens again from the list on the left or from
+  the history bar.
 - **Cut, copy and paste curves** (Ctrl+X, Ctrl+C, Ctrl+V); pasted curves land
   under the mouse pointer. **Delete** removes the selected curves (operations
   forget them); with no curves selected it removes the selected operation.
@@ -34,7 +40,13 @@ Version numbers:
   peck retract) are at the top of the settings in a highlighted box, with the
   number of passes; the rest is grouped (operation, tool and cutting), and
   the rarely changed heights are folded away.
-- The right panel is divided into boxes: stock, layers, curves.
+- The right panel is divided into boxes: stock, layers, curves. On top is the
+  **active machine** in its own box, with a picture, its controller and work
+  area, a list to switch machines and a button to its settings (it used to be
+  a small label in the menu bar).
+- **Machine types with pictures:** gantry, moving table, column mill and
+  sheet router; chosen in the machine settings and shown in the list of
+  machines and in the machine box.
 - **Edycja** menu with these commands, **Ctrl+Shift+S** for "save as", and a
   list of all keyboard shortcuts under Pomoc → Skróty klawiszowe.
 

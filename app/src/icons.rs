@@ -301,6 +301,81 @@ pub fn draw(painter: &egui::Painter, r: Rect, icon: Icon) {
     }
 }
 
+/// Rysunek maszyny danego rodzaju (widok z przodu) w prostokącie `r`; układ 60 × 44 jednostek.
+pub fn draw_machine(painter: &egui::Painter, r: Rect, kind: cam_post::MachineKind) {
+    use cam_post::MachineKind;
+    let k = (r.width() / 60.0).min(r.height() / 44.0);
+    let o = Pos2::new(r.center().x - 30.0 * k, r.center().y - 22.0 * k);
+    let rect = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_size(Pos2::new(o.x + x * k, o.y + y * k), egui::vec2(w * k, h * k));
+    let fill = |x: f32, y: f32, w: f32, h: f32, c: Color32| {
+        painter.rect(rect(x, y, w, h), 1.0 * k, c, Stroke::new(1.0, OUTLINE), StrokeKind::Inside);
+    };
+    let wood = Color32::from_rgb(200, 164, 112);
+    let frame = BLUE;
+    let frame_dark = BLUE_DARK;
+    // wrzeciono z frezem: korpus (x, y) szerokości 8, frez w dół
+    let spindle = |x: f32, y: f32, h: f32| {
+        fill(x, y, 8.0, h, STEEL);
+        fill(x + 2.5, y + h, 3.0, 3.0, STEEL_DARK);
+        painter.line_segment(
+            [Pos2::new(o.x + (x + 4.0) * k, o.y + (y + h + 3.0) * k), Pos2::new(o.x + (x + 4.0) * k, o.y + (y + h + 6.0) * k)],
+            Stroke::new(1.6 * k.max(0.6), WHITE),
+        );
+    };
+    let arrows = |y: f32| {
+        let s = Stroke::new(1.6 * k.max(0.6), RED);
+        let p = |x: f32, yy: f32| Pos2::new(o.x + x * k, o.y + yy * k);
+        painter.line_segment([p(20.0, y), p(40.0, y)], s);
+        painter.add(Shape::convex_polygon(vec![p(17.0, y), p(21.0, y - 2.5), p(21.0, y + 2.5)], RED, Stroke::NONE));
+        painter.add(Shape::convex_polygon(vec![p(43.0, y), p(39.0, y - 2.5), p(39.0, y + 2.5)], RED, Stroke::NONE));
+    };
+    match kind {
+        MachineKind::Gantry => {
+            fill(3.0, 33.0, 54.0, 5.0, PLATE); // stół
+            fill(5.0, 38.0, 4.0, 4.0, LINE_DARK);
+            fill(51.0, 38.0, 4.0, 4.0, LINE_DARK);
+            fill(16.0, 30.0, 28.0, 3.0, wood); // materiał
+            fill(9.0, 8.0, 5.0, 25.0, frame); // boki bramy
+            fill(46.0, 8.0, 5.0, 25.0, frame);
+            fill(7.0, 6.0, 46.0, 7.0, frame_dark); // belka
+            spindle(26.0, 11.0, 11.0);
+            arrows(3.0);
+        }
+        MachineKind::MovingTable => {
+            fill(6.0, 4.0, 6.0, 34.0, LINE_DARK); // nieruchome boki
+            fill(48.0, 4.0, 6.0, 34.0, LINE_DARK);
+            fill(6.0, 4.0, 48.0, 7.0, STEEL_DARK); // belka
+            fill(4.0, 38.0, 52.0, 4.0, LINE_DARK); // podstawa
+            spindle(26.0, 11.0, 10.0);
+            fill(14.0, 29.0, 32.0, 4.0, frame); // ruchomy stół
+            fill(18.0, 26.0, 24.0, 3.0, wood);
+            arrows(36.0);
+        }
+        MachineKind::BenchMill => {
+            fill(8.0, 37.0, 40.0, 5.0, LINE_DARK); // podstawa
+            fill(38.0, 4.0, 9.0, 33.0, frame); // kolumna
+            fill(14.0, 6.0, 30.0, 10.0, frame_dark); // wrzeciennik
+            spindle(20.0, 16.0, 7.0);
+            fill(8.0, 30.0, 30.0, 4.0, PLATE); // stół
+            fill(12.0, 34.0, 22.0, 3.0, STEEL_DARK);
+            fill(16.0, 26.0, 16.0, 4.0, Color32::from_rgb(170, 180, 190)); // imadło
+            painter.circle(Pos2::new(o.x + 5.0 * k, o.y + 32.0 * k), 3.0 * k, STEEL, Stroke::new(1.0, OUTLINE)); // pokrętło
+        }
+        MachineKind::SheetRouter => {
+            fill(1.0, 30.0, 58.0, 5.0, PLATE); // długi stół
+            for x in [3.0, 28.0, 53.0] {
+                fill(x, 35.0, 4.0, 7.0, LINE_DARK);
+            }
+            fill(2.0, 27.0, 56.0, 3.0, wood); // cała płyta
+            fill(18.0, 12.0, 4.0, 15.0, frame);
+            fill(38.0, 12.0, 4.0, 15.0, frame);
+            fill(16.0, 9.0, 28.0, 6.0, frame_dark);
+            spindle(26.0, 14.0, 8.0);
+            arrows(4.0);
+        }
+    }
+}
+
 fn round_rect_pts(r: Rect, radius: f32) -> Vec<Pos2> {
     let rad = radius.min(r.width() * 0.5).min(r.height() * 0.5);
     let corners = [

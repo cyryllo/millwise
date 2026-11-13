@@ -18,6 +18,8 @@ pub enum ViewEvent {
     Point(cam_geom::Vec2),
     /// Przesunięcie zaznaczenia [mm].
     Moved(cam_geom::Vec2),
+    /// Kliknięcie w puste miejsce rysunku (bez krzywej pod kursorem).
+    Empty,
 }
 
 use crate::doc::Document;
@@ -166,6 +168,7 @@ impl View2D {
 
         let clicked = resp.clicked_by(egui::PointerButton::Primary);
         match &inter {
+            Interaction::Op { .. } if clicked && self.hovered.is_none() && !additive => events.push(ViewEvent::Empty),
             Interaction::Op { kind, .. } if clicked => {
                 if let Some(i) = self.hovered {
                     if doc.contour_fits(kind, i) {
@@ -194,7 +197,10 @@ impl View2D {
                     doc.clear_selection();
                     doc.set_selected(i, true);
                 }
-                None if !additive => doc.clear_selection(),
+                None if !additive => {
+                    doc.clear_selection();
+                    events.push(ViewEvent::Empty);
+                }
                 None => {}
             },
             _ => {}

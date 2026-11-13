@@ -168,9 +168,45 @@ impl History {
         true
     }
 
-    /// Kroki do wyświetlenia: (numer, opis, wygląd, czy bieżący, czy cofnięty).
-    pub fn entries(&self) -> impl Iterator<Item = (usize, &str, Mark, bool, bool)> {
-        self.steps.iter().enumerate().map(|(i, s)| (i, s.label.as_str(), s.mark, i == self.pos, i > self.pos))
+}
+
+/// Grupa kolejnych kroków pokazywana w panelu jako jedna ikona.
+pub struct Group<'a> {
+    pub first: usize,
+    pub last: usize,
+    pub mark: Mark,
+    pub labels: Vec<&'a str>,
+}
+
+impl History {
+    /// Kroki zebrane w grupy: kolejne zmiany tej samej operacji (utworzenie,
+    /// krzywe, parametry) albo seria jednakowych zmian (np. kilka przesunięć).
+    /// Cofanie dalej działa po jednym kroku.
+    pub fn groups(&self) -> Vec<Group<'_>> {
+        let mut out: Vec<Group> = Vec::new();
+        for (i, s) in self.steps.iter().enumerate() {
+            let starts_new = matches!(s.mark.badge, Badge::Add | Badge::Remove) || s.mark.icon == Icon::Open;
+            if let Some(g) = out.last_mut().filter(|g| !starts_new && same_subject(&g.mark, &s.mark)) {
+                g.last = i;
+                g.labels.push(&s.label);
+            } else {
+                out.push(Group { first: i, last: i, mark: s.mark, labels: vec![&s.label] });
+            }
+        }
+        out
+    }
+
+    /// Numer bieżącego kroku.
+    pub fn pos(&self) -> usize {
+        self.pos
+    }
+}
+
+fn same_subject(a: &Mark, b: &Mark) -> bool {
+    match (a.op, b.op) {
+        (Some(x), Some(y)) => x == y && a.badge != Badge::Remove,
+        (None, None) => a.icon == b.icon && a.icon != Icon::Open,
+        _ => false,
     }
 }
 
@@ -260,7 +296,7 @@ mod tests {
         d.move_selected(Vec2::new(5.0, 0.0));
         h.track(&mut d, true);
         assert_eq!(d.contours[0].bbox.min.x, 10.0);
-        assert_eq!(h.entries().count(), 2, "przeciąganie = jeden krok");
+        assert_eq!(h.pos(), 1, "przeciąganie = jeden krok");
 
         assert_eq!(h.undo(&mut d).as_deref(), Some("Przesunięcie"));
         assert_eq!(d.contours[0].bbox.min.x, 0.0);
@@ -289,8 +325,8 @@ mod tests {
         d.stock.thickness = 12.0;
         h.track(&mut d, true);
         assert!(!h.can_redo());
-        let last = h.entries().last().unwrap();
-        assert_eq!((last.1, last.2.icon), ("Półfabrykat", Icon::Stock));
+        let last = h.groups().pop().unwrap();
+        assert_eq!((last.labels[0], last.mark.icon), ("Półfabrykat", Icon::Stock));
     }
 
     #[test]
@@ -301,12 +337,32 @@ mod tests {
         let copy = d.ops[0].clone();
         d.add_op(copy); // identyczna kopia
         h.track(&mut d, true);
-        let last = h.entries().last().unwrap();
-        assert_eq!((last.1, last.2.badge, last.2.op), ("Nowa operacja: Profil 1", Badge::Add, Some(1)));
+        let last = h.groups().pop().unwrap();
+        assert_eq!((last.labels[0], last.mark.badge, last.mark.op), ("Nowa operacja: Profil 1", Badge::Add, Some(1)));
         d.ops[1].enabled = false;
         h.track(&mut d, true);
-        let last = h.entries().last().unwrap();
-        assert_eq!((last.1, last.2.badge), ("Profil 1: wyłączona", Badge::Off));
+        let last = h.groups().pop().unwrap();
+        assert_eq!(last.labels, vec!["Nowa operacja: Profil 1", "Profil 1: wyłączona"], "ta sama operacja = jedna grupa");
+    }
+
+    #[test]
+    fn steps_of_one_operation_are_one_group() {
+        let mut d = doc_with_square();
+        let mut h = History::new(&d, "Start");
+        d.add_op(test_op());
+        h.track(&mut d, true);
+        d.ops[0].contours.push(0);
+        h.track(&mut d, true);
+        d.ops[0].cut.depth = 7.5;
+        h.track(&mut d, true);
+        d.move_selected(Vec2::new(1.0, 0.0));
+        h.track(&mut d, true);
+        d.move_selected(Vec2::new(1.0, 0.0));
+        h.track(&mut d, true);
+        let g: Vec<(usize, usize)> = h.groups().iter().map(|g| (g.first, g.last)).collect();
+        assert_eq!(g, vec![(0, 0), (1, 3), (4, 5)], "start | operacja: 3 kroki | przesunięcia: 2 kroki");
+        h.undo(&mut d);
+        assert_eq!(h.pos(), 4, "cofanie dalej po jednym kroku");
     }
 
     fn test_op() -> Operation {

@@ -340,6 +340,24 @@ impl CamApp {
         }
     }
 
+    /// Kliknięcie obok (w puste miejsce rysunku): koniec dodawania krzywych i
+    /// zamknięcie ustawień operacji. Zmiany są już zapisane w projekcie; operację
+    /// otwiera ponownie kliknięcie na liście po lewej albo w historii.
+    fn close_op_editor(&mut self, ctx: &egui::Context) {
+        let target = self.pick_target.filter(|&t| t < self.doc.ops.len());
+        if self.toolbar.current().op_template(1.0).is_some() && target.is_none() {
+            return; // wybrany rodzaj operacji, ale operacji jeszcze nie ma — czekamy na krzywą
+        }
+        let Some(i) = target.or(self.doc.selected_op) else { return };
+        let name = self.doc.ops.get(i).map(|o| o.name.clone()).unwrap_or_default();
+        if target.is_some() {
+            self.stop_mode(); // koniec dodawania krzywych; inne tryby (np. Przesuń) zostają
+        }
+        self.doc.selected_op = None;
+        self.doc.revision += 1;
+        self.view2d.flash(format!("Zapisano: {name}"), Self::now(ctx));
+    }
+
     /// Operacja docelowa dla klikania; tworzy nową z szablonu wariantu, jeśli trzeba.
     fn ensure_target(&mut self) -> Option<usize> {
         if let Some(t) = self.pick_target.filter(|&t| t < self.doc.ops.len()) {
@@ -385,6 +403,7 @@ impl CamApp {
                 ViewEvent::Moved(d) => {
                     self.doc.move_selected(d);
                 }
+                ViewEvent::Empty => self.close_op_editor(ctx),
             }
         }
     }
@@ -712,7 +731,11 @@ impl CamApp {
                 .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 3.0;
-                    for (i, label, mark, current, undone) in self.history.entries() {
+                    let pos = self.history.pos();
+                    for g in self.history.groups() {
+                        let current = (g.first..=g.last).contains(&pos);
+                        let undone = g.first > pos;
+                        let count = g.last - g.first + 1;
                         let (rect, resp) = ui.allocate_exact_size(egui::vec2(32.0, 32.0), egui::Sense::click());
                         let painter = ui.painter();
                         let accent = Color32::from_rgb(61, 127, 224);
@@ -724,10 +747,10 @@ impl CamApp {
                             (Color32::from_rgb(35, 38, 43), egui::Stroke::new(1.0, Color32::from_rgb(52, 57, 64)))
                         };
                         painter.rect(rect, 6.0, bg, stroke, egui::StrokeKind::Inside);
-                        if let Some(op) = mark.op {
+                        if let Some(op) = g.mark.op {
                             let bar = egui::Rect::from_min_max(
                                 egui::pos2(rect.left() + 5.0, rect.bottom() - 4.0),
-                                egui::pos2(rect.right() - 5.0, rect.bottom() - 2.0),
+                                egui::pos2(rect.right() - if count > 1 { 15.0 } else { 5.0 }, rect.bottom() - 2.0),
                             );
                             painter.rect_filled(bar, 1.0, op_color(op));
                         }
@@ -735,37 +758,55 @@ impl CamApp {
                         if undone {
                             p.set_opacity(0.35);
                         }
-                        crate::icons::draw(&p, rect.shrink(6.0), mark.icon);
-                        draw_badge(&p, rect, mark.badge);
-                        let mut tip = format!("{}. {label}", i + 1);
-                        if current {
-                            tip.push_str("\n(stan obecny)");
-                        } else if undone {
-                            tip.push_str("\n(cofnięte — kliknij, aby przywrócić)");
-                        } else {
-                            tip.push_str("\nkliknij, aby wrócić do tego stanu");
+                        crate::icons::draw(&p, rect.shrink(6.0), g.mark.icon);
+                        draw_badge(&p, rect, g.mark.badge);
+                        if count > 1 {
+                            let c = egui::pos2(rect.right() - 7.0, rect.bottom() - 7.0);
+                            p.circle(c, 6.5, Color32::from_rgb(17, 19, 22), egui::Stroke::new(1.0, Color32::from_gray(120)));
+                            p.text(c, egui::Align2::CENTER_CENTER, count.to_string(), egui::FontId::proportional(9.5), Color32::WHITE);
                         }
+                        let mut tip = String::new();
+                        for (k, label) in g.labels.iter().enumerate() {
+                            let n = g.first + k;
+                            tip.push_str(&format!("{}. {label}", n + 1));
+                            if n > pos {
+                                tip.push_str("  (cofnięte)");
+                            }
+                            tip.push('\n');
+                        }
+                        let open = g.mark.op.is_some() && g.mark.badge != crate::history::Badge::Remove;
+                        tip.push_str(match (pos == g.last, undone || current, open) {
+                            (true, _, true) => "(stan obecny) — kliknij, aby edytować operację",
+                            (true, _, false) => "(stan obecny)",
+                            (false, true, _) => "kliknij, aby przywrócić",
+                            (false, false, _) => "kliknij, aby wrócić do tego stanu",
+                        });
                         let resp = resp.on_hover_text(tip);
                         if current && self.history_seen != serial {
                             resp.scroll_to_me(Some(egui::Align::Center));
                             self.history_seen = serial;
                         }
-                        if resp.clicked() && !current {
-                            jump = Some(i);
+                        if resp.clicked() {
+                            jump = Some((g.last, g.mark.op.filter(|_| g.mark.badge != crate::history::Badge::Remove)));
                         }
                     }
                 });
             });
         });
-        if let Some(i) = jump {
-            if self.history.jump(&mut self.doc, i) {
+        // klik: powrót do końca grupy (jeśli trzeba) i otwarcie ustawień jej operacji
+        if let Some((step, op)) = jump {
+            if step != self.history.pos() && self.history.jump(&mut self.doc, step) {
                 self.stop_mode();
+            }
+            if let Some(op) = op.filter(|&o| o < self.doc.ops.len()) {
+                self.stop_mode();
+                self.doc.selected_op = Some(op);
+                self.doc.revision += 1;
             }
         }
     }
 
     fn menu(&mut self, ui: &mut egui::Ui) {
-        let machine = self.machine();
         egui::MenuBar::new().ui(ui, |ui| {
             ui.menu_button("Plik", |ui| {
                 if ui.button("Otwórz DXF / projekt…  (Ctrl+O)").clicked() {
@@ -859,16 +900,70 @@ impl CamApp {
             ui.separator();
             ui.selectable_value(&mut self.mode, ViewMode::Project, RichText::new("  Projekt 2D  ").strong());
             ui.selectable_value(&mut self.mode, ViewMode::Visual, RichText::new("  Wizualizacja 3D  ").strong());
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let text = format!("{}  ·  {} mm", machine.name, machine.summary());
-                if ui.button(text).on_hover_text("Aktywna maszyna — kliknij, aby edytować").clicked() {
-                    self.machines_window.open = true;
-                }
-            });
         });
     }
 
+    /// Aktywna maszyna: wyraźna ramka na górze prawego panelu, z wyborem maszyny.
+    fn machine_card(&mut self, ui: &mut egui::Ui) {
+        let Some(m) = self.machines.active().cloned() else {
+            ui_kit::card(ui, |ui| {
+                ui_kit::title(ui, "Maszyna");
+                if ui.button("Dodaj maszynę…").clicked() {
+                    self.machines_window.open = true;
+                }
+            });
+            return;
+        };
+        let accent = Color32::from_rgb(61, 127, 224);
+        let mut pick = None;
+        let mut open = false;
+        ui_kit::accent_card(ui, accent, |ui| {
+            ui.horizontal(|ui| {
+                ui_kit::title(ui, "Maszyna");
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    open = ui.small_button("Ustawienia…").on_hover_text("Pole robocze, posuwy, sterownik, zmiana narzędzia").clicked();
+                });
+            });
+            let others: Vec<(u32, String)> = self.machines.machines.iter().map(|m| (m.id, m.name.clone())).collect();
+            ui.horizontal(|ui| {
+                let (r, resp) = ui.allocate_exact_size(egui::vec2(60.0, 44.0), egui::Sense::click());
+                crate::icons::draw_machine(ui.painter(), r, m.kind);
+                if resp.on_hover_text(m.kind.label()).clicked() {
+                    open = true;
+                }
+                ui.vertical(|ui| {
+                    if others.len() > 1 {
+                        egui::ComboBox::from_id_salt("active_machine")
+                            .width(ui.available_width() - 8.0)
+                            .selected_text(RichText::new(&m.name).size(16.0).strong().color(Color32::WHITE))
+                            .show_ui(ui, |ui| {
+                                for (id, name) in &others {
+                                    if ui.selectable_label(*id == m.id, name).clicked() {
+                                        pick = Some(*id);
+                                    }
+                                }
+                            });
+                    } else {
+                        ui.label(RichText::new(&m.name).size(16.0).strong().color(Color32::WHITE));
+                    }
+                    ui.label(RichText::new(format!("{} mm", m.summary())).color(ui_kit::LABEL));
+                });
+            });
+        });
+        if open {
+            self.machines_window.open = true;
+        }
+        if let Some(id) = pick.filter(|&id| id != m.id) {
+            self.machines.active = id;
+            self.save_machines();
+            self.doc.ops_dirty = true;
+        }
+    }
+
     fn side_panel(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(4.0);
+        self.machine_card(ui);
+        ui.add_space(6.0);
         let doc = &mut self.doc;
         ui.add_space(4.0);
         ui.heading(doc.file_name());

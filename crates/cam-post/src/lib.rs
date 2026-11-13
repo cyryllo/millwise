@@ -1,7 +1,7 @@
 //! Postprocesor G-code: GRBL / FluidNC oraz LinuxCNC, profile maszyn.
 
 pub mod machine;
-pub use machine::{Controller, HomeCorner, Machine, MachineLibrary, SpindleKind};
+pub use machine::{Controller, HomeCorner, Machine, MachineKind, MachineLibrary, SpindleKind};
 
 use cam_ops::toolpath::{arc_points, Move, Toolpath, P3};
 use cam_ops::Tool;

@@ -618,6 +618,7 @@ dependencies = [
  "cam-io",
  "cam-ops",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

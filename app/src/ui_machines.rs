@@ -1,6 +1,7 @@
 //! Okno „Maszyny”: lista profili, podgląd pola roboczego, parametry w zakładkach.
 
-use cam_post::{Controller, HomeCorner, Machine, MachineLibrary, SpindleKind, ToolChange};
+use crate::icons;
+use cam_post::{Controller, HomeCorner, Machine, MachineKind, MachineLibrary, SpindleKind, ToolChange};
 use eframe::egui::{self, Color32, Pos2, Rect, RichText, Stroke, StrokeKind};
 
 const ACCENT: Color32 = Color32::from_rgb(61, 127, 224);
@@ -138,8 +139,9 @@ fn machine_row(ui: &mut egui::Ui, m: &Machine, selected: bool, active: bool) -> 
     let p = ui.painter();
     let bg = if selected { Color32::from_rgb(31, 51, 80) } else { Color32::from_rgb(37, 40, 45) };
     p.rect(rect, 8.0, bg, Stroke::new(1.0, if selected { ACCENT } else { Color32::from_rgb(52, 57, 64) }), StrokeKind::Inside);
-    p.text(rect.min + egui::vec2(10.0, 9.0), egui::Align2::LEFT_TOP, &m.name, egui::FontId::proportional(13.0), Color32::from_gray(235));
-    p.text(rect.min + egui::vec2(10.0, 29.0), egui::Align2::LEFT_TOP, m.summary() + " mm", egui::FontId::proportional(12.0), Color32::from_gray(155));
+    icons::draw_machine(p, Rect::from_min_size(rect.min + egui::vec2(6.0, 8.0), egui::vec2(50.0, 36.0)), m.kind);
+    p.text(rect.min + egui::vec2(62.0, 9.0), egui::Align2::LEFT_TOP, &m.name, egui::FontId::proportional(13.0), Color32::from_gray(235));
+    p.text(rect.min + egui::vec2(62.0, 29.0), egui::Align2::LEFT_TOP, m.summary() + " mm", egui::FontId::proportional(12.0), Color32::from_gray(155));
     if active {
         let r = Rect::from_min_size(Pos2::new(rect.right() - 66.0, rect.top() + 8.0), egui::vec2(58.0, 16.0));
         p.rect_filled(r, 4.0, Color32::from_rgb(90, 220, 120));
@@ -189,8 +191,42 @@ fn num(ui: &mut egui::Ui, label: &str, v: &mut f64, range: std::ops::RangeInclus
     c
 }
 
+/// Przycisk wyboru rodzaju maszyny: rysunek i nazwa.
+fn kind_button(ui: &mut egui::Ui, k: MachineKind, active: bool) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(104.0, 88.0), egui::Sense::click());
+    let bg = if active {
+        Color32::from_rgb(31, 51, 80)
+    } else if resp.hovered() {
+        Color32::from_rgb(45, 49, 56)
+    } else {
+        Color32::from_rgb(39, 42, 48)
+    };
+    let stroke = Stroke::new(if active { 1.5 } else { 1.0 }, if active { ACCENT } else { Color32::from_rgb(52, 57, 64) });
+    let p = ui.painter();
+    p.rect(rect, 8.0, bg, stroke, StrokeKind::Inside);
+    icons::draw_machine(p, Rect::from_center_size(Pos2::new(rect.center().x, rect.top() + 34.0), egui::vec2(80.0, 58.0)), k);
+    p.text(
+        Pos2::new(rect.center().x, rect.bottom() - 7.0),
+        egui::Align2::CENTER_BOTTOM,
+        k.label(),
+        egui::FontId::proportional(12.0),
+        if active { Color32::WHITE } else { Color32::from_gray(200) },
+    );
+    resp.on_hover_text(k.hint())
+}
+
 fn general(ui: &mut egui::Ui, m: &mut Machine) -> bool {
     let mut ch = false;
+    ui.label("Rodzaj maszyny");
+    ui.horizontal_wrapped(|ui| {
+        for k in MachineKind::ALL {
+            if kind_button(ui, k, m.kind == k).clicked() && m.kind != k {
+                m.kind = k;
+                ch = true;
+            }
+        }
+    });
+    ui.add_space(6.0);
     egui::Grid::new("m_general").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
         ui.label("Nazwa");
         ch |= ui.add(egui::TextEdit::singleline(&mut m.name).desired_width(260.0)).changed();

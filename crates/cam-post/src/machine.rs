@@ -29,6 +29,43 @@ impl Controller {
     }
 }
 
+/// Rodzaj (budowa) maszyny — do ikony na liście i w oknie programu.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum MachineKind {
+    /// Brama jeździ nad nieruchomym stołem (typowa frezarka stołowa, np. 6040).
+    #[default]
+    Gantry,
+    /// Stół jeździ pod nieruchomą bramą (małe frezarki, np. 3018).
+    MovingTable,
+    /// Frezarka kolumnowa (wrzeciennik na kolumnie, np. do metalu).
+    BenchMill,
+    /// Duża frezarka do całych płyt (ploter).
+    SheetRouter,
+}
+
+impl MachineKind {
+    pub const ALL: [MachineKind; 4] =
+        [MachineKind::Gantry, MachineKind::MovingTable, MachineKind::BenchMill, MachineKind::SheetRouter];
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            MachineKind::Gantry => "Portalowa",
+            MachineKind::MovingTable => "Ruchomy stół",
+            MachineKind::BenchMill => "Kolumnowa",
+            MachineKind::SheetRouter => "Do płyt (ploter)",
+        }
+    }
+
+    pub fn hint(&self) -> &'static str {
+        match self {
+            MachineKind::Gantry => "Brama jeździ nad stołem, np. 6040",
+            MachineKind::MovingTable => "Stół jeździ pod bramą, np. 3018",
+            MachineKind::BenchMill => "Wrzeciennik na kolumnie, frezarka do metalu",
+            MachineKind::SheetRouter => "Duży stół na całe płyty",
+        }
+    }
+}
+
 /// Narożnik stołu, w którym maszyna się bazuje.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum HomeCorner {
@@ -77,6 +114,7 @@ impl SpindleKind {
 pub struct Machine {
     pub id: u32,
     pub name: String,
+    pub kind: MachineKind,
     pub controller: Controller,
     // --- pole robocze ---
     pub travel_x: f64,
@@ -123,6 +161,7 @@ impl Default for Machine {
         Machine {
             id: 0,
             name: "Frezarka 6040".into(),
+            kind: MachineKind::Gantry,
             controller: Controller::Grbl,
             travel_x: 600.0,
             travel_y: 400.0,
@@ -217,6 +256,7 @@ impl MachineLibrary {
         let a = lib.add(Machine::default());
         lib.add(Machine {
             name: "Mini CNC 3018".into(),
+            kind: MachineKind::MovingTable,
             controller: Controller::Grbl,
             travel_x: 300.0,
             travel_y: 180.0,
@@ -231,6 +271,7 @@ impl MachineLibrary {
         });
         lib.add(Machine {
             name: "Router 1325 (LinuxCNC)".into(),
+            kind: MachineKind::SheetRouter,
             controller: Controller::LinuxCnc,
             travel_x: 2500.0,
             travel_y: 1300.0,
@@ -273,5 +314,18 @@ impl MachineLibrary {
         if self.get(self.active).is_none() {
             self.active = self.machines.first().map_or(0, |m| m.id);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_machine_files_without_kind_still_load() {
+        let m: Machine = serde_json::from_str(r#"{"id": 3, "name": "Stara", "travel_x": 500.0}"#).unwrap();
+        assert_eq!((m.kind, m.travel_x, m.travel_y), (MachineKind::Gantry, 500.0, 400.0));
+        let back: Machine = serde_json::from_str(&serde_json::to_string(&Machine { kind: MachineKind::BenchMill, ..m }).unwrap()).unwrap();
+        assert_eq!(back.kind, MachineKind::BenchMill);
     }
 }
