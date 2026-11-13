@@ -471,6 +471,58 @@ impl Document {
         self.sources.len() - 1
     }
 
+    /// Odstęp między elementami przy układaniu dodanych plików [mm].
+    const ELEMENT_GAP: f64 = 10.0;
+
+    /// Miejsce (lewy dolny róg) na nowy element o rozmiarze `size`: obok
+    /// istniejących, rzędami od dołu — najpierw w prawo, a gdy przekroczyłby
+    /// `max_width`, w kolejnym rzędzie wyżej; bez nachodzenia na inne elementy.
+    fn free_spot(&self, size: Vec2, max_width: Option<f64>) -> Vec2 {
+        let gap = Self::ELEMENT_GAP;
+        let Some(all) = self.bbox else { return Vec2::new(0.0, 0.0) };
+        // prostokąty zajęte przez elementy (pliki)
+        let mut boxes: Vec<Aabb2> = Vec::new();
+        for s in 0..self.sources.len().max(1) {
+            if let Some(b) = self.contours.iter().filter(|c| c.source == s).map(|c| c.bbox).reduce(|a, b| a.union(&b)) {
+                boxes.push(b);
+            }
+        }
+        if boxes.is_empty() {
+            boxes.push(all);
+        }
+        let limit = max_width.map(|w| all.min.x + w.max(size.x));
+        // kandydaci: na prawo od każdego elementu (na wysokości jego dołu) i nad całością
+        let mut cand: Vec<Vec2> = boxes.iter().map(|b| Vec2::new(b.max.x + gap, b.min.y)).collect();
+        cand.extend(boxes.iter().map(|b| Vec2::new(b.min.x, b.max.y + gap)));
+        cand.push(Vec2::new(all.min.x, all.max.y + gap));
+        cand.sort_by(|a, b| (a.y, a.x).partial_cmp(&(b.y, b.x)).unwrap());
+        let free = |p: Vec2| {
+            let r = Aabb2 { min: p, max: p + size };
+            limit.is_none_or(|l| r.max.x <= l + 1e-6)
+                && boxes.iter().all(|b| {
+                    let b = b.expanded(gap * 0.5 - 1e-6);
+                    let r = r.expanded(gap * 0.5 - 1e-6);
+                    r.max.x <= b.min.x || r.min.x >= b.max.x || r.max.y <= b.min.y || r.min.y >= b.max.y
+                })
+        };
+        cand.into_iter().find(|&p| free(p)).unwrap_or(Vec2::new(all.min.x, all.max.y + gap))
+    }
+
+    /// Przesuwa cały rysunek tak, żeby lewy dolny róg półfabrykatu był w punkcie
+    /// 0,0 (zero programu). Bez wpisu w historii — do użycia przy wczytaniu.
+    pub fn place_at_origin(&mut self) {
+        let Some(sb) = self.stock_box() else { return };
+        let d = Vec2::new(0.0, 0.0) - sb.min;
+        if d.length() < 1e-9 {
+            return;
+        }
+        for i in 0..self.contours.len() {
+            self.contours[i].contour.translate(d);
+            self.rebuild(i);
+        }
+        self.geometry_changed();
+    }
+
     /// Liczba krzywych każdego elementu.
     pub fn source_counts(&self) -> Vec<usize> {
         let mut n = vec![0; self.sources.len()];
@@ -494,10 +546,12 @@ impl Document {
     /// krzywe stają obok dotychczasowych i zostają zaznaczone, warstwy o tej
     /// samej nazwie są łączone, operacje projektu dochodzą razem z krzywymi.
     /// Zwraca liczbę dodanych krzywych i operacji.
-    pub fn merge(&mut self, other: Document) -> (usize, usize) {
+    /// `max_width` — szerokość, w której mają się zmieścić elementy (pole robocze
+    /// maszyny minus naddatki); gdy nowy element się nie mieści, idzie do rzędu wyżej.
+    pub fn merge(&mut self, other: Document, max_width: Option<f64>) -> (usize, usize) {
         let name = other.file_name();
-        let d = match (self.bbox, other.bbox) {
-            (Some(a), Some(b)) if !self.contours.is_empty() => Vec2::new(a.max.x + 10.0 - b.min.x, a.min.y - b.min.y),
+        let d = match other.bbox {
+            Some(b) if !self.contours.is_empty() => self.free_spot(b.size(), max_width) - b.min,
             _ => Vec2::new(0.0, 0.0),
         };
         let layer_map: Vec<usize> = other
@@ -804,5 +858,45 @@ fn check_machine(op: &Operation, tp: &cam_ops::Toolpath, m: &Machine, warnings: 
                 s.x, s.y, m.travel_x, m.travel_y
             ));
         }
+    }
+}
+
+#[cfg(test)]
+mod placement_tests {
+    use super::*;
+    use cam_geom::Vertex;
+
+    /// Dokument z prostokątem w × h zaczynającym się w (x, y).
+    fn rect_doc(name: &str, x: f64, y: f64, w: f64, h: f64) -> Document {
+        let mut c = Contour::new(true);
+        for (px, py) in [(x, y), (x + w, y), (x + w, y + h), (x, y + h)] {
+            c.verts.push(Vertex::new(px, py, 0.0));
+        }
+        let mut d = Document { path: Some(PathBuf::from(name)), contours: vec![DocContour::new(c, 0)], ..Default::default() };
+        d.finish_load();
+        d
+    }
+
+    #[test]
+    fn opened_drawing_lands_at_zero() {
+        // rysunek narysowany wokół środka układu, jak na zgłoszonym zrzucie
+        let mut d = rect_doc("a.dxf", -150.0, -120.0, 300.0, 240.0);
+        d.place_at_origin();
+        let sb = d.stock_box().unwrap();
+        assert!(sb.min.distance(Vec2::new(0.0, 0.0)) < 1e-9, "lewy dolny róg półfabrykatu w 0,0: {:?}", sb.min);
+        assert!((d.bbox.unwrap().min.x - d.stock.margin).abs() < 1e-9);
+    }
+
+    #[test]
+    fn added_files_go_right_then_to_the_next_row() {
+        let mut d = rect_doc("a.dxf", 0.0, 0.0, 100.0, 50.0);
+        let width = Some(250.0);
+        d.merge(rect_doc("b.dxf", 500.0, 500.0, 100.0, 50.0), width);
+        d.merge(rect_doc("c.dxf", -40.0, 7.0, 100.0, 50.0), width);
+        d.merge(rect_doc("d.dxf", 0.0, 0.0, 100.0, 50.0), width);
+        let at = |s: usize| d.contours.iter().filter(|c| c.source == s).map(|c| c.bbox.min).next().unwrap();
+        assert_eq!(at(1), Vec2::new(110.0, 0.0), "drugi obok pierwszego");
+        assert_eq!(at(2), Vec2::new(0.0, 60.0), "trzeci się nie mieści — rząd wyżej");
+        assert_eq!(at(3), Vec2::new(110.0, 60.0), "czwarty obok trzeciego");
     }
 }

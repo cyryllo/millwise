@@ -165,6 +165,8 @@ impl CamApp {
         match Document::load_dxf(&path) {
             Ok(mut doc) => {
                 doc.stock = std::mem::take(&mut self.doc.stock);
+                // rysunek zawsze w tym samym miejscu: lewy dolny róg półfabrykatu = 0,0
+                doc.place_at_origin();
                 self.set_doc(doc);
             }
             Err(e) => self.error = Some(format!("{e:#}")),
@@ -188,6 +190,9 @@ impl CamApp {
         self.doc = doc;
         self.param_edit = None;
         self.open_source = None;
+        // ustawienie przy wczytaniu (np. zero w 0,0) nie jest krokiem historii
+        self.doc.edit_label = None;
+        self.doc.step_param = None;
         self.history.reset(&self.doc, format!("Otwarto {}", self.doc.file_name()));
         self.stop_mode();
         self.gcode_preview = None;
@@ -258,7 +263,9 @@ impl CamApp {
             match loaded {
                 Ok(other) => {
                     let name = other.file_name();
-                    let (n, ops) = self.doc.merge(other);
+                    let machine = self.machine();
+                    let width = machine.travel_x - 2.0 * self.doc.stock.margin;
+                    let (n, ops) = self.doc.merge(other, Some(width));
                     added.push(if ops > 0 { format!("{name}: {n} krzywych, {ops} operacji") } else { format!("{name}: {n} krzywych") });
                 }
                 Err(e) => self.error = Some(format!("{}: {e:#}", path.display())),

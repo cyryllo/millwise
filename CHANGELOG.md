@@ -7,6 +7,18 @@ Version numbers:
   when a new module is added);
 - the **third number** goes up for releases that only fix bugs.
 
+## Unreleased
+
+### Changed
+
+- **An opened DXF drawing always lands at the program zero:** the bottom left
+  corner of the stock is at X0 Y0, whatever coordinates the drawing has in
+  the file (before, a drawing made around its centre opened with the zero in
+  the middle). Saved projects open where they were saved.
+- **Added files are laid out in rows:** next to the existing elements, to the
+  right while they fit in the machine's work area, then in a new row above,
+  never on top of another element.
+
 ## 0.3.0 (2026-11-14)
 
 ### Added

@@ -296,7 +296,7 @@ mod tests {
         let mut h = crate::history::History::new(&doc, "Start");
 
         let dxf = Document::load_dxf(&root.join("samples/test.dxf")).unwrap();
-        assert_eq!(doc.merge(dxf), (n0, 0));
+        assert_eq!(doc.merge(dxf, None), (n0, 0));
         h.track(&mut doc, true);
         // element bazowy nosi nazwę rysunku, z którego powstał projekt; ten sam plik dodany drugi raz dostaje numer
         assert_eq!(doc.sources, vec!["test.dxf".to_string(), "test.dxf (2)".to_string()]);
@@ -307,7 +307,7 @@ mod tests {
 
         let (proj, _) = load_project(&proj_path, &mut lib).unwrap();
         let _ = std::fs::remove_file(&proj_path);
-        doc.merge(proj);
+        doc.merge(proj, None);
         h.track(&mut doc, true);
         assert_eq!(doc.ops.len(), ops0 * 2);
         assert_eq!(doc.layers.len(), layers0, "warstwy o tych samych nazwach są łączone");
