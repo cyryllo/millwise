@@ -557,7 +557,15 @@ impl CamApp {
                 ViewEvent::Moved(d) => {
                     self.doc.move_selected(d);
                 }
-                ViewEvent::Empty => self.close_op_editor(ctx),
+                ViewEvent::Empty => {
+                    // klik obok: zamyka okienko narzędzia edycji (szyk, obrót, skala…) i edycję z historii
+                    self.param_edit = None;
+                    let sub = self.toolbar.current();
+                    if sub != Sub::Select && sub.op_template(1.0).is_none() {
+                        self.stop_mode();
+                    }
+                    self.close_op_editor(ctx);
+                }
             }
         }
     }

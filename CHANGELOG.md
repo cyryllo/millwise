@@ -32,6 +32,9 @@ Version numbers:
 - **Shorter rapid moves inside an operation:** each contour starts at the
   corner nearest to where the tool is (with lead-in: in the middle of the
   nearest edge), and open contours are cut from the nearer end.
+- Clicking an empty spot of the drawing also closes the box of an editing
+  tool (array, move, rotate, scale, align) and the box for changing an older
+  step from the history.
 - Layers on the right are folded at start, like the list of curves.
 
 ## 0.2.0 (2026-11-13)
