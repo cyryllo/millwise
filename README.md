@@ -3,7 +3,7 @@
 **Po polsku:** [README_pl.md](README_pl.md) · **Changes:** [CHANGELOG.md](CHANGELOG.md) · **For developers:** [DEVELOPMENT.md](DEVELOPMENT.md)
 
 > **Early development — not ready for use.** Millwise is at a very early stage
-> (version 0.2.0). It changes every day and the G-code it writes has not been
+> (version 0.3.0). It changes every day and the G-code it writes has not been
 > tested on real machines. **Please do not use it to run a CNC machine yet.**
 > A first test version for Linux can be downloaded (see below). Feedback and
 > ideas are welcome in the issues.
@@ -15,15 +15,17 @@ not planned for now). The user interface is in Polish for now.
 
 ![Millwise main window](docs/screenshot.png)
 
-## What it does (0.2.0)
+## What it does (0.3.0)
 
 - **DXF import:** lines, arcs, circles, polylines with arcs, splines,
   ellipses and blocks; loose pieces are joined into contours, inches are
   converted to millimetres.
 - **Operations:** pick a tool and an operation on the left toolbar, then
-  click the curves in the 2D view.
-  - **Profile** outside / inside, with tabs, ramp entry and stock to leave.
-  - **Pocket** offset or zigzag, with islands.
+  click the curves in the 2D view. The machining order is changed by
+  dragging the operations in the list.
+  - **Profile** outside / inside, with tabs, ramp or arc lead-in, stock to
+    leave and a finishing pass.
+  - **Pocket** offset or zigzag, with islands and a finishing pass.
   - **Drilling:** single, peck, or helical hole milling.
   - **Engraving** on the line, on its left or on its right.
 - **Editing:** move, rotate, mirror, scale, align, array, cut / copy / paste;
@@ -59,8 +61,8 @@ The [Releases](https://github.com/cyryllo/millwise/releases) page has an
 Ubuntu 22.04 or newer and other distributions of that age.
 
 ```sh
-chmod +x Millwise-0.2.0-x86_64.AppImage
-./Millwise-0.2.0-x86_64.AppImage
+chmod +x Millwise-0.3.0-x86_64.AppImage
+./Millwise-0.3.0-x86_64.AppImage
 ```
 
 ## Building from source

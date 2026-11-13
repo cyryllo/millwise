@@ -19,7 +19,8 @@ Simulation timing (release build, prints the time of each stage):
 manual checks: `3d`, `simend`, `simat=0.25` (simulation at a fraction of the
 program), `bottom`, `tools`, `machines`, `about`, `keys` (keyboard shortcuts),
 `op=2` (select the third operation) — several separated by commas.
-`MILLWISE_SCREENSHOT=file.ppm` saves a picture of the program's own window
+`MILLWISE_SCREENSHOT=file.ppm` (the window then opens at 1600 × 1000, not
+maximized) saves a picture of the program's own window
 after a moment and closes it (convert with `convert file.ppm file.png`);
 `MILLWISE_SCREENSHOT_AT=200` takes it at a later frame (e.g. after the
 simulation has been computed). `CAMSIM_DEBUG=1` prints the cells the fast (height map) engine could

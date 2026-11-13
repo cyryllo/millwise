@@ -7,7 +7,7 @@ Version numbers:
   when a new module is added);
 - the **third number** goes up for releases that only fix bugs.
 
-## Unreleased
+## 0.3.0 (2026-11-14)
 
 ### Added
 
@@ -18,7 +18,6 @@ Version numbers:
   history bar opens its values (columns, rows and gaps; percent; angle); a new
   value rebuilds it at once and the history keeps one step. Editing an older
   one warns that the later steps will be dropped.
-
 - **Finishing pass** for profiles and pockets: the roughing passes leave a
   small allowance (0.3 mm to start with), and at the end one pass at full
   depth takes it off to size, for smoother walls. Tabs are kept.
