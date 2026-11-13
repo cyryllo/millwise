@@ -41,7 +41,9 @@ Version numbers:
   hints: it shows the machining simulation, not a 3D preview of a model. Its
   button moved from the toolbar (which now holds only drawing tools) to the
   operations panel, as a green „Symulacja obróbki” button above the G-code
-  buttons: operations, then simulation, then export.
+  buttons: operations, then simulation, then export. The two G-code buttons
+  are side by side, each half as wide, in their own colours (preview amber,
+  export blue).
 - Layers on the right are folded at start, like the list of curves.
 
 ## 0.2.0 (2026-11-13)

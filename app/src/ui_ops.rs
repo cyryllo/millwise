@@ -223,11 +223,24 @@ pub fn ops_panel(
     ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
         ui.add_space(4.0);
         ui.label(RichText::new(format!("Postprocesor z maszyny: {machine_label}")).small().weak());
-        ui.horizontal(|ui| {
-            if ui.button("Podgląd G-code").clicked() {
+        // dwa przyciski G-code, każdy na pół szerokości przycisku symulacji
+        let row = egui::vec2(ui.available_width(), 32.0);
+        ui.allocate_ui_with_layout(row, egui::Layout::left_to_right(egui::Align::Center), |ui| {
+            let gap = ui.spacing().item_spacing.x;
+            let size = egui::vec2((row.x - gap) / 2.0, 32.0);
+            let amber = Color32::from_rgb(230, 170, 70);
+            let preview = egui::Button::new(RichText::new("Podgląd G-code").color(Color32::WHITE))
+                .fill(amber.gamma_multiply(0.2))
+                .stroke(egui::Stroke::new(1.0, amber))
+                .min_size(size);
+            if ui.add(preview).clicked() {
                 action = OpsAction::PreviewGcode;
             }
-            if ui.button(RichText::new("Eksportuj G-code…").strong()).clicked() {
+            let export = egui::Button::new(RichText::new("Eksportuj G-code…").strong().color(Color32::WHITE))
+                .fill(Color32::from_rgb(31, 51, 80))
+                .stroke(egui::Stroke::new(1.0, Color32::from_rgb(61, 127, 224)))
+                .min_size(size);
+            if ui.add(export).clicked() {
                 action = OpsAction::ExportGcode;
             }
         });
