@@ -7,6 +7,22 @@ Version numbers:
   when a new module is added);
 - the **third number** goes up for releases that only fix bugs.
 
+## Unreleased
+
+### Added
+
+- **Machining order:** the operations on the left are numbered in the order
+  they are cut and can be **dragged** to a new place (a line shows where the
+  operation will land); the change is one step in the history.
+- **Change an array, a scale or a rotation later:** a click on its icon in the
+  history bar opens its values (columns, rows and gaps; percent; angle); a new
+  value rebuilds it at once and the history keeps one step. Editing an older
+  one warns that the later steps will be dropped.
+
+### Changed
+
+- Layers on the right are folded at start, like the list of curves.
+
 ## 0.2.0 (2026-11-13)
 
 First version to download: an AppImage for Linux. **Still early development:

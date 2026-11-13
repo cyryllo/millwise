@@ -322,13 +322,29 @@ impl Document {
     pub fn move_op(&mut self, i: usize, up: bool) {
         let j = if up { i.checked_sub(1) } else { Some(i + 1).filter(|&j| j < self.ops.len()) };
         if let Some(j) = j {
-            self.ops.swap(i, j);
-            self.op_cache.swap(i, j);
-            if self.selected_op == Some(i) {
-                self.selected_op = Some(j);
-            }
-            self.ops_dirty = true;
+            self.move_op_to(i, j);
         }
+    }
+
+    /// Zmiana kolejności obróbki: operacja `from` trafia na miejsce `to` (numer na liście po zmianie).
+    pub fn move_op_to(&mut self, from: usize, to: usize) {
+        let n = self.ops.len();
+        if from >= n || to >= n || from == to {
+            return;
+        }
+        let mut order: Vec<usize> = (0..n).collect();
+        let k = order.remove(from);
+        order.insert(to, k);
+        let op = self.ops.remove(from);
+        let cache = self.op_cache.remove(from);
+        let name = op.name.clone();
+        self.ops.insert(to, op);
+        self.op_cache.insert(to, cache);
+        self.selected_op = self.selected_op.and_then(|s| order.iter().position(|&x| x == s));
+        self.ops_dirty = true;
+        self.revision += 1;
+        let mark = Mark::op(to, &self.ops[to], Badge::Order);
+        self.label(mark, format!("Kolejność obróbki: {name} na {}. miejsce", to + 1));
     }
 
     /// Przelicza ścieżki wszystkich operacji.

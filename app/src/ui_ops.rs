@@ -107,7 +107,12 @@ pub fn ops_panel(
     ui.label(RichText::new("Wybierz operację na pasku po lewej i klikaj krzywe w widoku 2D.").small().weak());
 
     ui.add_space(6.0);
-    ui_kit::title(ui, "Lista operacji");
+    ui.horizontal(|ui| {
+        ui_kit::title(ui, "Kolejność obróbki");
+        if doc.ops.len() > 1 {
+            ui.label(RichText::new("przeciągnij, aby zmienić").small().color(ui_kit::LABEL));
+        }
+    });
     if doc.ops.is_empty() {
         ui.label(RichText::new("Brak operacji.").weak());
     }
@@ -115,6 +120,7 @@ pub fn ops_panel(
     // --- lista: nazwa operacji na górze, krótko narzędzie i głębokość pod spodem ---
     let mut select: Option<usize> = None;
     let mut changed = false;
+    let mut reorder: Option<(usize, usize)> = None;
     egui::ScrollArea::vertical().id_salt("ops_list").max_height(190.0).auto_shrink([false, true]).show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = 4.0;
         for i in 0..doc.ops.len() {
@@ -124,10 +130,37 @@ pub fn ops_panel(
                     if r.clicked() {
                         select = Some(i);
                     }
+                    // przeciąganie: zmiana kolejności obróbki
+                    if r.drag_started() {
+                        r.dnd_set_drag_payload(i);
+                    }
+                    if r.dragged() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+                    }
+                    let above = ui.ctx().pointer_interact_pos().is_some_and(|p| p.y < r.rect.center().y);
+                    if let Some(src) = r.dnd_hover_payload::<usize>() {
+                        if *src != i {
+                            let y = if above { r.rect.top() - 2.0 } else { r.rect.bottom() + 2.0 };
+                            ui.painter().hline(r.rect.x_range(), y, egui::Stroke::new(3.0, Color32::from_rgb(61, 127, 224)));
+                        }
+                    }
+                    if let Some(src) = r.dnd_release_payload::<usize>() {
+                        let src = *src;
+                        let mut to = if above { i } else { i + 1 };
+                        if src < to {
+                            to -= 1;
+                        }
+                        reorder = Some((src, to));
+                    }
                 }
             });
         }
     });
+    if let Some((from, to)) = reorder.filter(|(a, b)| a != b) {
+        doc.move_op_to(from, to);
+        action = OpsAction::StopPicking;
+        select = None;
+    }
     if let Some(i) = select {
         doc.selected_op = if doc.selected_op == Some(i) { None } else { Some(i) };
         if picking.is_some() {
@@ -237,7 +270,7 @@ fn direction_ui(ui: &mut egui::Ui, d: &mut Direction) -> bool {
 fn op_row(ui: &mut egui::Ui, doc: &Document, lib: &ToolLibrary, i: usize) -> Option<egui::Response> {
     let op = doc.ops.get(i)?;
     let sel = doc.selected_op == Some(i);
-    let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 40.0), egui::Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 40.0), egui::Sense::click_and_drag());
     let painter = ui.painter_at(rect);
     let color = op_color(i);
     let (bg, stroke) = if sel {
@@ -263,7 +296,13 @@ fn op_row(ui: &mut egui::Ui, doc: &Document, lib: &ToolLibrary, i: usize) -> Opt
     let warnings: Vec<String> = cache.map(|c| c.result.warnings.clone()).unwrap_or_default();
     let x = rect.left() + 44.0;
     let name_color = if op.enabled { Color32::WHITE } else { Color32::from_gray(120) };
-    painter.text(egui::pos2(x, rect.top() + 12.0), egui::Align2::LEFT_CENTER, &op.name, egui::FontId::proportional(14.0), name_color);
+    painter.text(
+        egui::pos2(x, rect.top() + 12.0),
+        egui::Align2::LEFT_CENTER,
+        format!("{}. {}", i + 1, op.name),
+        egui::FontId::proportional(14.0),
+        name_color,
+    );
     let tool = lib.get(op.tool_id).map(|t| format!("T{} Ø{}", t.number, t.diameter)).unwrap_or_else(|| "T?".into());
     let detail = format!("{tool}  ·  gł. {} mm  ·  {} krz.", fmt_mm(op.cut.depth), op.contours.len());
     painter.text(egui::pos2(x, rect.top() + 29.0), egui::Align2::LEFT_CENTER, detail, egui::FontId::proportional(11.0), Color32::from_gray(150));

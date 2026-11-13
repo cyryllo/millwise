@@ -47,7 +47,7 @@ impl Mark {
         self
     }
 
-    fn op(i: usize, op: &Operation, b: Badge) -> Self {
+    pub fn op(i: usize, op: &Operation, b: Badge) -> Self {
         Mark { icon: Sub::for_op(&op.kind).icon(), badge: b, op: Some(i) }
     }
 }
@@ -430,6 +430,26 @@ mod tests {
         d.scale_selected(2.0);
         h.track(&mut d, true);
         assert!(matches!(h.param_edit(2), Some(ParamEdit::Scale { pct, .. }) if *pct == 200.0));
+    }
+
+    #[test]
+    fn machining_order_change_is_one_described_step() {
+        let mut d = doc_with_square();
+        for n in ["A", "B", "C"] {
+            d.ops.push(Operation { name: n.into(), ..test_op() });
+        }
+        d.op_cache = vec![None, None, None];
+        d.selected_op = Some(0);
+        let mut h = History::new(&d, "Start");
+        d.move_op_to(0, 2); // A na koniec
+        h.track(&mut d, true);
+        let names: Vec<&str> = d.ops.iter().map(|o| o.name.as_str()).collect();
+        assert_eq!(names, ["B", "C", "A"]);
+        assert_eq!(d.selected_op, Some(2), "zaznaczenie idzie za przeniesioną operacją");
+        let last = h.groups().pop().unwrap();
+        assert_eq!((last.labels[0], last.mark.badge), ("Kolejność obróbki: A na 3. miejsce", Badge::Order));
+        h.undo(&mut d);
+        assert_eq!(d.ops[0].name, "A");
     }
 
     fn test_op() -> Operation {
