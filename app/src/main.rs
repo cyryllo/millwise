@@ -47,7 +47,8 @@ fn main() -> eframe::Result<()> {
                 width: 256,
                 height: 256,
             }))
-            .with_inner_size([1400.0, 900.0])
+            .with_inner_size([1600.0, 1000.0])
+            .with_maximized(true)
             .with_min_inner_size([800.0, 500.0]),
         renderer: eframe::Renderer::Wgpu,
         ..Default::default()

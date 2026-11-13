@@ -44,6 +44,7 @@ Version numbers:
   buttons: operations, then simulation, then export. The two G-code buttons
   are side by side, each half as wide, in their own colours (preview amber,
   export blue).
+- The window opens maximized (1600 × 1000 when restored).
 - Layers on the right are folded at start, like the list of curves.
 
 ## 0.2.0 (2026-11-13)
