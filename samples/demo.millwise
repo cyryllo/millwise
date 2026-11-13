@@ -9,9 +9,13 @@
     "OBRYS",
     "OTWORY"
   ],
+  "sources": [
+    "test.dxf"
+  ],
   "contours": [
     {
       "layer": 0,
+      "source": 0,
       "contour": {
         "verts": [
           {
@@ -1525,6 +1529,7 @@
     },
     {
       "layer": 0,
+      "source": 0,
       "contour": {
         "verts": [
           {
@@ -1561,6 +1566,7 @@
     },
     {
       "layer": 1,
+      "source": 0,
       "contour": {
         "verts": [
           {
@@ -1625,6 +1631,7 @@
     },
     {
       "layer": 1,
+      "source": 0,
       "contour": {
         "verts": [
           {
@@ -1647,6 +1654,7 @@
     },
     {
       "layer": 1,
+      "source": 0,
       "contour": {
         "verts": [
           {
@@ -1683,6 +1691,7 @@
     },
     {
       "layer": 2,
+      "source": 0,
       "contour": {
         "verts": [
           {
@@ -1747,6 +1756,7 @@
     },
     {
       "layer": 3,
+      "source": 0,
       "contour": {
         "verts": [
           {
@@ -1769,6 +1779,7 @@
     },
     {
       "layer": 3,
+      "source": 0,
       "contour": {
         "verts": [
           {
@@ -1791,6 +1802,7 @@
     },
     {
       "layer": 3,
+      "source": 0,
       "contour": {
         "verts": [
           {
@@ -1813,6 +1825,7 @@
     },
     {
       "layer": 3,
+      "source": 0,
       "contour": {
         "verts": [
           {

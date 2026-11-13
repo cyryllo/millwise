@@ -27,7 +27,7 @@ fn main() -> eframe::Result<()> {
             }
             "--help" | "-h" => {
                 println!(
-                    "Millwise {} — CAM dla frezarek CNC\n\nUżycie: millwise [plik.dxf | projekt.millwise]\n  --version   wersja programu\n  --help      ta pomoc",
+                    "Millwise {} — CAM dla frezarek CNC\n\nUżycie: millwise [plik.dxf | projekt.millwise] [kolejne pliki…]\n  (pierwszy plik jest otwierany, kolejne dochodzą do projektu)\n  --version   wersja programu\n  --help      ta pomoc",
                     env!("CARGO_PKG_VERSION")
                 );
                 return Ok(());
@@ -36,7 +36,7 @@ fn main() -> eframe::Result<()> {
         }
     }
 
-    let initial_file = std::env::args().nth(1).map(std::path::PathBuf::from);
+    let files: Vec<std::path::PathBuf> = std::env::args().skip(1).map(std::path::PathBuf::from).collect();
 
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
@@ -55,6 +55,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "Millwise",
         options,
-        Box::new(move |cc| Ok(Box::new(app::CamApp::new(cc, initial_file)))),
+        Box::new(move |cc| Ok(Box::new(app::CamApp::new(cc, files)))),
     )
 }

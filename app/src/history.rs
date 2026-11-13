@@ -58,6 +58,8 @@ struct Step {
     contours: Rc<Vec<DocContour>>,
     /// `geom_revision` dokumentu, przy którym zapisano krzywe.
     geom: u64,
+    layers: Vec<String>,
+    sources: Vec<String>,
     ops: Vec<Operation>,
     stock: Stock,
     post: PostSettings,
@@ -93,7 +95,13 @@ impl History {
     /// Czy dokument różni się od bieżącego kroku.
     fn changed(&self, doc: &Document) -> bool {
         let c = self.current();
-        doc.geom_revision != c.geom || doc.ops != c.ops || doc.stock != c.stock || doc.post != c.post
+        doc.geom_revision != c.geom
+            || doc.ops != c.ops
+            || doc.stock != c.stock
+            || doc.post != c.post
+            || doc.sources != c.sources
+            || doc.layers.len() != c.layers.len()
+            || doc.layers.iter().zip(&c.layers).any(|(a, b)| &a.name != b)
     }
 
     /// Wywoływane co klatkę. Zapisuje zmianę jako nowy krok, gdy edycja się
@@ -161,7 +169,7 @@ impl History {
             self.commit(doc);
         }
         let s = &self.steps[i];
-        doc.restore_state((*s.contours).clone(), s.ops.clone(), s.stock.clone(), s.post.clone());
+        doc.restore_state((*s.contours).clone(), &s.layers, s.sources.clone(), s.ops.clone(), s.stock.clone(), s.post.clone());
         self.pos = i;
         self.steps[i].geom = doc.geom_revision;
         self.serial += 1;
@@ -216,6 +224,8 @@ fn step(doc: &Document, (mark, label): (Mark, String), contours: Rc<Vec<DocConto
         mark,
         contours,
         geom: doc.geom_revision,
+        layers: doc.layers.iter().map(|l| l.name.clone()).collect(),
+        sources: doc.sources.clone(),
         ops: doc.ops.clone(),
         stock: doc.stock.clone(),
         post: doc.post.clone(),
@@ -281,7 +291,7 @@ mod tests {
         for (x, y) in [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)] {
             sq.verts.push(cam_geom::Vertex::new(x, y, 0.0));
         }
-        d.add_contours(&[(sq, String::new())], Vec2::new(0.0, 0.0));
+        d.add_contours(&[crate::doc::ClipItem { contour: sq, layer: String::new(), source: String::new() }], Vec2::new(0.0, 0.0));
         d.edit_label = None;
         d
     }
@@ -310,7 +320,7 @@ mod tests {
     fn new_change_drops_redo_and_delete_remaps_ops() {
         let mut d = doc_with_square();
         let sq2 = d.contours[0].contour.clone();
-        d.add_contours(&[(sq2, String::new())], Vec2::new(20.0, 0.0));
+        d.add_contours(&[crate::doc::ClipItem { contour: sq2, layer: String::new(), source: String::new() }], Vec2::new(20.0, 0.0));
         d.ops.push(Operation { contours: vec![0, 1], ..test_op() });
         let mut h = History::new(&d, "Start");
 

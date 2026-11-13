@@ -44,6 +44,16 @@ Version numbers:
   **active machine** in its own box, with a picture, its controller and work
   area, a list to switch machines and a button to its settings (it used to be
   a small label in the menu bar).
+- **Add files to a project** (Plik → Dodaj DXF / projekt…, Ctrl+I, or drop
+  files on the window; several at once): the new drawing is placed next to
+  the existing ones and selected, ready to move. An added project brings its
+  operations and tools along. Layers with the same name are joined. Several
+  files can also be given on the command line: the first one is opened, the
+  others are added.
+- **Elements list** on the right: the files the project is made of, each with
+  its number of curves; a click shows its size, layers and operations, with
+  buttons to select or remove it. The right panel is more compact: layers and
+  the list of curves fold away.
 - **Machine types with pictures:** gantry, moving table, column mill and
   sheet router; chosen in the machine settings and shown in the list of
   machines and in the machine box.

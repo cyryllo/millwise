@@ -13,6 +13,8 @@ use std::path::{Path, PathBuf};
 pub struct DocContour {
     pub contour: Contour,
     pub layer: usize,
+    /// Element (plik), z którego pochodzi krzywa — indeks w `Document::sources`.
+    pub source: usize,
     /// Kontur spłaszczony do łamanej — do rysowania i zaznaczania.
     pub flat: Vec<Vec2>,
     pub bbox: Aabb2,
@@ -29,8 +31,22 @@ impl DocContour {
             area: contour.signed_area().abs(),
             contour,
             layer,
+            source: 0,
         }
     }
+
+    fn with_source(mut self, source: usize) -> Self {
+        self.source = source;
+        self
+    }
+}
+
+/// Krzywa w schowku: kontur, nazwa warstwy i nazwa elementu (pliku).
+#[derive(Clone)]
+pub struct ClipItem {
+    pub contour: Contour,
+    pub layer: String,
+    pub source: String,
 }
 
 pub struct Layer {
@@ -82,6 +98,8 @@ pub struct Document {
     pub project_path: Option<PathBuf>,
     pub contours: Vec<DocContour>,
     pub layers: Vec<Layer>,
+    /// Elementy projektu: nazwy wczytanych i dodanych plików.
+    pub sources: Vec<String>,
     pub selected: Vec<bool>,
     pub bbox: Option<Aabb2>,
     pub stock: Stock,
@@ -133,6 +151,14 @@ impl Document {
 
     /// Uzupełnia pola pochodne po wczytaniu geometrii.
     pub fn finish_load(&mut self) {
+        if self.sources.is_empty() {
+            let name = self.project_path.as_ref().or(self.path.as_ref()).and_then(|p| p.file_name());
+            self.sources.push(name.map_or_else(|| "Rysunek".into(), |n| n.to_string_lossy().into_owned()));
+        }
+        let last = self.sources.len() - 1;
+        for c in &mut self.contours {
+            c.source = c.source.min(last);
+        }
         self.bbox = self.contours.iter().map(|c| c.bbox).reduce(|a, b| a.union(&b));
         self.selected = vec![false; self.contours.len()];
         self.op_cache = self.ops.iter().map(|_| None).collect();
@@ -317,7 +343,7 @@ impl Document {
 
     fn rebuild(&mut self, i: usize) {
         let c = &self.contours[i];
-        self.contours[i] = DocContour::new(c.contour.clone(), c.layer);
+        self.contours[i] = DocContour::new(c.contour.clone(), c.layer).with_source(c.source);
     }
 
     fn geometry_changed(&mut self) {
@@ -361,16 +387,17 @@ impl Document {
     }
 
     /// Dodaje krzywe (np. ze schowka) przesunięte o `d`; zaznaczone zostają tylko nowe.
-    pub fn add_contours(&mut self, items: &[(Contour, String)], d: Vec2) {
+    pub fn add_contours(&mut self, items: &[ClipItem], d: Vec2) {
         if items.is_empty() {
             return;
         }
         self.selected.iter_mut().for_each(|s| *s = false);
-        for (c, layer) in items {
-            let mut c = c.clone();
+        for it in items {
+            let mut c = it.contour.clone();
             c.translate(d);
-            let layer = self.layers.iter().position(|l| &l.name == layer).unwrap_or(0);
-            self.contours.push(DocContour::new(c, layer));
+            let layer = self.layers.iter().position(|l| l.name == it.layer).unwrap_or(0);
+            let source = self.source_index(&it.source);
+            self.contours.push(DocContour::new(c, layer).with_source(source));
             self.selected.push(true);
         }
         self.geometry_changed();
@@ -378,19 +405,126 @@ impl Document {
     }
 
     /// Kopia zaznaczonych krzywych do schowka: kontur i nazwa warstwy.
-    pub fn copy_selected(&self) -> Vec<(Contour, String)> {
+    pub fn copy_selected(&self) -> Vec<ClipItem> {
         self.selected_indices()
             .into_iter()
             .map(|i| {
                 let c = &self.contours[i];
-                let layer = self.layers.get(c.layer).map(|l| l.name.clone()).unwrap_or_default();
-                (c.contour.clone(), layer)
+                ClipItem {
+                    contour: c.contour.clone(),
+                    layer: self.layers.get(c.layer).map(|l| l.name.clone()).unwrap_or_default(),
+                    source: self.sources.get(c.source).cloned().unwrap_or_default(),
+                }
             })
             .collect()
     }
 
+    /// Numer elementu o tej nazwie; dodaje go, jeśli go nie ma.
+    fn source_index(&mut self, name: &str) -> usize {
+        if let Some(i) = self.sources.iter().position(|s| s == name) {
+            return i;
+        }
+        if self.sources.is_empty() && name.is_empty() {
+            self.sources.push("Rysunek".into());
+            return 0;
+        }
+        self.sources.push(if name.is_empty() { "Rysunek".into() } else { name.to_string() });
+        self.sources.len() - 1
+    }
+
+    /// Liczba krzywych każdego elementu.
+    pub fn source_counts(&self) -> Vec<usize> {
+        let mut n = vec![0; self.sources.len()];
+        for c in &self.contours {
+            if let Some(k) = n.get_mut(c.source) {
+                *k += 1;
+            }
+        }
+        n
+    }
+
+    /// Zaznacza krzywe elementu `s` (tylko je).
+    pub fn select_source(&mut self, s: usize) {
+        for i in 0..self.contours.len() {
+            let v = self.contours[i].source == s;
+            self.set_selected(i, v);
+        }
+    }
+
+    /// Dokłada drugi dokument (dodany plik DXF lub projekt) jako nowy element:
+    /// krzywe stają obok dotychczasowych i zostają zaznaczone, warstwy o tej
+    /// samej nazwie są łączone, operacje projektu dochodzą razem z krzywymi.
+    /// Zwraca liczbę dodanych krzywych i operacji.
+    pub fn merge(&mut self, other: Document) -> (usize, usize) {
+        let name = other.file_name();
+        let d = match (self.bbox, other.bbox) {
+            (Some(a), Some(b)) if !self.contours.is_empty() => Vec2::new(a.max.x + 10.0 - b.min.x, a.min.y - b.min.y),
+            _ => Vec2::new(0.0, 0.0),
+        };
+        let layer_map: Vec<usize> = other
+            .layers
+            .iter()
+            .map(|l| match self.layers.iter().position(|x| x.name == l.name) {
+                Some(i) => i,
+                None => {
+                    self.layers.push(Layer { name: l.name.clone(), visible: true });
+                    self.layers.len() - 1
+                }
+            })
+            .collect();
+        // elementy dodanego projektu; plik DXF to jeden element nazwany jak plik
+        let names: Vec<String> = if other.sources.len() > 1 { other.sources.clone() } else { vec![name.clone()] };
+        let source_map: Vec<usize> = names
+            .iter()
+            .map(|n| {
+                let mut unique = n.clone();
+                let mut k = 2;
+                while self.sources.contains(&unique) {
+                    unique = format!("{n} ({k})");
+                    k += 1;
+                }
+                self.sources.push(unique);
+                self.sources.len() - 1
+            })
+            .collect();
+        let base = self.contours.len();
+        self.selected.iter_mut().for_each(|s| *s = false);
+        for c in other.contours {
+            let mut k = c.contour;
+            k.translate(d);
+            let layer = layer_map.get(c.layer).copied().unwrap_or(0);
+            let source = source_map.get(c.source).copied().unwrap_or(source_map[0]);
+            self.contours.push(DocContour::new(k, layer).with_source(source));
+            self.selected.push(true);
+        }
+        let n_ops = other.ops.len();
+        for mut op in other.ops {
+            op.contours.iter_mut().for_each(|i| *i += base);
+            self.add_op(op);
+        }
+        self.selected_op = None;
+        let n = self.contours.len() - base;
+        self.geometry_changed();
+        self.label(Mark::new(Icon::Open).badge(Badge::Add), format!("Dodano element: {name}"));
+        (n, n_ops)
+    }
+
     /// Przywraca stan z historii zmian (krzywe, operacje, półfabrykat, ustawienia G-code).
-    pub fn restore_state(&mut self, contours: Vec<DocContour>, ops: Vec<Operation>, stock: Stock, post: PostSettings) {
+    pub fn restore_state(
+        &mut self,
+        contours: Vec<DocContour>,
+        layers: &[String],
+        sources: Vec<String>,
+        ops: Vec<Operation>,
+        stock: Stock,
+        post: PostSettings,
+    ) {
+        // widoczność warstw zostaje taka, jak ustawił użytkownik
+        self.layers = layers
+            .iter()
+            .map(|n| Layer { name: n.clone(), visible: self.layers.iter().find(|l| &l.name == n).is_none_or(|l| l.visible) })
+            .collect();
+        self.sources = sources;
         self.contours = contours;
         self.selected = vec![false; self.contours.len()];
         self.op_cache = ops.iter().map(|_| None).collect();
@@ -491,7 +625,8 @@ impl Document {
                     let mut k = self.contours[i].contour.clone();
                     k.translate(d);
                     let new_idx = self.contours.len();
-                    self.contours.push(DocContour::new(k, self.contours[i].layer));
+                    let (layer, source) = (self.contours[i].layer, self.contours[i].source);
+                    self.contours.push(DocContour::new(k, layer).with_source(source));
                     self.selected.push(true);
                     for op in &mut self.ops {
                         if op.contours.contains(&i) {

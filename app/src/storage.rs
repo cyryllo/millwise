@@ -114,6 +114,9 @@ struct ProjectFile {
     source_file: Option<PathBuf>,
     unit_name: String,
     layers: Vec<String>,
+    /// Elementy projektu (dodane pliki); starsze projekty ich nie mają.
+    #[serde(default)]
+    sources: Vec<String>,
     contours: Vec<ProjectContour>,
     stock: Stock,
     operations: Vec<Operation>,
@@ -125,6 +128,8 @@ struct ProjectFile {
 #[derive(Serialize, Deserialize)]
 struct ProjectContour {
     layer: usize,
+    #[serde(default)]
+    source: usize,
     contour: Contour,
 }
 
@@ -147,7 +152,12 @@ pub fn save_project(doc: &Document, lib: &ToolLibrary, path: &Path) -> Result<()
         source_file: doc.path.clone(),
         unit_name: doc.unit_name.clone(),
         layers: doc.layers.iter().map(|l| l.name.clone()).collect(),
-        contours: doc.contours.iter().map(|c| ProjectContour { layer: c.layer, contour: c.contour.clone() }).collect(),
+        sources: doc.sources.clone(),
+        contours: doc
+            .contours
+            .iter()
+            .map(|c| ProjectContour { layer: c.layer, source: c.source, contour: c.contour.clone() })
+            .collect(),
         stock: doc.stock.clone(),
         operations: doc.ops.clone(),
         tools,
@@ -192,7 +202,16 @@ pub fn load_project(path: &Path, lib: &mut ToolLibrary) -> Result<(Document, boo
         project_path: Some(path.to_path_buf()),
         unit_name: pf.unit_name,
         layers: pf.layers.into_iter().map(|name| Layer { name, visible: true }).collect(),
-        contours: pf.contours.into_iter().map(|c| DocContour::new(c.contour, c.layer)).collect(),
+        sources: pf.sources,
+        contours: pf
+            .contours
+            .into_iter()
+            .map(|c| {
+                let mut d = DocContour::new(c.contour, c.layer);
+                d.source = c.source;
+                d
+            })
+            .collect(),
         stock: pf.stock,
         ops,
         post: pf.post,
@@ -252,5 +271,63 @@ mod tests {
         // ta sama biblioteka → bez zmian
         let (_, changed) = load_project(&out, &mut lib).unwrap();
         assert!(!changed);
+    }
+
+    /// Dodanie pliku DXF i drugiego projektu do bieżącego: krzywe obok, operacje
+    /// wskazują na swoje krzywe, cofnięcie usuwa wszystko, zapis zachowuje elementy.
+    #[test]
+    fn merge_files_into_project() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let mut lib = ToolLibrary::with_defaults();
+        // własny projekt testowy (samples/demo.millwise zapisuje równolegle inny test)
+        let proj_path = std::env::temp_dir().join(format!("millwise-merge-src-{}.millwise", std::process::id()));
+        {
+            let mut d = Document::load_dxf(&root.join("samples/test.dxf")).unwrap();
+            let t = lib.tools[0].clone();
+            let cut = CutParams { depth: 3.0, ..Default::default() };
+            d.add_op(Operation { name: "Profil".into(), enabled: true, kind: OpKind::Profile(ProfileParams::default()), tool_id: t.id, cut, contours: vec![0, 2] });
+            save_project(&d, &lib, &proj_path).unwrap();
+        }
+        let (mut doc, _) = load_project(&proj_path, &mut lib).unwrap();
+        let proj_name = proj_path.file_name().unwrap().to_string_lossy().into_owned();
+        let n0 = doc.contours.len();
+        let ops0 = doc.ops.len();
+        let right0 = doc.bbox.unwrap().max.x;
+        let mut h = crate::history::History::new(&doc, "Start");
+
+        let dxf = Document::load_dxf(&root.join("samples/test.dxf")).unwrap();
+        assert_eq!(doc.merge(dxf), (n0, 0));
+        h.track(&mut doc, true);
+        // element bazowy nosi nazwę rysunku, z którego powstał projekt; ten sam plik dodany drugi raz dostaje numer
+        assert_eq!(doc.sources, vec!["test.dxf".to_string(), "test.dxf (2)".to_string()]);
+        assert!(doc.contours[n0..].iter().all(|c| c.bbox.min.x > right0), "nowe krzywe stoją obok");
+        assert!(doc.contours[n0..].iter().all(|c| c.source == 1));
+        assert_eq!(doc.selected_count(), n0, "zaznaczone są tylko dodane");
+        let layers0 = doc.layers.len();
+
+        let (proj, _) = load_project(&proj_path, &mut lib).unwrap();
+        let _ = std::fs::remove_file(&proj_path);
+        doc.merge(proj);
+        h.track(&mut doc, true);
+        assert_eq!(doc.ops.len(), ops0 * 2);
+        assert_eq!(doc.layers.len(), layers0, "warstwy o tych samych nazwach są łączone");
+        assert_eq!(doc.sources[2], proj_name, "dodany projekt z jednym elementem nazywa się jak plik projektu");
+        for (a, b) in doc.ops[..ops0].iter().zip(&doc.ops[ops0..]) {
+            let shifted: Vec<usize> = a.contours.iter().map(|i| i + 2 * n0).collect();
+            assert_eq!(b.contours, shifted, "operacje dodanego projektu wskazują na jego krzywe");
+        }
+
+        // zapis i odczyt zachowuje elementy
+        let tmp = std::env::temp_dir().join(format!("millwise-merge-{}.millwise", std::process::id()));
+        save_project(&doc, &lib, &tmp).unwrap();
+        let (back, _) = load_project(&tmp, &mut lib).unwrap();
+        let _ = std::fs::remove_file(&tmp);
+        assert_eq!(back.sources, doc.sources);
+        assert_eq!(back.source_counts(), vec![n0, n0, n0]);
+
+        // cofnięcie dwóch dodań przywraca projekt
+        h.undo(&mut doc);
+        h.undo(&mut doc);
+        assert_eq!((doc.contours.len(), doc.ops.len(), doc.sources.len()), (n0, ops0, 1));
     }
 }

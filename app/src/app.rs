@@ -9,7 +9,7 @@ use crate::ui_ops::{self, OpsAction, OpsUi};
 use crate::ui_tools::ToolsWindow;
 use crate::view2d::{colors, op_color, Interaction, View2D, ViewEvent};
 use crate::view3d::View3D;
-use cam_geom::{Contour, Vec2};
+use cam_geom::Vec2;
 use cam_ops::{CutParams, Operation, ToolLibrary};
 use cam_post::{Machine, MachineLibrary};
 use eframe::egui::{self, Color32, RichText};
@@ -66,14 +66,16 @@ pub struct CamApp {
     logo: Option<egui::TextureHandle>,
     history: History,
     show_history: bool,
+    /// Element projektu rozwinięty na liście po prawej.
+    open_source: Option<usize>,
     /// Krok historii, do którego panel ostatnio przewinął listę.
     history_seen: u64,
     /// Schowek krzywych (Ctrl+C / Ctrl+X → Ctrl+V): kontur i nazwa warstwy.
-    clipboard: Vec<(Contour, String)>,
+    clipboard: Vec<crate::doc::ClipItem>,
 }
 
 impl CamApp {
-    pub fn new(cc: &eframe::CreationContext<'_>, initial_file: Option<PathBuf>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>, files: Vec<PathBuf>) -> Self {
         cc.egui_ctx.set_visuals(egui::Visuals::dark());
         let (tools, tools_warning) = storage::load_tools();
         let (machines, machines_warning) = storage::load_machines();
@@ -101,11 +103,18 @@ impl CamApp {
             logo: None,
             history,
             show_history: true,
+            open_source: None,
             history_seen: u64::MAX,
             clipboard: Vec::new(),
         };
-        if let Some(p) = initial_file {
+        let mut files = files.into_iter();
+        if let Some(p) = files.next() {
             app.open_any(p);
+        }
+        let more: Vec<PathBuf> = files.collect();
+        if !more.is_empty() {
+            app.add_files(more);
+            app.info = None;
         }
         // dla programisty / zrzutów ekranu: MILLWISE_OPEN=3d,tools,machines
         if let Ok(v) = std::env::var("MILLWISE_OPEN") {
@@ -174,6 +183,7 @@ impl CamApp {
 
     fn set_doc(&mut self, doc: Document) {
         self.doc = doc;
+        self.open_source = None;
         self.history.reset(&self.doc, format!("Otwarto {}", self.doc.file_name()));
         self.stop_mode();
         self.gcode_preview = None;
@@ -203,6 +213,61 @@ impl CamApp {
         }
         if let Some(p) = dlg.pick_file() {
             self.open_any(p);
+        }
+    }
+
+    /// Plik → Dodaj: dokłada wybrane pliki DXF i projekty do bieżącego projektu.
+    fn add_dialog(&mut self) {
+        let mut dlg = rfd::FileDialog::new()
+            .set_title("Dodaj do projektu")
+            .add_filter("DXF i projekty", &["dxf", "DXF", "millwise", "camsoft"])
+            .add_filter("DXF", &["dxf", "DXF"])
+            .add_filter("Projekt Millwise", &["millwise", "camsoft"]);
+        if let Some(dir) = self.doc.project_path.as_ref().or(self.doc.path.as_ref()).and_then(|p| p.parent()) {
+            dlg = dlg.set_directory(dir);
+        }
+        if let Some(paths) = dlg.pick_files() {
+            self.add_files(paths);
+        }
+    }
+
+    /// Dodaje pliki jako kolejne elementy; do pustego projektu pierwszy plik jest po prostu otwierany.
+    fn add_files(&mut self, paths: Vec<PathBuf>) {
+        let mut added = Vec::new();
+        for path in paths {
+            if self.doc.contours.is_empty() && self.doc.ops.is_empty() {
+                self.open_any(path);
+                continue;
+            }
+            let is_project =
+                path.extension().is_some_and(|e| e.eq_ignore_ascii_case("millwise") || e.eq_ignore_ascii_case("camsoft"));
+            let loaded = if is_project {
+                storage::load_project(&path, &mut self.tools).map(|(d, lib_changed)| {
+                    if lib_changed {
+                        self.save_tools();
+                    }
+                    d
+                })
+            } else {
+                Document::load_dxf(&path)
+            };
+            match loaded {
+                Ok(other) => {
+                    let name = other.file_name();
+                    let (n, ops) = self.doc.merge(other);
+                    added.push(if ops > 0 { format!("{name}: {n} krzywych, {ops} operacji") } else { format!("{name}: {n} krzywych") });
+                }
+                Err(e) => self.error = Some(format!("{}: {e:#}", path.display())),
+            }
+        }
+        if !added.is_empty() {
+            self.open_source = self.doc.sources.len().checked_sub(1);
+            self.stop_mode();
+            self.view2d.fit_requested = true;
+            self.info = Some(format!(
+                "Dodano do projektu:\n{}\n\nNowe elementy stoją obok dotychczasowych i są zaznaczone — można je od razu przesunąć.",
+                added.join("\n")
+            ));
         }
     }
 
@@ -560,6 +625,9 @@ impl CamApp {
         if pressed(cmd(Key::O)) {
             self.open_dialog();
         }
+        if pressed(cmd(Key::I)) {
+            self.add_dialog();
+        }
         // z Shiftem najpierw: Ctrl+S pasuje też do Ctrl+Shift+S
         if pressed(cmd_shift(Key::S)) {
             self.save_project(true);
@@ -689,7 +757,7 @@ impl CamApp {
             self.view2d.flash("Schowek jest pusty", now);
             return;
         }
-        let d = match (self.view2d.cursor_world, self.clipboard.iter().map(|(c, _)| c.bbox()).reduce(|a, b| a.union(&b))) {
+        let d = match (self.view2d.cursor_world, self.clipboard.iter().map(|c| c.contour.bbox()).reduce(|a, b| a.union(&b))) {
             (Some(p), Some(bb)) => p - bb.center(),
             _ => Vec2::new(0.0, 0.0),
         };
@@ -811,6 +879,13 @@ impl CamApp {
             ui.menu_button("Plik", |ui| {
                 if ui.button("Otwórz DXF / projekt…  (Ctrl+O)").clicked() {
                     self.open_dialog();
+                }
+                if ui
+                    .button("Dodaj DXF / projekt…  (Ctrl+I)")
+                    .on_hover_text("Dołóż kolejne pliki do bieżącego projektu (można wybrać kilka naraz)")
+                    .clicked()
+                {
+                    self.add_dialog();
                 }
                 ui.separator();
                 if ui.button("Zapisz projekt  (Ctrl+S)").clicked() {
@@ -964,17 +1039,144 @@ impl CamApp {
         ui.add_space(4.0);
         self.machine_card(ui);
         ui.add_space(6.0);
-        let doc = &mut self.doc;
-        ui.add_space(4.0);
-        ui.heading(doc.file_name());
-        if doc.path.is_some() {
-            ui.label(RichText::new(format!("Jednostki pliku: {}", doc.unit_name)).small().weak());
-        }
-        for w in &doc.warnings {
-            ui.label(RichText::new(format!("Uwaga: {w}")).small().color(Color32::from_rgb(230, 180, 80)));
-        }
+        self.elements_card(ui);
+        ui.add_space(6.0);
+        self.stock_card(ui);
+        ui.add_space(6.0);
+        self.layers_and_curves(ui);
+    }
 
-        ui.add_space(4.0);
+    /// Elementy projektu (wczytane i dodane pliki): zwarta lista; klik rozwija krótką informację.
+    fn elements_card(&mut self, ui: &mut egui::Ui) {
+        let doc = &mut self.doc;
+        let counts = doc.source_counts();
+        let shown: Vec<usize> = (0..doc.sources.len()).filter(|&i| counts[i] > 0).collect();
+        let mut add = false;
+        let mut toggle = None;
+        let mut select_src = None;
+        let mut delete_src = None;
+        ui_kit::card(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui_kit::title(ui, "Elementy");
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    add = ui
+                        .small_button("+ Dodaj…")
+                        .on_hover_text("Dodaj DXF lub projekt (Ctrl+I); pliki można też upuścić na okno")
+                        .clicked();
+                });
+            });
+            if shown.is_empty() {
+                ui.label(RichText::new("Otwórz albo dodaj plik DXF lub projekt.").small().color(ui_kit::LABEL));
+            }
+            for &i in &shown {
+                let open = self.open_source == Some(i);
+                let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 24.0), egui::Sense::click());
+                let painter = ui.painter_at(rect);
+                let bg = if open {
+                    Color32::from_rgb(31, 51, 80)
+                } else if resp.hovered() {
+                    Color32::from_rgb(45, 49, 56)
+                } else {
+                    Color32::TRANSPARENT
+                };
+                painter.rect_filled(rect, 4.0, bg);
+                // trójkąt: rozwinięty / zwinięty
+                let c = egui::pos2(rect.left() + 9.0, rect.center().y);
+                let tri = if open {
+                    vec![c + egui::vec2(-4.0, -2.5), c + egui::vec2(4.0, -2.5), c + egui::vec2(0.0, 3.0)]
+                } else {
+                    vec![c + egui::vec2(-2.5, -4.0), c + egui::vec2(3.0, 0.0), c + egui::vec2(-2.5, 4.0)]
+                };
+                painter.add(egui::Shape::convex_polygon(tri, Color32::from_gray(170), egui::Stroke::NONE));
+                painter.text(
+                    egui::pos2(rect.right() - 6.0, rect.center().y),
+                    egui::Align2::RIGHT_CENTER,
+                    format!("{} krz.", counts[i]),
+                    egui::FontId::proportional(11.0),
+                    ui_kit::LABEL,
+                );
+                painter.with_clip_rect(rect.shrink2(egui::vec2(0.0, 0.0)).with_max_x(rect.right() - 50.0)).text(
+                    egui::pos2(rect.left() + 20.0, rect.center().y),
+                    egui::Align2::LEFT_CENTER,
+                    &doc.sources[i],
+                    egui::FontId::proportional(13.5),
+                    Color32::WHITE,
+                );
+                if resp.on_hover_text(&doc.sources[i]).clicked() {
+                    toggle = Some(i);
+                }
+                if open {
+                    // krótka informacja o elemencie
+                    let mine: Vec<usize> = (0..doc.contours.len()).filter(|&k| doc.contours[k].source == i).collect();
+                    let bb = mine.iter().map(|&k| doc.contours[k].bbox).reduce(|a, b| a.union(&b));
+                    let mut layers: Vec<&str> = Vec::new();
+                    for &k in &mine {
+                        if let Some(l) = doc.layers.get(doc.contours[k].layer) {
+                            if !layers.contains(&l.name.as_str()) {
+                                layers.push(&l.name);
+                            }
+                        }
+                    }
+                    let ops: Vec<&str> =
+                        doc.ops.iter().filter(|o| o.contours.iter().any(|k| mine.contains(k))).map(|o| o.name.as_str()).collect();
+                    egui::Frame::new().inner_margin(egui::Margin { left: 20, right: 4, top: 2, bottom: 4 }).show(ui, |ui| {
+                        let line = |ui: &mut egui::Ui, label: &str, text: String| {
+                            ui.horizontal_wrapped(|ui| {
+                                ui.spacing_mut().item_spacing.x = 4.0;
+                                ui.label(RichText::new(label).small().color(ui_kit::LABEL));
+                                ui.label(RichText::new(text).small());
+                            });
+                        };
+                        if let Some(b) = bb {
+                            let sz = b.size();
+                            line(ui, "Wymiary", format!("{:.1} × {:.1} mm", sz.x, sz.y));
+                        }
+                        if !layers.is_empty() {
+                            line(ui, "Warstwy", layers.join(", "));
+                        }
+                        line(ui, "Operacje", if ops.is_empty() { "brak".into() } else { ops.join(", ") });
+                        ui.horizontal(|ui| {
+                            if ui.small_button("Zaznacz").on_hover_text("Zaznacz krzywe elementu, np. żeby go przesunąć").clicked() {
+                                select_src = Some(i);
+                            }
+                            if shown.len() > 1 && ui.small_button("Usuń").on_hover_text("Usuń krzywe tego elementu z projektu").clicked() {
+                                delete_src = Some(i);
+                            }
+                        });
+                    });
+                }
+            }
+            if doc.path.is_some() || !doc.warnings.is_empty() {
+                ui.add_space(2.0);
+                if doc.path.is_some() {
+                    ui.label(RichText::new(format!("Jednostki DXF: {}", doc.unit_name)).small().color(ui_kit::LABEL));
+                }
+                for w in &doc.warnings {
+                    ui.label(RichText::new(format!("Uwaga: {w}")).small().color(Color32::from_rgb(230, 180, 80)));
+                }
+            }
+        });
+        if let Some(i) = toggle {
+            self.open_source = if self.open_source == Some(i) { None } else { Some(i) };
+        }
+        if let Some(i) = select_src {
+            self.doc.select_source(i);
+        }
+        if let Some(i) = delete_src {
+            self.doc.select_source(i);
+            self.doc.delete_selected();
+            let name = self.doc.sources[i].clone();
+            self.doc.label(crate::history::Mark::new(crate::icons::Icon::Delete), format!("Usunięto element: {name}"));
+            self.open_source = None;
+            self.stop_mode();
+        }
+        if add {
+            self.add_dialog();
+        }
+    }
+
+    fn stock_card(&mut self, ui: &mut egui::Ui) {
+        let doc = &mut self.doc;
         let mut materials: Vec<String> = vec!["Drewno".into()];
         for t in &self.tools.tools {
             for p in &t.presets {
@@ -988,13 +1190,29 @@ impl CamApp {
         }
         ui_kit::card(ui, |ui| {
             ui_kit::title(ui, "Półfabrykat");
-            egui::Grid::new("stock").num_columns(2).spacing([10.0, 5.0]).show(ui, |ui| {
+            egui::Grid::new("stock").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
                 let a = ui_kit::big_num(ui, "Grubość", &mut doc.stock.thickness, 0.1..=500.0, 0.1, " mm");
                 let b = ui_kit::num(ui, "Naddatek XY", &mut doc.stock.margin, 0.0..=500.0, 0.1, " mm");
                 ui_kit::label(ui, "Materiał");
-                egui::ComboBox::from_id_salt("material").selected_text(doc.stock.material.clone()).show_ui(ui, |ui| {
-                    for m in &materials {
-                        ui.selectable_value(&mut doc.stock.material, m.clone(), m);
+                ui.horizontal(|ui| {
+                    egui::ComboBox::from_id_salt("material").selected_text(doc.stock.material.clone()).show_ui(ui, |ui| {
+                        for m in &materials {
+                            ui.selectable_value(&mut doc.stock.material, m.clone(), m);
+                        }
+                    });
+                    if !doc.ops.is_empty()
+                        && ui
+                            .small_button("Do operacji")
+                            .on_hover_text("Zastosuj obroty, posuwy i krok w dół z biblioteki narzędzi dla tego materiału we wszystkich operacjach")
+                            .clicked()
+                    {
+                        let m = doc.stock.material.clone();
+                        for op in &mut doc.ops {
+                            if let Some(t) = self.tools.get(op.tool_id) {
+                                op.cut.apply_tool(t, &m);
+                            }
+                        }
+                        doc.ops_dirty = true;
                     }
                 });
                 ui.end_row();
@@ -1002,118 +1220,104 @@ impl CamApp {
                     doc.revision += 1;
                 }
             });
-            if !doc.ops.is_empty()
-                && ui
-                    .small_button("Zastosuj parametry materiału do operacji")
-                    .on_hover_text("Obroty, posuwy i krok w dół z biblioteki narzędzi dla wybranego materiału")
-                    .clicked()
-            {
-                let m = doc.stock.material.clone();
-                for op in &mut doc.ops {
-                    if let Some(t) = self.tools.get(op.tool_id) {
-                        op.cut.apply_tool(t, &m);
-                    }
-                }
-                doc.ops_dirty = true;
-            }
             if let Some(sb) = doc.stock_box() {
                 let s = sb.size();
                 let m = self.machines.active();
                 let fits = m.is_none_or(|m| s.x <= m.travel_x && s.y <= m.travel_y);
                 let text = format!(
-                    "{:.1} × {:.1} × {:.1} mm, Z0 = góra materiału{}",
+                    "{:.1} × {:.1} × {:.1} mm, Z0 = góra{}",
                     s.x,
                     s.y,
                     doc.stock.thickness,
                     if fits { "" } else { " — WIĘKSZY NIŻ POLE ROBOCZE" }
                 );
-                ui.label(RichText::new(text).small().color(if fits { Color32::from_gray(150) } else { Color32::LIGHT_RED }));
+                ui.label(RichText::new(text).small().color(if fits { ui_kit::LABEL } else { Color32::LIGHT_RED }));
             }
         });
+    }
 
-        if !doc.layers.is_empty() {
-            ui.add_space(6.0);
-            ui_kit::card(ui, |ui| {
-                ui_kit::title(ui, "Warstwy");
-                let mut layers_changed = false;
-                for l in &mut doc.layers {
-                    layers_changed |= ui.checkbox(&mut l.visible, &l.name).changed();
-                }
-                if layers_changed {
-                    doc.revision += 1;
-                }
-            });
-        }
-
-        ui.add_space(6.0);
-        ui_kit::card(ui, |ui| {
-            ui.horizontal(|ui| {
-                ui_kit::title(ui, "Krzywe");
-                ui.label(RichText::new(format!("{}  ·  zaznaczone {}", doc.contours.len(), doc.selected_count())).small().color(ui_kit::LABEL));
-        });
-        ui.horizontal_wrapped(|ui| {
-            if ui.small_button("Zamknięte").on_hover_text("Zaznacz wszystkie zamknięte krzywe").clicked() {
-                for i in 0..doc.contours.len() {
-                    let v = doc.is_visible(i) && doc.contours[i].contour.closed;
-                    doc.set_selected(i, v);
-                }
-            }
-            if ui.small_button("Okręgi").on_hover_text("Zaznacz wszystkie okręgi (do wiercenia)").clicked() {
-                for i in 0..doc.contours.len() {
-                    let v = doc.is_visible(i) && doc.contours[i].contour.as_circle().is_some();
-                    doc.set_selected(i, v);
-                }
-            }
-            if ui.small_button("Wszystkie").clicked() {
-                for i in 0..doc.contours.len() {
-                    let v = doc.is_visible(i);
-                    doc.set_selected(i, v);
-                }
-            }
-            if ui.small_button("Odznacz").clicked() {
-                doc.clear_selection();
-            }
-        });
-
+    /// Warstwy i lista krzywych — zwijane, żeby nie zajmowały miejsca.
+    fn layers_and_curves(&mut self, ui: &mut egui::Ui) {
+        let doc = &mut self.doc;
         let hovered = self.view2d.hovered;
-        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
-        egui::ScrollArea::vertical().auto_shrink([false, false]).show_rows(
-            ui,
-            ui.text_style_height(&egui::TextStyle::Body) + 4.0,
-            doc.contours.len(),
-            |ui, range| {
-                for i in range {
-                    let c = &doc.contours[i];
-                    let kind_color = if c.contour.closed { colors::CLOSED } else { colors::OPEN };
-                    let shape = match c.contour.as_circle() {
-                        Some((_, r)) => format!("Ø{:.2}", r * 2.0),
-                        None if c.contour.closed => "●".into(),
-                        None => "○".into(),
-                    };
-                    let text = RichText::new(format!(
-                        "#{:<3}{:<7}{:>7.1}  {}",
-                        i + 1,
-                        shape,
-                        c.length,
-                        doc.layers[c.layer].name
-                    ))
-                    .monospace()
-                    .color(if Some(i) == hovered { Color32::WHITE } else { kind_color });
-                    let visible = doc.is_visible(i);
-                    let r = ui.add_enabled(visible, egui::Button::selectable(doc.selected[i], text));
-                    if r.clicked() {
-                        let additive = ui.input(|inp| inp.modifiers.command || inp.modifiers.shift);
-                        if additive {
-                            let v = !doc.selected[i];
+        ui_kit::card(ui, |ui| {
+            if !doc.layers.is_empty() {
+                let visible = doc.layers.iter().filter(|l| l.visible).count();
+                let head = RichText::new(format!("WARSTWY  {visible} / {}", doc.layers.len())).small().strong().color(ui_kit::LABEL);
+                egui::CollapsingHeader::new(head).id_salt("layers").default_open(true).show(ui, |ui| {
+                    let mut changed = false;
+                    ui.horizontal_wrapped(|ui| {
+                        for l in &mut doc.layers {
+                            changed |= ui.checkbox(&mut l.visible, &l.name).changed();
+                        }
+                    });
+                    if changed {
+                        doc.revision += 1;
+                    }
+                });
+            }
+            let head = RichText::new(format!("KRZYWE  {}  ·  zaznaczone {}", doc.contours.len(), doc.selected_count()))
+                .small()
+                .strong()
+                .color(ui_kit::LABEL);
+            egui::CollapsingHeader::new(head).id_salt("curves").default_open(false).show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    if ui.small_button("Zamknięte").on_hover_text("Zaznacz wszystkie zamknięte krzywe").clicked() {
+                        for i in 0..doc.contours.len() {
+                            let v = doc.is_visible(i) && doc.contours[i].contour.closed;
                             doc.set_selected(i, v);
-                        } else {
-                            doc.clear_selection();
-                            doc.set_selected(i, true);
                         }
                     }
-                }
-            },
-        );
+                    if ui.small_button("Okręgi").on_hover_text("Zaznacz wszystkie okręgi (do wiercenia)").clicked() {
+                        for i in 0..doc.contours.len() {
+                            let v = doc.is_visible(i) && doc.contours[i].contour.as_circle().is_some();
+                            doc.set_selected(i, v);
+                        }
+                    }
+                    if ui.small_button("Wszystkie").clicked() {
+                        for i in 0..doc.contours.len() {
+                            let v = doc.is_visible(i);
+                            doc.set_selected(i, v);
+                        }
+                    }
+                    if ui.small_button("Odznacz").clicked() {
+                        doc.clear_selection();
+                    }
+                });
+                ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Truncate);
+                egui::ScrollArea::vertical().auto_shrink([false, true]).show_rows(
+                    ui,
+                    ui.text_style_height(&egui::TextStyle::Body) + 4.0,
+                    doc.contours.len(),
+                    |ui, range| {
+                        for i in range {
+                            let c = &doc.contours[i];
+                            let kind_color = if c.contour.closed { colors::CLOSED } else { colors::OPEN };
+                            let shape = match c.contour.as_circle() {
+                                Some((_, r)) => format!("Ø{:.2}", r * 2.0),
+                                None if c.contour.closed => "●".into(),
+                                None => "○".into(),
+                            };
+                            let layer = doc.layers.get(c.layer).map_or("", |l| l.name.as_str());
+                            let text = RichText::new(format!("#{:<3}{:<7}{:>7.1}  {}", i + 1, shape, c.length, layer))
+                                .monospace()
+                                .color(if Some(i) == hovered { Color32::WHITE } else { kind_color });
+                            let visible = doc.is_visible(i);
+                            let r = ui.add_enabled(visible, egui::Button::selectable(doc.selected[i], text));
+                            if r.clicked() {
+                                let additive = ui.input(|inp| inp.modifiers.command || inp.modifiers.shift);
+                                if additive {
+                                    let v = !doc.selected[i];
+                                    doc.set_selected(i, v);
+                                } else {
+                                    doc.clear_selection();
+                                    doc.set_selected(i, true);
+                                }
+                            }
+                        }
+                    },
+                );
+            });
         });
     }
 
@@ -1142,6 +1346,7 @@ impl CamApp {
     fn shortcuts_window(&mut self, ctx: &egui::Context) {
         const KEYS: &[(&str, &str)] = &[
             ("Ctrl+O", "otwórz DXF lub projekt"),
+            ("Ctrl+I", "dodaj DXF lub projekt do bieżącego"),
             ("Ctrl+S", "zapisz projekt"),
             ("Ctrl+Shift+S", "zapisz projekt jako…"),
             ("Ctrl+E", "eksportuj G-code"),
@@ -1298,6 +1503,11 @@ impl eframe::App for CamApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         dev_screenshot(&ctx);
+        // upuszczone pliki: dochodzą do projektu jako kolejne elementy
+        let dropped: Vec<PathBuf> = ctx.input(|i| i.raw.dropped_files.iter().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty()).collect());
+        if !dropped.is_empty() {
+            self.add_files(dropped);
+        }
         self.shortcuts(&ctx);
         self.ensure_generated();
 

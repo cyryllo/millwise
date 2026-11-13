@@ -5,6 +5,7 @@
 ```sh
 cargo run --release -p millwise -- samples/test.dxf        # a drawing only
 cargo run --release -p millwise -- samples/demo.millwise   # a project with operations
+cargo run --release -p millwise -- samples/demo.millwise samples/test.dxf   # the second file is added
 cargo test --workspace                                     # all tests
 ```
 
