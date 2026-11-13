@@ -1044,9 +1044,9 @@ impl CamApp {
         ui.add_space(4.0);
         self.machine_card(ui);
         ui.add_space(6.0);
-        self.elements_card(ui);
-        ui.add_space(6.0);
         self.stock_card(ui);
+        ui.add_space(6.0);
+        self.elements_card(ui);
         ui.add_space(6.0);
         self.layers_and_curves(ui);
     }
