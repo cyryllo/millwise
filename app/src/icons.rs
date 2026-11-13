@@ -395,6 +395,25 @@ fn round_rect_pts(r: Rect, radius: f32) -> Vec<Pos2> {
     pts
 }
 
+/// Szeroki przycisk przejścia do innego widoku (np. symulacji): wyróżniony
+/// kolorem, z ikoną po lewej, żeby nie mylił się ze zwykłymi przyciskami.
+pub fn wide_view_button(ui: &mut egui::Ui, icon: Icon, label: &str, color: Color32) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 36.0), egui::Sense::click());
+    let painter = ui.painter();
+    let bg = if resp.hovered() { color.gamma_multiply(0.35) } else { color.gamma_multiply(0.2) };
+    painter.rect(rect, 7.0, bg, Stroke::new(1.5, color), StrokeKind::Inside);
+    let icon_rect = Rect::from_center_size(Pos2::new(rect.left() + 22.0, rect.center().y), egui::vec2(24.0, 24.0));
+    draw(painter, icon_rect, icon);
+    painter.text(
+        Pos2::new(rect.center().x + 12.0, rect.center().y),
+        egui::Align2::CENTER_CENTER,
+        label,
+        egui::FontId::proportional(14.0),
+        Color32::WHITE,
+    );
+    resp
+}
+
 /// Duży przycisk paska narzędzi: ikona + podpis. `accent` — kolor ramki aktywnego.
 pub fn tool_button(ui: &mut egui::Ui, icon: Icon, label: &str, active: bool, enabled: bool, accent: Color32) -> egui::Response {
     let wrap = ui.available_width() - 6.0;

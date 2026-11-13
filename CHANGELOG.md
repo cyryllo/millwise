@@ -37,9 +37,11 @@ Version numbers:
   step from the history.
 - The boxes of the editing tools grow to the right with longer values instead
   of wrapping their fields onto a second line.
-- **„Podgląd 3D” is now „Symulacja”** — on the toolbar, the tab at the top,
-  in the menu and in the hints: it shows the machining simulation, not a 3D
-  preview of a model.
+- **„Podgląd 3D” is now „Symulacja”** — the tab at the top, the menu and the
+  hints: it shows the machining simulation, not a 3D preview of a model. Its
+  button moved from the toolbar (which now holds only drawing tools) to the
+  operations panel, as a green „Symulacja obróbki” button above the G-code
+  buttons: operations, then simulation, then export.
 - Layers on the right are folded at start, like the list of curves.
 
 ## 0.2.0 (2026-11-13)

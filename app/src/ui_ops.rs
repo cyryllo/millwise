@@ -14,6 +14,8 @@ pub enum OpsAction {
     None,
     PreviewGcode,
     ExportGcode,
+    /// Przejście do symulacji obróbki.
+    Simulate,
     /// Włącz dodawanie/usuwanie krzywych do operacji `i`.
     EditCurves(usize),
     /// Operacja usunięta / zmieniona kolejność — zakończ tryb dodawania.
@@ -198,7 +200,7 @@ pub fn ops_panel(
     if let Some(i) = doc.selected_op.filter(|&i| i < doc.ops.len()) {
         ui.add_space(6.0);
         let active = picking == Some(i);
-        let bottom_reserve = 70.0;
+        let bottom_reserve = 118.0;
         egui::Frame::new()
             .fill(ui_kit::CARD_FILL)
             .stroke(egui::Stroke::new(1.5, op_color(i).gamma_multiply(0.8)))
@@ -229,6 +231,14 @@ pub fn ops_panel(
                 action = OpsAction::ExportGcode;
             }
         });
+        // kolejny krok po operacjach: symulacja, potem eksport
+        ui.add_space(2.0);
+        if icons::wide_view_button(ui, icons::Icon::Preview3D, "Symulacja obróbki  (Tab)", Color32::from_rgb(70, 190, 110))
+            .on_hover_text("Sprawdź ścieżki na symulacji 3D przed eksportem G-code")
+            .clicked()
+        {
+            action = OpsAction::Simulate;
+        }
         ui.separator();
     });
     action

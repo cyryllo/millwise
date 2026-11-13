@@ -382,7 +382,6 @@ impl CamApp {
     fn handle_toolbar(&mut self, action: ToolbarAction, ctx: &egui::Context) {
         match action {
             ToolbarAction::Changed => self.pick_target = None,
-            ToolbarAction::Preview => self.mode = ViewMode::Visual,
             ToolbarAction::Command(sub) => {
                 let ok = match sub {
                     Sub::FlipH => self.doc.flip_selected(true),
@@ -1678,6 +1677,10 @@ impl eframe::App for CamApp {
             match action {
                 OpsAction::None => {}
                 OpsAction::ExportGcode => self.export_gcode(),
+                OpsAction::Simulate => {
+                    self.stop_mode();
+                    self.mode = ViewMode::Visual;
+                }
                 OpsAction::PreviewGcode => {
                     self.ensure_generated();
                     match self.preview_lines() {

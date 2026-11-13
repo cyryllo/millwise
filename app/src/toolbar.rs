@@ -229,7 +229,6 @@ pub enum ToolbarAction {
     Changed,
     /// Polecenie natychmiastowe (odbicie, ustawienie zera).
     Command(Sub),
-    Preview,
 }
 
 impl Toolbar {
@@ -271,13 +270,6 @@ impl Toolbar {
                 self.group = g;
                 action = Some(ToolbarAction::Changed);
             }
-        }
-        ui.separator();
-        if icons::tool_button(ui, Icon::Preview3D, "Symulacja", false, true, Color32::WHITE)
-            .on_hover_text("Symulacja obróbki w 3D (Tab)")
-            .clicked()
-        {
-            action = Some(ToolbarAction::Preview);
         }
         action
     }
