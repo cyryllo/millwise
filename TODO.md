@@ -4,17 +4,13 @@ Lista tego, co jest jeszcze w planie, w kolejności. Szczegóły techniczne
 większych etapów są w [ROADMAP.md](ROADMAP.md). Zrobione punkty usuwamy — co
 weszło do programu, jest w [CHANGELOG.md](CHANGELOG.md) i w historii gita.
 
-## 1. Teraz: dopracowanie frezowania 2D / 2.5D
-
-- [ ] …
-
-## 2. Wydania
+## 1. Wydania
 
 - [ ] Kolejna wersja z poprawkami frezowania 2D.
 - [ ] Sprawdzić G-code na prawdziwej maszynie (GRBL/FluidNC, LinuxCNC), potem
       złagodzić ostrzeżenie w README.
 
-## 3. Później: STL i obróbka 3D (wstrzymane)
+## 2. Później: STL i obróbka 3D (wstrzymane)
 
 Plan ustalony, start dopiero po dopracowaniu 2D. Szczegóły w
 [ROADMAP.md](ROADMAP.md).
@@ -27,7 +23,7 @@ Plan ustalony, start dopiero po dopracowaniu 2D. Szczegóły w
       ścieżek.
 - [ ] Obróbka resztek i kontrola podcięć modelu.
 
-## 4. Pomysły na dalej
+## 3. Pomysły na dalej
 
 - [ ] Kieszeń adaptacyjna (HSM).
 - [ ] V-carving.
