@@ -25,9 +25,25 @@ Plan ustalony, start dopiero po dopracowaniu 2D. Szczegóły w
 
 ## 3. Pomysły na dalej
 
-- [ ] Kieszeń adaptacyjna (HSM).
-- [ ] V-carving.
+**Frezowanie 2D**
+
+- [ ] V-carving: grawer frezem V o zmiennej głębokości, np. ładne napisy i
+      ozdoby.
+- [ ] Kieszeń adaptacyjna (HSM): stałe obciążenie freza, szybsze i
+      bezpieczniejsze wybieranie dużych kieszeni, zwłaszcza w aluminium.
+- [ ] Obróbka dwustronna: odwracanie detalu z bazowaniem.
+- [ ] Osobny posuw dla przejścia wykańczającego (zwykle wolniejszy niż
+      zgrubny).
+- [ ] Resztki w narożnikach kieszeni mniejszym frezem (rest machining) — duży
+      frez zostawia zaokrąglone narożniki.
+- [ ] Kolejność według narzędzi: podpowiedź albo przycisk, żeby operacje tym
+      samym frezem szły po sobie (mniej zmian narzędzia).
+- [ ] Rampa dla linii otwartych (teraz zawsze wejście pionowe).
+- [ ] Napisy (tekst) w programie do graweru, bez osobnego CAD-a.
+- [ ] Pomiar odległości w widoku 2D.
+
+**Paczki i program**
+
 - [ ] Budowanie AppImage w GitHub Actions.
 - [ ] Paczki dla Linuksa z CI (deb).
 - [ ] Sprawdzanie aktualizacji.
-- [ ] Obróbka dwustronna.
