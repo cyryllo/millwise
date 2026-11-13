@@ -1249,7 +1249,7 @@ impl CamApp {
             if !doc.layers.is_empty() {
                 let visible = doc.layers.iter().filter(|l| l.visible).count();
                 let head = RichText::new(format!("WARSTWY  {visible} / {}", doc.layers.len())).small().strong().color(ui_kit::LABEL);
-                egui::CollapsingHeader::new(head).id_salt("layers").default_open(true).show(ui, |ui| {
+                egui::CollapsingHeader::new(head).id_salt("layers").default_open(false).show(ui, |ui| {
                     let mut changed = false;
                     ui.horizontal_wrapped(|ui| {
                         for l in &mut doc.layers {
