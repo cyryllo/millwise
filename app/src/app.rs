@@ -451,7 +451,8 @@ impl CamApp {
                     .corner_radius(8.0)
                     .inner_margin(10.0)
                     .show(ui, |ui| {
-                        ui.horizontal_wrapped(|ui| match info {
+                        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
+                        ui.horizontal(|ui| match info {
                             ParamEdit::Array { .. } => {
                                 ui.strong("Edycja szyku");
                                 ui.label("kolumny");
@@ -595,6 +596,8 @@ impl CamApp {
                     .inner_margin(10.0)
                     .show(ui, |ui| {
                         ui.set_max_width((view.width() - 40.0).max(200.0));
+                        // okienko rośnie w prawo razem z wartościami, zamiast zawijać pola
+                        ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
                         let e = &mut self.edit;
                         let doc = &mut self.doc;
                         let mut apply = |ok: bool| {
@@ -604,7 +607,7 @@ impl CamApp {
                         };
                         match sub {
                             Sub::Move => {
-                                ui.horizontal_wrapped(|ui| {
+                                ui.horizontal(|ui| {
                                     ui.strong("Przesuń");
                                     ui.label(RichText::new("przeciągnij zaznaczone myszą lub:").weak());
                                     ui.label("ΔX");
@@ -617,7 +620,7 @@ impl CamApp {
                                 });
                             }
                             Sub::Rotate => {
-                                ui.horizontal_wrapped(|ui| {
+                                ui.horizontal(|ui| {
                                     ui.strong("Obróć zaznaczone wokół ich środka");
                                     ui.add(egui::DragValue::new(&mut e.angle).speed(0.5).suffix("°"));
                                     if ui.button("Obróć").clicked() {
@@ -631,7 +634,7 @@ impl CamApp {
                                 });
                             }
                             Sub::Scale => {
-                                ui.horizontal_wrapped(|ui| {
+                                ui.horizontal(|ui| {
                                     ui.strong("Skaluj zaznaczone");
                                     ui.add(egui::DragValue::new(&mut e.scale_pct).range(0.1..=10000.0).speed(0.5).suffix(" %"));
                                     if ui.button("Skaluj").clicked() {
@@ -640,7 +643,7 @@ impl CamApp {
                                 });
                             }
                             Sub::Align => {
-                                ui.horizontal_wrapped(|ui| {
+                                ui.horizontal(|ui| {
                                     ui.strong("Wyrównaj zaznaczone");
                                     for (m, l) in [
                                         (AlignMode::Left, "Do lewej"),
@@ -657,7 +660,7 @@ impl CamApp {
                                 });
                             }
                             Sub::Array => {
-                                ui.horizontal_wrapped(|ui| {
+                                ui.horizontal(|ui| {
                                     ui.strong("Szyk");
                                     ui.label("kolumny");
                                     ui.add(egui::DragValue::new(&mut e.cols).range(1..=100));
@@ -674,7 +677,7 @@ impl CamApp {
                                 ui.label(RichText::new("Odstęp liczony między krawędziami kopii; kopie trafiają też do operacji oryginału.").small().weak());
                             }
                             Sub::ZeroPick => {
-                                ui.horizontal_wrapped(|ui| {
+                                ui.horizontal(|ui| {
                                     ui.strong("Zero programu:");
                                     ui.label("kliknij punkt (przyciąga do środków okręgów i wierzchołków)");
                                     if ui.button("Anuluj").clicked() {
@@ -684,7 +687,7 @@ impl CamApp {
                             }
                             s if s.op_template(1.0).is_some() => {
                                 let target = self.pick_target.filter(|&t| t < doc.ops.len());
-                                ui.horizontal_wrapped(|ui| {
+                                ui.horizontal(|ui| {
                                     let title = match target {
                                         Some(t) => format!("Dodawanie do: {}", doc.ops[t].name),
                                         None => format!("{} › {} — kliknij krzywą, aby utworzyć operację", s.group().label(), s.label()),

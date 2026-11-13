@@ -35,6 +35,8 @@ Version numbers:
 - Clicking an empty spot of the drawing also closes the box of an editing
   tool (array, move, rotate, scale, align) and the box for changing an older
   step from the history.
+- The boxes of the editing tools grow to the right with longer values instead
+  of wrapping their fields onto a second line.
 - Layers on the right are folded at start, like the list of curves.
 
 ## 0.2.0 (2026-11-13)
