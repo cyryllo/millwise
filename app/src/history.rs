@@ -7,6 +7,8 @@
 //! Krzywe są współdzielone między krokami, w których się nie zmieniły.
 
 use crate::doc::{DocContour, Document, Stock};
+use crate::icons::Icon;
+use crate::toolbar::Sub;
 use cam_ops::Operation;
 use cam_post::PostSettings;
 use std::rc::Rc;
@@ -14,8 +16,45 @@ use std::rc::Rc;
 /// Najwięcej kroków w historii; najstarsze są usuwane.
 const MAX_STEPS: usize = 200;
 
+/// Znaczek w rogu ikony kroku: co się stało.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Badge {
+    None,
+    Add,
+    Remove,
+    Edit,
+    Curves,
+    Order,
+    On,
+    Off,
+}
+
+/// Wygląd kroku w panelu historii: ikona, znaczek i operacja (jej kolor).
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Mark {
+    pub icon: Icon,
+    pub badge: Badge,
+    pub op: Option<usize>,
+}
+
+impl Mark {
+    pub fn new(icon: Icon) -> Self {
+        Mark { icon, badge: Badge::None, op: None }
+    }
+
+    pub fn badge(mut self, b: Badge) -> Self {
+        self.badge = b;
+        self
+    }
+
+    fn op(i: usize, op: &Operation, b: Badge) -> Self {
+        Mark { icon: Sub::for_op(&op.kind).icon(), badge: b, op: Some(i) }
+    }
+}
+
 struct Step {
     label: String,
+    mark: Mark,
     contours: Rc<Vec<DocContour>>,
     /// `geom_revision` dokumentu, przy którym zapisano krzywe.
     geom: u64,
@@ -42,7 +81,7 @@ impl History {
     /// Nowa historia od bieżącego stanu (po otwarciu pliku).
     pub fn reset(&mut self, doc: &Document, label: impl Into<String>) {
         let contours = Rc::new(doc.contours.clone());
-        self.steps = vec![step(doc, label.into(), contours)];
+        self.steps = vec![step(doc, (Mark::new(Icon::Open), label.into()), contours)];
         self.pos = 0;
         self.serial += 1;
     }
@@ -129,60 +168,70 @@ impl History {
         true
     }
 
-    /// Kroki do wyświetlenia: (opis, czy to bieżący krok, czy krok cofnięty).
-    pub fn entries(&self) -> impl Iterator<Item = (usize, &str, bool, bool)> {
-        self.steps.iter().enumerate().map(|(i, s)| (i, s.label.as_str(), i == self.pos, i > self.pos))
+    /// Kroki do wyświetlenia: (numer, opis, wygląd, czy bieżący, czy cofnięty).
+    pub fn entries(&self) -> impl Iterator<Item = (usize, &str, Mark, bool, bool)> {
+        self.steps.iter().enumerate().map(|(i, s)| (i, s.label.as_str(), s.mark, i == self.pos, i > self.pos))
     }
 }
 
-fn step(doc: &Document, label: String, contours: Rc<Vec<DocContour>>) -> Step {
-    Step { label, contours, geom: doc.geom_revision, ops: doc.ops.clone(), stock: doc.stock.clone(), post: doc.post.clone() }
+fn step(doc: &Document, (mark, label): (Mark, String), contours: Rc<Vec<DocContour>>) -> Step {
+    Step {
+        label,
+        mark,
+        contours,
+        geom: doc.geom_revision,
+        ops: doc.ops.clone(),
+        stock: doc.stock.clone(),
+        post: doc.post.clone(),
+    }
 }
 
-/// Nazwa zmiany, gdy kod, który ją zrobił, nie podał opisu.
-fn describe(prev: &Step, doc: &Document) -> String {
+/// Nazwa i ikona zmiany, gdy kod, który ją zrobił, nie podał opisu.
+fn describe(prev: &Step, doc: &Document) -> (Mark, String) {
     if doc.geom_revision != prev.geom {
-        return "Zmiana krzywych".into();
+        return (Mark::new(Icon::Curve).badge(Badge::Edit), "Zmiana krzywych".into());
     }
+    // dodana / usunięta: pierwsze miejsce, w którym listy się różnią (kopia operacji też się liczy)
     if doc.ops.len() > prev.ops.len() {
-        if let Some(op) = doc.ops.iter().find(|o| !prev.ops.contains(o)) {
-            return format!("Nowa operacja: {}", op.name);
-        }
+        let i = (0..doc.ops.len()).find(|&i| prev.ops.get(i) != Some(&doc.ops[i])).unwrap_or(doc.ops.len() - 1);
+        let op = &doc.ops[i];
+        return (Mark::op(i, op, Badge::Add), format!("Nowa operacja: {}", op.name));
     }
     if doc.ops.len() < prev.ops.len() {
-        if let Some(op) = prev.ops.iter().find(|o| !doc.ops.contains(o)) {
-            return format!("Usunięto operację: {}", op.name);
-        }
+        let i = (0..prev.ops.len()).find(|&i| doc.ops.get(i) != Some(&prev.ops[i])).unwrap_or(prev.ops.len() - 1);
+        let op = &prev.ops[i];
+        return (Mark::op(i, op, Badge::Remove), format!("Usunięto operację: {}", op.name));
     }
     if doc.ops.len() == prev.ops.len() && doc.ops != prev.ops {
         let changed: Vec<usize> = (0..doc.ops.len()).filter(|&i| doc.ops[i] != prev.ops[i]).collect();
         if changed.len() == 2 && doc.ops[changed[0]] == prev.ops[changed[1]] && doc.ops[changed[1]] == prev.ops[changed[0]] {
-            return "Kolejność operacji".into();
+            let i = changed[0];
+            return (Mark::op(i, &doc.ops[i], Badge::Order), "Kolejność operacji".into());
         }
         if let [i] = changed[..] {
             let (a, b) = (&prev.ops[i], &doc.ops[i]);
-            let what = if a.contours != b.contours {
-                "krzywe"
+            let (badge, what) = if a.contours != b.contours {
+                (Badge::Curves, "krzywe")
             } else if a.name != b.name {
-                return format!("Nazwa operacji: {}", b.name);
+                return (Mark::op(i, b, Badge::Edit), format!("Nazwa operacji: {}", b.name));
             } else if a.enabled != b.enabled {
-                if b.enabled { "włączona" } else { "wyłączona" }
+                if b.enabled { (Badge::On, "włączona") } else { (Badge::Off, "wyłączona") }
             } else if a.tool_id != b.tool_id {
-                "narzędzie"
+                (Badge::Edit, "narzędzie")
             } else {
-                "parametry"
+                (Badge::Edit, "parametry")
             };
-            return format!("{}: {what}", b.name);
+            return (Mark::op(i, b, badge), format!("{}: {what}", b.name));
         }
-        return "Zmiana operacji".into();
+        return (Mark::new(Icon::Document).badge(Badge::Edit), "Zmiana operacji".into());
     }
     if doc.stock != prev.stock {
-        return "Półfabrykat".into();
+        return (Mark::new(Icon::Stock).badge(Badge::Edit), "Półfabrykat".into());
     }
     if doc.post != prev.post {
-        return "Ustawienia G-code".into();
+        return (Mark::new(Icon::Document).badge(Badge::Edit), "Ustawienia G-code".into());
     }
-    "Zmiana".into()
+    (Mark::new(Icon::Document), "Zmiana".into())
 }
 
 #[cfg(test)]
@@ -240,7 +289,24 @@ mod tests {
         d.stock.thickness = 12.0;
         h.track(&mut d, true);
         assert!(!h.can_redo());
-        assert_eq!(h.entries().last().unwrap().1, "Półfabrykat");
+        let last = h.entries().last().unwrap();
+        assert_eq!((last.1, last.2.icon), ("Półfabrykat", Icon::Stock));
+    }
+
+    #[test]
+    fn duplicated_and_disabled_ops_are_named() {
+        let mut d = doc_with_square();
+        d.ops.push(test_op());
+        let mut h = History::new(&d, "Start");
+        let copy = d.ops[0].clone();
+        d.add_op(copy); // identyczna kopia
+        h.track(&mut d, true);
+        let last = h.entries().last().unwrap();
+        assert_eq!((last.1, last.2.badge, last.2.op), ("Nowa operacja: Profil 1", Badge::Add, Some(1)));
+        d.ops[1].enabled = false;
+        h.track(&mut d, true);
+        let last = h.entries().last().unwrap();
+        assert_eq!((last.1, last.2.badge), ("Profil 1: wyłączona", Badge::Off));
     }
 
     fn test_op() -> Operation {

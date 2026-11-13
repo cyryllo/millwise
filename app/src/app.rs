@@ -3,6 +3,7 @@ use crate::history::History;
 use crate::sim_panel::SimState;
 use crate::storage;
 use crate::toolbar::{Sub, Toolbar, ToolbarAction};
+use crate::ui_kit;
 use crate::ui_machines::MachinesWindow;
 use crate::ui_ops::{self, OpsAction, OpsUi};
 use crate::ui_tools::ToolsWindow;
@@ -124,6 +125,9 @@ impl CamApp {
                     "machines" => app.machines_window.open = true,
                     "about" => app.about_open = true,
                     "keys" => app.shortcuts_open = true,
+                    w if w.starts_with("op=") => {
+                        app.doc.selected_op = w[3..].parse().ok().filter(|&i: &usize| i < app.doc.ops.len());
+                    }
                     _ => {}
                 }
             }
@@ -654,7 +658,7 @@ impl CamApp {
     fn cut(&mut self, now: f64) {
         if self.copy(now) {
             let n = self.doc.delete_selected();
-            self.doc.edit_label = Some(format!("Wycięto krzywe ({n})"));
+            self.doc.label(crate::history::Mark::new(crate::icons::Icon::Cut), format!("Wycięto krzywe ({n})"));
             self.stop_mode();
             self.view2d.flash(format!("Wycięto krzywe: {n}"), now);
         }
@@ -687,35 +691,71 @@ impl CamApp {
         }
     }
 
+    /// Historia zmian: rząd ikon od najstarszej do najnowszej; opis po najechaniu, klik = powrót.
     fn history_panel(&mut self, ui: &mut egui::Ui) {
         let now = Self::now(ui.ctx());
-        ui.horizontal(|ui| {
-            ui.strong("Historia zmian");
-            if ui.add_enabled(self.history.can_undo(), egui::Button::new("Cofnij").small()).on_hover_text("Ctrl+Z").clicked() {
-                self.undo(now);
-            }
-            if ui.add_enabled(self.history.can_redo(), egui::Button::new("Ponów").small()).on_hover_text("Ctrl+Y").clicked() {
-                self.redo(now);
-            }
-            ui.label(RichText::new("kliknij krok, aby wrócić do tego stanu").small().weak());
-        });
         let serial = self.history.serial;
         let mut jump = None;
-        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-            for (i, label, current, undone) in self.history.entries() {
-                let mut text = RichText::new(format!("{:>3}.  {label}", i + 1)).monospace();
-                if undone {
-                    text = text.weak().italics();
-                }
-                let r = ui.selectable_label(current, text);
-                if current && self.history_seen != serial {
-                    r.scroll_to_me(Some(egui::Align::Center));
-                    self.history_seen = serial;
-                }
-                if r.clicked() && !current {
-                    jump = Some(i);
-                }
+        ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+            ui.label(RichText::new("HISTORIA").small().strong().color(Color32::from_gray(150)));
+            if ui.add_enabled(self.history.can_undo(), egui::Button::new("Cofnij")).on_hover_text("Ctrl+Z").clicked() {
+                self.undo(now);
             }
+            if ui.add_enabled(self.history.can_redo(), egui::Button::new("Ponów")).on_hover_text("Ctrl+Y").clicked() {
+                self.redo(now);
+            }
+            ui.separator();
+            egui::ScrollArea::horizontal()
+                .auto_shrink([false, false])
+                .max_height(32.0)
+                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden)
+                .show(ui, |ui| {
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 3.0;
+                    for (i, label, mark, current, undone) in self.history.entries() {
+                        let (rect, resp) = ui.allocate_exact_size(egui::vec2(32.0, 32.0), egui::Sense::click());
+                        let painter = ui.painter();
+                        let accent = Color32::from_rgb(61, 127, 224);
+                        let (bg, stroke) = if current {
+                            (Color32::from_rgb(31, 51, 80), egui::Stroke::new(1.5, accent))
+                        } else if resp.hovered() {
+                            (Color32::from_rgb(52, 57, 64), egui::Stroke::new(1.0, Color32::from_gray(120)))
+                        } else {
+                            (Color32::from_rgb(35, 38, 43), egui::Stroke::new(1.0, Color32::from_rgb(52, 57, 64)))
+                        };
+                        painter.rect(rect, 6.0, bg, stroke, egui::StrokeKind::Inside);
+                        if let Some(op) = mark.op {
+                            let bar = egui::Rect::from_min_max(
+                                egui::pos2(rect.left() + 5.0, rect.bottom() - 4.0),
+                                egui::pos2(rect.right() - 5.0, rect.bottom() - 2.0),
+                            );
+                            painter.rect_filled(bar, 1.0, op_color(op));
+                        }
+                        let mut p = painter.clone();
+                        if undone {
+                            p.set_opacity(0.35);
+                        }
+                        crate::icons::draw(&p, rect.shrink(6.0), mark.icon);
+                        draw_badge(&p, rect, mark.badge);
+                        let mut tip = format!("{}. {label}", i + 1);
+                        if current {
+                            tip.push_str("\n(stan obecny)");
+                        } else if undone {
+                            tip.push_str("\n(cofnięte — kliknij, aby przywrócić)");
+                        } else {
+                            tip.push_str("\nkliknij, aby wrócić do tego stanu");
+                        }
+                        let resp = resp.on_hover_text(tip);
+                        if current && self.history_seen != serial {
+                            resp.scroll_to_me(Some(egui::Align::Center));
+                            self.history_seen = serial;
+                        }
+                        if resp.clicked() && !current {
+                            jump = Some(i);
+                        }
+                    }
+                });
+            });
         });
         if let Some(i) = jump {
             if self.history.jump(&mut self.doc, i) {
@@ -839,8 +879,7 @@ impl CamApp {
             ui.label(RichText::new(format!("Uwaga: {w}")).small().color(Color32::from_rgb(230, 180, 80)));
         }
 
-        ui.separator();
-        ui.strong("Półfabrykat");
+        ui.add_space(4.0);
         let mut materials: Vec<String> = vec!["Drewno".into()];
         for t in &self.tools.tools {
             for p in &t.presets {
@@ -852,66 +891,70 @@ impl CamApp {
         if !materials.contains(&doc.stock.material) {
             materials.push(doc.stock.material.clone());
         }
-        egui::Grid::new("stock").num_columns(2).show(ui, |ui| {
-            ui.label("Grubość");
-            let a = ui.add(egui::DragValue::new(&mut doc.stock.thickness).range(0.1..=500.0).speed(0.1).suffix(" mm"));
-            ui.end_row();
-            ui.label("Naddatek XY");
-            let b = ui.add(egui::DragValue::new(&mut doc.stock.margin).range(0.0..=500.0).speed(0.1).suffix(" mm"));
-            ui.end_row();
-            ui.label("Materiał");
-            egui::ComboBox::from_id_salt("material").selected_text(doc.stock.material.clone()).show_ui(ui, |ui| {
-                for m in &materials {
-                    ui.selectable_value(&mut doc.stock.material, m.clone(), m);
+        ui_kit::card(ui, |ui| {
+            ui_kit::title(ui, "Półfabrykat");
+            egui::Grid::new("stock").num_columns(2).spacing([10.0, 5.0]).show(ui, |ui| {
+                let a = ui_kit::big_num(ui, "Grubość", &mut doc.stock.thickness, 0.1..=500.0, 0.1, " mm");
+                let b = ui_kit::num(ui, "Naddatek XY", &mut doc.stock.margin, 0.0..=500.0, 0.1, " mm");
+                ui_kit::label(ui, "Materiał");
+                egui::ComboBox::from_id_salt("material").selected_text(doc.stock.material.clone()).show_ui(ui, |ui| {
+                    for m in &materials {
+                        ui.selectable_value(&mut doc.stock.material, m.clone(), m);
+                    }
+                });
+                ui.end_row();
+                if a || b {
+                    doc.revision += 1;
                 }
             });
-            ui.end_row();
-            if a.changed() || b.changed() {
-                doc.revision += 1;
+            if !doc.ops.is_empty()
+                && ui
+                    .small_button("Zastosuj parametry materiału do operacji")
+                    .on_hover_text("Obroty, posuwy i krok w dół z biblioteki narzędzi dla wybranego materiału")
+                    .clicked()
+            {
+                let m = doc.stock.material.clone();
+                for op in &mut doc.ops {
+                    if let Some(t) = self.tools.get(op.tool_id) {
+                        op.cut.apply_tool(t, &m);
+                    }
+                }
+                doc.ops_dirty = true;
+            }
+            if let Some(sb) = doc.stock_box() {
+                let s = sb.size();
+                let m = self.machines.active();
+                let fits = m.is_none_or(|m| s.x <= m.travel_x && s.y <= m.travel_y);
+                let text = format!(
+                    "{:.1} × {:.1} × {:.1} mm, Z0 = góra materiału{}",
+                    s.x,
+                    s.y,
+                    doc.stock.thickness,
+                    if fits { "" } else { " — WIĘKSZY NIŻ POLE ROBOCZE" }
+                );
+                ui.label(RichText::new(text).small().color(if fits { Color32::from_gray(150) } else { Color32::LIGHT_RED }));
             }
         });
-        if !doc.ops.is_empty()
-            && ui
-                .small_button("Zastosuj parametry materiału do operacji")
-                .on_hover_text("Obroty, posuwy i krok w dół z biblioteki narzędzi dla wybranego materiału")
-                .clicked()
-        {
-            let m = doc.stock.material.clone();
-            for op in &mut doc.ops {
-                if let Some(t) = self.tools.get(op.tool_id) {
-                    op.cut.apply_tool(t, &m);
+
+        if !doc.layers.is_empty() {
+            ui.add_space(6.0);
+            ui_kit::card(ui, |ui| {
+                ui_kit::title(ui, "Warstwy");
+                let mut layers_changed = false;
+                for l in &mut doc.layers {
+                    layers_changed |= ui.checkbox(&mut l.visible, &l.name).changed();
                 }
-            }
-            doc.ops_dirty = true;
-        }
-        if let Some(sb) = doc.stock_box() {
-            let s = sb.size();
-            let m = self.machines.active();
-            let fits = m.is_none_or(|m| s.x <= m.travel_x && s.y <= m.travel_y);
-            let text = format!(
-                "{:.1} × {:.1} × {:.1} mm, Z0 = góra materiału{}",
-                s.x,
-                s.y,
-                doc.stock.thickness,
-                if fits { "" } else { " — WIĘKSZY NIŻ POLE ROBOCZE" }
-            );
-            ui.label(RichText::new(text).small().color(if fits { Color32::from_gray(150) } else { Color32::LIGHT_RED }));
+                if layers_changed {
+                    doc.revision += 1;
+                }
+            });
         }
 
-        ui.separator();
-        ui.strong("Warstwy");
-        let mut layers_changed = false;
-        for l in &mut doc.layers {
-            layers_changed |= ui.checkbox(&mut l.visible, &l.name).changed();
-        }
-        if layers_changed {
-            doc.revision += 1;
-        }
-
-        ui.separator();
-        ui.horizontal(|ui| {
-            ui.strong("Krzywe");
-            ui.label(RichText::new(format!("({} / zazn. {})", doc.contours.len(), doc.selected_count())).weak());
+        ui.add_space(6.0);
+        ui_kit::card(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui_kit::title(ui, "Krzywe");
+                ui.label(RichText::new(format!("{}  ·  zaznaczone {}", doc.contours.len(), doc.selected_count())).small().color(ui_kit::LABEL));
         });
         ui.horizontal_wrapped(|ui| {
             if ui.small_button("Zamknięte").on_hover_text("Zaznacz wszystkie zamknięte krzywe").clicked() {
@@ -976,6 +1019,7 @@ impl CamApp {
                 }
             },
         );
+        });
     }
 
     fn status_bar(&self, ui: &mut egui::Ui) {
@@ -1129,9 +1173,36 @@ impl CamApp {
     }
 }
 
+/// Dla programisty: `MILLWISE_SCREENSHOT=plik.ppm` zapisuje zrzut własnego okna
+/// (po kilkudziesięciu klatkach) i zamyka program.
+fn dev_screenshot(ctx: &egui::Context) {
+    let Ok(path) = std::env::var("MILLWISE_SCREENSHOT") else { return };
+    let n = ctx.cumulative_frame_nr();
+    if n < 300 {
+        ctx.request_repaint();
+    }
+    if n == 40 {
+        let c = ctx.clone();
+        let cb = egui::ScreenshotCallback::new(move |img| {
+            let [w, h] = img.size;
+            let mut data = format!("P6\n{w} {h}\n255\n").into_bytes();
+            for p in &img.pixels {
+                data.extend_from_slice(&[p.r(), p.g(), p.b()]);
+            }
+            if let Err(e) = std::fs::write(&path, data) {
+                eprintln!("zrzut ekranu: {e}");
+            }
+            c.send_viewport_cmd(egui::ViewportCommand::Close);
+            c.request_repaint();
+        });
+        ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(cb));
+    }
+}
+
 impl eframe::App for CamApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        dev_screenshot(&ctx);
         self.shortcuts(&ctx);
         self.ensure_generated();
 
@@ -1179,9 +1250,9 @@ impl eframe::App for CamApp {
             egui::Panel::right("geometry").resizable(true).default_size(260.0).show(ui, |ui| self.side_panel(ui));
             if self.show_history {
                 egui::Panel::bottom("history")
-                    .resizable(true)
-                    .default_size(120.0)
-                    .min_size(60.0)
+                    .resizable(false)
+                    .exact_size(48.0)
+                    .frame(egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(8, 6)))
                     .show(ui, |ui| self.history_panel(ui));
             }
             match action {
@@ -1268,5 +1339,51 @@ impl eframe::App for CamApp {
                     });
             }
         }
+    }
+}
+
+/// Znaczek w prawym górnym rogu ikony kroku historii.
+fn draw_badge(painter: &egui::Painter, rect: egui::Rect, badge: crate::history::Badge) {
+    use crate::history::Badge;
+    let c = egui::pos2(rect.right() - 7.0, rect.top() + 7.0);
+    let color = match badge {
+        Badge::None => return,
+        Badge::Add | Badge::On => Color32::from_rgb(60, 170, 90),
+        Badge::Remove => Color32::from_rgb(210, 70, 60),
+        Badge::Off => Color32::from_gray(110),
+        Badge::Edit => Color32::from_rgb(220, 160, 50),
+        Badge::Curves | Badge::Order => Color32::from_rgb(61, 127, 224),
+    };
+    painter.circle(c, 5.5, color, egui::Stroke::new(1.0, Color32::from_rgb(17, 19, 22)));
+    let w = egui::Stroke::new(1.5, Color32::WHITE);
+    let d = 2.8;
+    match badge {
+        Badge::Add => {
+            painter.line_segment([c - egui::vec2(d, 0.0), c + egui::vec2(d, 0.0)], w);
+            painter.line_segment([c - egui::vec2(0.0, d), c + egui::vec2(0.0, d)], w);
+        }
+        Badge::Remove => {
+            painter.line_segment([c - egui::vec2(d, 0.0), c + egui::vec2(d, 0.0)], w);
+        }
+        Badge::Off => {
+            painter.line_segment([c + egui::vec2(-d * 0.8, d * 0.8), c + egui::vec2(d * 0.8, -d * 0.8)], w);
+        }
+        Badge::Edit => {
+            painter.circle_filled(c, 1.6, Color32::WHITE);
+        }
+        Badge::Curves => {
+            painter.line_segment([c + egui::vec2(-d, d * 0.6), c + egui::vec2(0.0, -d * 0.6)], w);
+            painter.line_segment([c + egui::vec2(0.0, -d * 0.6), c + egui::vec2(d, d * 0.6)], w);
+        }
+        Badge::Order => {
+            painter.line_segment([c - egui::vec2(0.0, d), c + egui::vec2(0.0, d)], w);
+            painter.line_segment([c - egui::vec2(0.0, d), c + egui::vec2(-1.8, -1.0)], w);
+            painter.line_segment([c - egui::vec2(0.0, d), c + egui::vec2(1.8, -1.0)], w);
+        }
+        Badge::On => {
+            painter.line_segment([c + egui::vec2(-d, 0.0), c + egui::vec2(-0.6, d * 0.8)], w);
+            painter.line_segment([c + egui::vec2(-0.6, d * 0.8), c + egui::vec2(d, -d * 0.8)], w);
+        }
+        Badge::None => {}
     }
 }

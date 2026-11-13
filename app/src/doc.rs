@@ -3,6 +3,8 @@
 use cam_geom::{Aabb2, Contour, Vec2};
 use cam_io::{DxfImport, ImportOptions};
 use cam_ops::{OpResult, Operation, ToolLibrary, P3};
+use crate::history::{Badge, Mark};
+use crate::icons::Icon;
 use cam_post::{Machine, PostSettings};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -97,8 +99,8 @@ pub struct Document {
     pub paths_revision: u64,
     /// Zwiększany przy każdej zmianie krzywych (historia zmian porównuje go zamiast krzywych).
     pub geom_revision: u64,
-    /// Opis ostatniej zmiany dla historii (np. „Obrót 90°”); bez opisu historia nazwie zmianę sama.
-    pub edit_label: Option<String>,
+    /// Opis ostatniej zmiany dla historii (np. „Obrót 90°”) z ikoną; bez opisu historia nazwie zmianę sama.
+    pub edit_label: Option<(Mark, String)>,
 }
 
 impl Document {
@@ -325,8 +327,8 @@ impl Document {
         self.geom_revision += 1;
     }
 
-    fn label(&mut self, text: impl Into<String>) {
-        self.edit_label = Some(text.into());
+    pub fn label(&mut self, mark: Mark, text: impl Into<String>) {
+        self.edit_label = Some((mark, text.into()));
     }
 
     /// Usuwa zaznaczone krzywe; operacje tracą odwołania do nich. Zwraca liczbę usuniętych.
@@ -354,7 +356,7 @@ impl Document {
             op.contours = op.contours.iter().filter_map(|&i| map.get(i).copied().flatten()).collect();
         }
         self.geometry_changed();
-        self.label(format!("Usunięto krzywe ({})", sel.len()));
+        self.label(Mark::new(Icon::Delete), format!("Usunięto krzywe ({})", sel.len()));
         sel.len()
     }
 
@@ -372,7 +374,7 @@ impl Document {
             self.selected.push(true);
         }
         self.geometry_changed();
-        self.label(format!("Wklejono krzywe ({})", items.len()));
+        self.label(Mark::new(Icon::Paste).badge(Badge::Add), format!("Wklejono krzywe ({})", items.len()));
     }
 
     /// Kopia zaznaczonych krzywych do schowka: kontur i nazwa warstwy.
@@ -417,7 +419,7 @@ impl Document {
     pub fn move_selected(&mut self, d: Vec2) -> bool {
         let ok = self.transform_selected(|c| c.translate(d));
         if ok {
-            self.label("Przesunięcie");
+            self.label(Mark::new(Icon::Move), "Przesunięcie");
         }
         ok
     }
@@ -425,21 +427,25 @@ impl Document {
     pub fn rotate_selected(&mut self, deg: f64) -> bool {
         let Some(bb) = self.selection_bbox() else { return false };
         let c = bb.center();
-        self.label(format!("Obrót {deg}°"));
+        self.label(Mark::new(Icon::Rotate), format!("Obrót {deg}°"));
         self.transform_selected(|k| k.rotate(c, deg.to_radians()))
     }
 
     pub fn scale_selected(&mut self, factor: f64) -> bool {
         let Some(bb) = self.selection_bbox() else { return false };
         let c = bb.center();
-        self.label(format!("Skalowanie {}%", (factor * 1e4).round() / 1e2));
+        self.label(Mark::new(Icon::Scale), format!("Skalowanie {}%", (factor * 1e4).round() / 1e2));
         self.transform_selected(|k| k.scale(c, factor))
     }
 
     pub fn flip_selected(&mut self, horizontal: bool) -> bool {
         let Some(bb) = self.selection_bbox() else { return false };
         let c = bb.center();
-        self.label(if horizontal { "Odbicie w poziomie" } else { "Odbicie w pionie" });
+        if horizontal {
+            self.label(Mark::new(Icon::FlipH), "Odbicie w poziomie");
+        } else {
+            self.label(Mark::new(Icon::FlipV), "Odbicie w pionie");
+        }
         if horizontal {
             self.transform_selected(|k| k.mirror_x(c.x))
         } else {
@@ -450,7 +456,7 @@ impl Document {
     /// Wyrównuje każdą zaznaczoną krzywą do krawędzi/środka całego zaznaczenia.
     pub fn align_selected(&mut self, mode: AlignMode) -> bool {
         let Some(all) = self.selection_bbox() else { return false };
-        self.label("Wyrównanie");
+        self.label(Mark::new(Icon::Align), "Wyrównanie");
         for i in self.selected_indices() {
             let bb = self.contours[i].bbox;
             let d = match mode {
@@ -496,7 +502,7 @@ impl Document {
             }
         }
         self.geometry_changed();
-        self.label(format!("Szyk {cols} × {rows}"));
+        self.label(Mark::new(Icon::Array), format!("Szyk {cols} × {rows}"));
         true
     }
 
@@ -507,7 +513,7 @@ impl Document {
             self.rebuild(i);
         }
         self.geometry_changed();
-        self.label("Zero programu");
+        self.label(Mark::new(Icon::ZeroPick), "Zero programu");
     }
 
     /// Punkt przyciągania do wskazywania: środek okręgu lub wierzchołek w promieniu `tol`.

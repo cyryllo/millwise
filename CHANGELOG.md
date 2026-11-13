@@ -21,12 +21,20 @@ Version numbers:
 - **Undo and redo** (Ctrl+Z, Ctrl+Y or Ctrl+Shift+Z) for every change to the
   curves, operations, stock and G-code settings. A drag or a slider move is
   one step.
-- **History panel** at the bottom of the 2D view: every change with a short
-  description; click a step to go back to that state (Widok → Historia zmian
-  hides it).
+- **History bar** at the bottom of the 2D view: one icon per change (what was
+  changed, with a small mark for added / removed / edited); the pointer over
+  an icon shows the description, a click goes back to that state (Widok →
+  Historia zmian hides it).
 - **Cut, copy and paste curves** (Ctrl+X, Ctrl+C, Ctrl+V); pasted curves land
   under the mouse pointer. **Delete** removes the selected curves (operations
   forget them); with no curves selected it removes the selected operation.
+- **Clearer operations panel:** the list of operations and the settings of
+  the selected one are separate; each operation in the list shows its icon,
+  name, tool and depth. **Depth and step down** (for drilling: depth and
+  peck retract) are at the top of the settings in a highlighted box, with the
+  number of passes; the rest is grouped (operation, tool and cutting), and
+  the rarely changed heights are folded away.
+- The right panel is divided into boxes: stock, layers, curves.
 - **Edycja** menu with these commands, **Ctrl+Shift+S** for "save as", and a
   list of all keyboard shortcuts under Pomoc → Skróty klawiszowe.
 

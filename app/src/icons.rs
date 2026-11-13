@@ -31,6 +31,14 @@ pub enum Icon {
     ZeroTL,
     ZeroPick,
     Preview3D,
+    // ikony kroków historii zmian
+    Open,
+    Delete,
+    Paste,
+    Cut,
+    Stock,
+    Document,
+    Curve,
 }
 
 const BLUE: Color32 = Color32::from_rgb(52, 120, 220);
@@ -251,6 +259,44 @@ pub fn draw(painter: &egui::Painter, r: Rect, icon: Icon) {
             poly(&[(20.0, 5.0), (34.0, 13.0), (20.0, 21.0), (6.0, 13.0)], BLUE_LIGHT, st(1.0, OUTLINE));
             poly(&[(6.0, 13.0), (20.0, 21.0), (20.0, 36.0), (6.0, 28.0)], BLUE, st(1.0, OUTLINE));
             poly(&[(34.0, 13.0), (34.0, 28.0), (20.0, 36.0), (20.0, 21.0)], BLUE_DARK, st(1.0, OUTLINE));
+        }
+        Icon::Open => {
+            poly(&[(4.0, 9.0), (15.0, 9.0), (18.0, 13.0), (36.0, 13.0), (36.0, 33.0), (4.0, 33.0)], AMBER, st(1.0, OUTLINE));
+            poly(&[(4.0, 33.0), (9.0, 18.0), (39.0, 18.0), (34.0, 33.0)], Color32::from_rgb(250, 205, 115), st(1.0, OUTLINE));
+        }
+        Icon::Delete => {
+            painter.add(Shape::line(wave(-4.0), st(2.6, BLUE_LIGHT)));
+            line(&[(11.0, 11.0), (29.0, 29.0)], st(4.0, RED));
+            line(&[(29.0, 11.0), (11.0, 29.0)], st(4.0, RED));
+        }
+        Icon::Paste => {
+            painter.rect_filled(rect(7.0, 7.0, 26.0, 30.0), 3.0 * k, Color32::from_rgb(160, 120, 75));
+            painter.rect_filled(rect(10.0, 11.0, 20.0, 23.0), 1.0 * k, WHITE);
+            painter.rect_filled(rect(14.0, 4.0, 12.0, 6.0), 2.0 * k, STEEL_DARK);
+            for y in [17.0, 22.0, 27.0] {
+                line(&[(13.0, y), (27.0, y)], st(1.6, BLUE));
+            }
+        }
+        Icon::Cut => {
+            line(&[(13.0, 4.0), (25.0, 26.0)], st(3.0, STEEL));
+            line(&[(27.0, 4.0), (15.0, 26.0)], st(3.0, STEEL));
+            painter.circle_stroke(p(13.0, 30.0), 5.0 * k, st(2.6, RED));
+            painter.circle_stroke(p(27.0, 30.0), 5.0 * k, st(2.6, RED));
+        }
+        Icon::Stock => {
+            let wood = Color32::from_rgb(200, 164, 112);
+            poly(&[(20.0, 8.0), (37.0, 15.0), (20.0, 22.0), (3.0, 15.0)], wood, st(1.0, OUTLINE));
+            poly(&[(3.0, 15.0), (20.0, 22.0), (20.0, 32.0), (3.0, 25.0)], Color32::from_rgb(160, 120, 75), st(1.0, OUTLINE));
+            poly(&[(37.0, 15.0), (37.0, 25.0), (20.0, 32.0), (20.0, 22.0)], Color32::from_rgb(125, 90, 55), st(1.0, OUTLINE));
+        }
+        Icon::Document => {
+            poly(&[(8.0, 4.0), (26.0, 4.0), (33.0, 11.0), (33.0, 36.0), (8.0, 36.0)], WHITE, st(1.0, OUTLINE));
+            for y in [15.0, 21.0, 27.0] {
+                line(&[(13.0, y), (28.0, y)], st(1.8, LINE_DARK));
+            }
+        }
+        Icon::Curve => {
+            painter.add(Shape::line(wave(-4.0), st(3.0, BLUE_LIGHT)));
         }
     }
 }
