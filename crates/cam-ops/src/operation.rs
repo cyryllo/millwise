@@ -43,6 +43,11 @@ impl CutParams {
         self.top_z - self.depth
     }
 
+    /// Parametry przejścia wykańczającego: posuw zmniejszony do `pct` %.
+    pub fn finishing(&self, pct: f64) -> CutParams {
+        CutParams { feed: self.feed * pct.clamp(5.0, 200.0) / 100.0, ..self.clone() }
+    }
+
     /// Przepisuje parametry skrawania z narzędzia (dla danego materiału).
     pub fn apply_tool(&mut self, t: &Tool, material: &str) {
         let p = t.cutting_for(material);
@@ -98,6 +103,8 @@ pub struct ProfileParams {
     /// Przejście wykańczające: zgrubne przejścia zostawiają tyle [mm], a na końcu
     /// jedno przejście na pełnej głębokości zbiera to do wymiaru.
     pub finish: Option<f64>,
+    /// Posuw przejścia wykańczającego w % posuwu zgrubnego.
+    pub finish_feed_pct: f64,
     /// Wejście i wyjście po łuku stycznym o tym promieniu [mm] (zejście w odpadzie, obok ścianki).
     pub lead: Option<f64>,
 }
@@ -111,6 +118,7 @@ impl Default for ProfileParams {
             stock_to_leave: 0.0,
             tabs: None,
             finish: None,
+            finish_feed_pct: 70.0,
             lead: None,
         }
     }
@@ -138,6 +146,8 @@ pub struct PocketParams {
     pub stock_to_leave: f64,
     /// Przejście wykańczające ścian (i wysp) na pełnej głębokości; zgrubna obróbka zostawia tyle [mm].
     pub finish: Option<f64>,
+    /// Posuw przejścia wykańczającego w % posuwu zgrubnego.
+    pub finish_feed_pct: f64,
 }
 
 impl Default for PocketParams {
@@ -150,6 +160,7 @@ impl Default for PocketParams {
             entry: Entry::Ramp { angle: 3.0 },
             stock_to_leave: 0.0,
             finish: None,
+            finish_feed_pct: 70.0,
         }
     }
 }

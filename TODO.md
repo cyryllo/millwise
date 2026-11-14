@@ -38,12 +38,8 @@ Plan ustalony, start dopiero po dopracowaniu 2D. Szczegóły w
 - [ ] Kieszeń adaptacyjna (HSM): stałe obciążenie freza, szybsze i
       bezpieczniejsze wybieranie dużych kieszeni, zwłaszcza w aluminium.
 - [ ] Obróbka dwustronna: odwracanie detalu z bazowaniem.
-- [ ] Osobny posuw dla przejścia wykańczającego (zwykle wolniejszy niż
-      zgrubny).
 - [ ] Resztki w narożnikach kieszeni mniejszym frezem (rest machining) — duży
       frez zostawia zaokrąglone narożniki.
-- [ ] Kolejność według narzędzi: podpowiedź albo przycisk, żeby operacje tym
-      samym frezem szły po sobie (mniej zmian narzędzia).
 - [ ] Rampa dla linii otwartych (teraz zawsze wejście pionowe).
 - [ ] Napisy (tekst) w programie do graweru, bez osobnego CAD-a.
 - [ ] Pomiar odległości w widoku 2D.

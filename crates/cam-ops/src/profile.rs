@@ -59,7 +59,8 @@ pub(crate) fn generate(cut: &CutParams, p: &ProfileParams, tool: &Tool, contours
 
         // zgrubnie na kolejnych poziomach, potem wykańczająco na pełnej głębokości
         let bottom = [cut.bottom_z()];
-        for (loops, lv, entry) in [(&rough, &levels[..], p.entry), (&finishing, &bottom[..], Entry::Plunge)] {
+        let fcut = cut.finishing(p.finish_feed_pct);
+        for (loops, lv, entry, cut) in [(&rough, &levels[..], p.entry, cut), (&finishing, &bottom[..], Entry::Plunge, &fcut)] {
             for lp in loops {
                 let mut lp = lp.clone();
                 let pos = res.toolpath.pos().map_or(Vec2::ZERO, |q| q.xy());
@@ -357,6 +358,35 @@ mod tests {
         // wykańczanie tylko na pełnej głębokości
         assert!(!left(-2.0).is_empty());
         assert!(left(-2.0).iter().all(|x| (x + 3.0).abs() > 1e-6));
+    }
+
+    #[test]
+    fn finishing_pass_uses_its_own_feed() {
+        let tool = Tool { diameter: 6.0, ..Default::default() };
+        let o = with(ProfileSide::Outside, |p| {
+            p.finish = Some(0.5);
+            p.finish_feed_pct = 50.0;
+        });
+        let res = generate(&o, &tool, &[square(20.0)]);
+        let feed = o.cut.feed;
+        // poziome ruchy liniowe na dnie: wykańczanie (x = -3 albo y = -3) połowa posuwu, zgrubnie (-3,5) pełny
+        let mut seen = (false, false);
+        let mut prev: Option<crate::toolpath::P3> = None;
+        for m in &res.toolpath.moves {
+            if let (Move::Feed { to, feed: f }, Some(p)) = (m, prev) {
+                let flat = (to.z - p.z).abs() < 1e-9 && (to.z + 4.0).abs() < 1e-9 && p.xy().distance(to.xy()) > 1.0;
+                if flat && ((to.x + 3.0).abs() < 1e-6 && (p.x + 3.0).abs() < 1e-6) {
+                    assert!((f - feed * 0.5).abs() < 1e-9, "wykańczanie: posuw {f}");
+                    seen.0 = true;
+                }
+                if flat && ((to.x + 3.5).abs() < 1e-6 && (p.x + 3.5).abs() < 1e-6) {
+                    assert!((f - feed).abs() < 1e-9, "zgrubnie pełny posuw, jest {f}");
+                    seen.1 = true;
+                }
+            }
+            prev = Some(m.end());
+        }
+        assert!(seen.0 && seen.1, "{seen:?}");
     }
 
     #[test]

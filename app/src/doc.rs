@@ -326,6 +326,54 @@ impl Document {
         }
     }
 
+    /// Liczba zmian narzędzia między kolejnymi włączonymi operacjami.
+    pub fn tool_changes(&self) -> usize {
+        Self::count_changes(self.ops.iter())
+    }
+
+    fn count_changes<'a>(ops: impl Iterator<Item = &'a Operation>) -> usize {
+        let tools: Vec<u32> = ops.filter(|o| o.enabled).map(|o| o.tool_id).collect();
+        tools.windows(2).filter(|w| w[0] != w[1]).count()
+    }
+
+    /// Kolejność „według narzędzi”: operacje tym samym frezem po sobie, narzędzia
+    /// w kolejności pierwszego użycia; profile zewnętrzne (wycinanie detalu) na
+    /// końcu, żeby detal nie odpadł przed resztą obróbki. Kolejność wewnątrz grup bez zmian.
+    fn grouped_order(&self) -> Vec<usize> {
+        let cutout = |o: &Operation| matches!(&o.kind, cam_ops::OpKind::Profile(p) if p.side == cam_ops::ProfileSide::Outside);
+        let mut first_use: Vec<u32> = Vec::new();
+        for o in &self.ops {
+            if !first_use.contains(&o.tool_id) {
+                first_use.push(o.tool_id);
+            }
+        }
+        let mut order: Vec<usize> = (0..self.ops.len()).collect();
+        order.sort_by_key(|&i| {
+            let o = &self.ops[i];
+            (cutout(o), first_use.iter().position(|&t| t == o.tool_id), i)
+        });
+        order
+    }
+
+    pub fn tool_changes_if_grouped(&self) -> usize {
+        Self::count_changes(self.grouped_order().into_iter().map(|i| &self.ops[i]))
+    }
+
+    /// Ustawia operacje według narzędzi (jeden krok w historii).
+    pub fn group_by_tool(&mut self) {
+        let order = self.grouped_order();
+        let before = self.tool_changes();
+        let ops: Vec<Operation> = order.iter().map(|&i| self.ops[i].clone()).collect();
+        let cache: Vec<Option<OpCache>> = order.iter().map(|&i| self.op_cache[i].take()).collect();
+        self.selected_op = self.selected_op.and_then(|s| order.iter().position(|&x| x == s));
+        self.ops = ops;
+        self.op_cache = cache;
+        self.ops_dirty = true;
+        self.revision += 1;
+        let after = self.tool_changes();
+        self.label(Mark::new(Icon::Document).badge(Badge::Order), format!("Kolejność według narzędzi (zmian narzędzia: {before}, teraz {after})"));
+    }
+
     /// Zmiana kolejności obróbki: operacja `from` trafia na miejsce `to` (numer na liście po zmianie).
     pub fn move_op_to(&mut self, from: usize, to: usize) {
         let n = self.ops.len();

@@ -73,7 +73,7 @@ pub(crate) fn generate(cut: &CutParams, p: &PocketParams, tool: &Tool, contours:
         }
         zigzag(cut, p, &boundary, stepover, res);
         if finish.is_some() {
-            finish_walls(cut, p, &shape.parallel_offset(tool.radius() + p.stock_to_leave, &opts), res);
+            finish_walls(&cut.finishing(p.finish_feed_pct), p, &shape.parallel_offset(tool.radius() + p.stock_to_leave, &opts), res);
         }
         return;
     }
@@ -185,7 +185,7 @@ pub(crate) fn generate(cut: &CutParams, p: &PocketParams, tool: &Tool, contours:
         prev = z;
     }
     if finish.is_some() {
-        finish_walls(cut, p, &shape.parallel_offset(tool.radius() + p.stock_to_leave, &opts), res);
+        finish_walls(&cut.finishing(p.finish_feed_pct), p, &shape.parallel_offset(tool.radius() + p.stock_to_leave, &opts), res);
     }
 }
 

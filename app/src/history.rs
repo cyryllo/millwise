@@ -452,6 +452,32 @@ mod tests {
         assert_eq!(d.ops[0].name, "A");
     }
 
+    #[test]
+    fn grouping_by_tool_keeps_the_cutout_last() {
+        let mut d = doc_with_square();
+        let op = |name: &str, tool: u32, outside: bool| Operation {
+            name: name.into(),
+            tool_id: tool,
+            kind: if outside {
+                cam_ops::OpKind::Profile(Default::default())
+            } else {
+                cam_ops::OpKind::Pocket(Default::default())
+            },
+            ..test_op()
+        };
+        // T1 kieszeń, T2 kieszeń, T1 wycięcie, T2 kieszeń, T1 kieszeń
+        d.ops = vec![op("a", 1, false), op("b", 2, false), op("cut", 1, true), op("c", 2, false), op("d", 1, false)];
+        d.op_cache = vec![None, None, None, None, None];
+        assert_eq!(d.tool_changes(), 4);
+        assert_eq!(d.tool_changes_if_grouped(), 2);
+        let mut h = History::new(&d, "Start");
+        d.group_by_tool();
+        h.track(&mut d, true);
+        let names: Vec<&str> = d.ops.iter().map(|o| o.name.as_str()).collect();
+        assert_eq!(names, ["a", "d", "b", "c", "cut"], "grupy narzędzi, wycięcie na końcu");
+        assert_eq!(h.groups().pop().unwrap().labels[0], "Kolejność według narzędzi (zmian narzędzia: 4, teraz 2)");
+    }
+
     fn test_op() -> Operation {
         Operation {
             name: "Profil 1".into(),

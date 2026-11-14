@@ -9,6 +9,18 @@ Version numbers:
 
 ## Unreleased
 
+### Added
+
+- **Feed of the finishing pass:** set as a percent of the roughing feed
+  (70 % to start with, the value in mm/min is shown next to it), for profiles
+  and pockets.
+- **Fewer tool changes:** under the list of operations Millwise shows how many
+  tool changes the program has and, when it can be fewer, a button that puts
+  operations with the same tool next to each other (tools in the order they
+  are first used). Outside profiles — cutting the part out — stay at the end,
+  so the part is not freed before the rest is machined. One step in the
+  history.
+
 ### Fixed
 
 - **The window did not open on Linux with NVIDIA cards** (only with OpenGL

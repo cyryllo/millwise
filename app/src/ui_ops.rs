@@ -196,6 +196,27 @@ pub fn ops_panel(
         });
     }
 
+    // --- zmiany narzędzia: licznik i ustawienie operacji tym samym frezem po sobie ---
+    let changes = doc.tool_changes();
+    if changes > 0 {
+        let grouped = doc.tool_changes_if_grouped();
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(format!("Zmian narzędzia: {changes}")).small().color(ui_kit::LABEL));
+            if grouped < changes
+                && ui
+                    .small_button(format!("Ułóż według narzędzi (będzie {grouped})"))
+                    .on_hover_text(
+                        "Operacje tym samym frezem po sobie, w kolejności pierwszego użycia narzędzia. \
+                         Profile zewnętrzne (wycinanie detalu) zostają na końcu.",
+                    )
+                    .clicked()
+            {
+                doc.group_by_tool();
+                action = OpsAction::StopPicking;
+            }
+        });
+    }
+
     // --- ustawienia zaznaczonej operacji: osobna ramka ---
     if let Some(i) = doc.selected_op.filter(|&i| i < doc.ops.len()) {
         ui.add_space(6.0);
@@ -266,7 +287,7 @@ pub fn gcode_buttons(ui: &mut egui::Ui, machine_label: &str) -> Option<OpsAction
 }
 
 /// Przejście wykańczające: włącznik i naddatek zostawiany przez obróbkę zgrubną.
-fn finish_ui(ui: &mut egui::Ui, finish: &mut Option<f64>) -> bool {
+fn finish_ui(ui: &mut egui::Ui, finish: &mut Option<f64>, feed_pct: &mut f64, feed: f64) -> bool {
     let mut changed = false;
     ui_kit::label(ui, "Przejście wykańczające");
     let mut on = finish.is_some();
@@ -281,6 +302,15 @@ fn finish_ui(ui: &mut egui::Ui, finish: &mut Option<f64>) -> bool {
     ui.end_row();
     if let Some(a) = finish {
         changed |= num(ui, "   zostaw do wykończenia", a, 0.05..=5.0, 0.01, " mm");
+        ui_kit::label(ui, "   posuw wykańczania");
+        ui.horizontal(|ui| {
+            changed |= ui
+                .add(egui::DragValue::new(feed_pct).range(5.0..=200.0).speed(1.0).suffix(" %"))
+                .on_hover_text("Procent posuwu zgrubnego; wolniej = gładsza ścianka")
+                .changed();
+            ui.label(RichText::new(format!("= {:.0} mm/min", feed * *feed_pct / 100.0)).small().color(ui_kit::LABEL));
+        });
+        ui.end_row();
     }
     changed
 }
@@ -490,6 +520,7 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
 
     // --- ustawienia rodzaju operacji ---
     let tool_r = lib.get(op.tool_id).map_or(3.0, |t| t.radius());
+    let feed = op.cut.feed;
     ui_kit::subtitle(ui, op.kind.label());
     egui::Grid::new("op_kind").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| match &mut op.kind {
         OpKind::Profile(p) => {
@@ -503,7 +534,7 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
             changed |= direction_ui(ui, &mut p.direction);
             changed |= entry_ui(ui, &mut p.entry);
             changed |= num(ui, "Naddatek", &mut p.stock_to_leave, -10.0..=50.0, 0.01, " mm");
-            changed |= finish_ui(ui, &mut p.finish);
+            changed |= finish_ui(ui, &mut p.finish, &mut p.finish_feed_pct, feed);
             ui_kit::label(ui, "Wejście po łuku");
             let mut on = p.lead.is_some();
             if ui
@@ -562,7 +593,7 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
             changed |= direction_ui(ui, &mut p.direction);
             changed |= entry_ui(ui, &mut p.entry);
             changed |= num(ui, "Naddatek ścian", &mut p.stock_to_leave, 0.0..=50.0, 0.01, " mm");
-            changed |= finish_ui(ui, &mut p.finish);
+            changed |= finish_ui(ui, &mut p.finish, &mut p.finish_feed_pct, feed);
         }
         OpKind::Drill(p) => {
             ui_kit::label(ui, "Frezowanie po helisie");
