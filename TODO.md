@@ -8,11 +8,12 @@ weszło do programu, jest w [CHANGELOG.md](CHANGELOG.md) i w historii gita.
 
 - [ ] Kolejna wersja z poprawkami frezowania 2D.
 - [ ] G-code na prawdziwej maszynie: pierwsze próby (2026-11-14) na frezarce
-      użytkownika ze sterownikiem GRBL — przygotowane rysunki i wygenerowane
-      G-code działają dobrze. Zostaje:
+      użytkownika ze sterownikiem FluidNC (G-code zgodny z GRBL) — przygotowane
+      rysunki i wygenerowane G-code działają dobrze. Zostaje:
   - [ ] zmierzyć wymiary wyciętych detali (profil zewn./wewn., kieszeń,
         otwory, naddatek, przejście wykańczające),
-  - [ ] FluidNC i LinuxCNC,
+  - [ ] LinuxCNC (inny wariant G-code: nagłówek %, G64, M6 z G43),
+  - [ ] klasyczny GRBL (ten sam G-code co FluidNC — wystarczy jedna próba),
   - [ ] potem złagodzić ostrzeżenie w README i w opisach wydań.
 
 ## 2. Później: STL i obróbka 3D (wstrzymane)
