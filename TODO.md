@@ -7,8 +7,13 @@ weszło do programu, jest w [CHANGELOG.md](CHANGELOG.md) i w historii gita.
 ## 1. Wydania
 
 - [ ] Kolejna wersja z poprawkami frezowania 2D.
-- [ ] Sprawdzić G-code na prawdziwej maszynie (GRBL/FluidNC, LinuxCNC), potem
-      złagodzić ostrzeżenie w README.
+- [ ] G-code na prawdziwej maszynie: pierwsze próby (2026-11-14) na frezarce
+      użytkownika ze sterownikiem GRBL — przygotowane rysunki i wygenerowane
+      G-code działają dobrze. Zostaje:
+  - [ ] zmierzyć wymiary wyciętych detali (profil zewn./wewn., kieszeń,
+        otwory, naddatek, przejście wykańczające),
+  - [ ] FluidNC i LinuxCNC,
+  - [ ] potem złagodzić ostrzeżenie w README i w opisach wydań.
 
 ## 2. Później: STL i obróbka 3D (wstrzymane)
 
