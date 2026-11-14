@@ -39,6 +39,19 @@ Plan ustalony, start dopiero po dopracowaniu 2D. Szczegóły w
       bezpieczniejsze wybieranie dużych kieszeni, zwłaszcza w aluminium.
 - [ ] Obróbka dwustronna: odwracanie detalu z bazowaniem.
 - [ ] Rampa dla linii otwartych (teraz zawsze wejście pionowe).
+- [ ] **Automatyzacja** — przycisk z oknem „co zrobić automatycznie”; każda
+      opcja do zaznaczenia, przed zastosowaniem podsumowanie (co i dla ilu
+      krzywych), całość jako jeden krok w historii (Ctrl+Z cofa wszystko):
+  - [ ] automatyczne ścieżki z rysunku: okręgi w rozmiarze wiertła →
+        wiercenie, kontury najbardziej zewnętrzne → profil zewnętrzny z
+        mostkami, kontury w środku detalu → profil wewnętrzny albo kieszeń,
+        linie otwarte → grawer; do wyboru reguły według nazw warstw
+        (np. warstwa „OTWORY” zawsze wiercenie), zapamiętywane;
+  - [ ] automatyczne uszka w narożnikach wszystkich profili wewnętrznych i
+        kieszeni;
+  - [ ] automatyczna kolejność: według narzędzi, otwory i kieszenie przed
+        wycięciem detalu;
+  - [ ] automatyczna liczba mostków według obwodu detalu.
 - [ ] Napisy (tekst) w programie do graweru, bez osobnego CAD-a.
 - [ ] Pomiar odległości w widoku 2D.
 
