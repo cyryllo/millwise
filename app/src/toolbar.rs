@@ -34,7 +34,7 @@ impl Group {
         use Sub::*;
         match self {
             Group::Select => &[Select, Move, Rotate, FlipH, FlipV, Scale, Align, Array],
-            Group::Profile => &[ProfileOut, ProfileIn],
+            Group::Profile => &[ProfileOut, ProfileIn, Corners],
             Group::Pocket => &[PocketOffset, PocketZigzag, PocketAdaptive],
             Group::Drill => &[DrillSimple, DrillPeck, DrillHelix],
             Group::Engrave => &[EngCenter, EngLeft, EngRight, EngVcarve],
@@ -70,6 +70,8 @@ pub enum Sub {
     Array,
     ProfileOut,
     ProfileIn,
+    /// Uszka w narożnikach istniejących operacji wewnętrznych (klik krzywej).
+    Corners,
     PocketOffset,
     PocketZigzag,
     PocketAdaptive,
@@ -100,6 +102,7 @@ impl Sub {
             Array => "Szyk",
             ProfileOut => "Zewnętrzny",
             ProfileIn => "Wewnętrzny",
+            Corners => "Narożniki",
             PocketOffset => "Offsetowa",
             PocketZigzag => "Zygzak",
             PocketAdaptive => "Adaptacyjna",
@@ -130,6 +133,7 @@ impl Sub {
             Array => Icon::Array,
             ProfileOut => Icon::ProfileOut,
             ProfileIn => Icon::ProfileIn,
+            Corners => Icon::Corners,
             PocketOffset => Icon::PocketOffset,
             PocketZigzag => Icon::PocketZigzag,
             PocketAdaptive => Icon::PocketAdaptive,

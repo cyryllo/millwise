@@ -16,6 +16,7 @@ pub enum Icon {
     Array,
     ProfileOut,
     ProfileIn,
+    Corners,
     PocketOffset,
     PocketZigzag,
     PocketAdaptive,
@@ -259,6 +260,15 @@ pub fn draw(painter: &egui::Painter, r: Rect, icon: Icon) {
             poly(&[(20.0, 5.0), (34.0, 13.0), (20.0, 21.0), (6.0, 13.0)], BLUE_LIGHT, st(1.0, OUTLINE));
             poly(&[(6.0, 13.0), (20.0, 21.0), (20.0, 36.0), (6.0, 28.0)], BLUE, st(1.0, OUTLINE));
             poly(&[(34.0, 13.0), (34.0, 28.0), (20.0, 36.0), (20.0, 21.0)], BLUE_DARK, st(1.0, OUTLINE));
+        }
+        Icon::Corners => {
+            // płyta z kwadratowym otworem i okrągłymi uszkami w rogach
+            painter.rect_filled(rect(3.0, 3.0, 34.0, 34.0), 2.0 * k, PLATE);
+            painter.rect_filled(rect(10.0, 10.0, 20.0, 20.0), 0.0, HOLE);
+            for (x, y) in [(10.5, 10.5), (29.5, 10.5), (29.5, 29.5), (10.5, 29.5)] {
+                painter.circle_filled(p(x, y), 3.6 * k, HOLE);
+            }
+            painter.rect_stroke(rect(13.0, 13.0, 14.0, 14.0), 0.0, st(1.4, GREEN), StrokeKind::Middle);
         }
         Icon::Open => {
             poly(&[(4.0, 9.0), (15.0, 9.0), (18.0, 13.0), (36.0, 13.0), (36.0, 33.0), (4.0, 33.0)], AMBER, st(1.0, OUTLINE));

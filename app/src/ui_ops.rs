@@ -554,6 +554,14 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
                     ui.end_row();
                 }
             }
+            if p.side == ProfileSide::Inside {
+                ui_kit::label(ui, "Uszka w narożnikach");
+                changed |= ui
+                    .checkbox(&mut p.corners, "")
+                    .on_hover_text("Frez dojeżdża do samego rogu (dog-bone), żeby wszedł tam kwadratowy element")
+                    .changed();
+                ui.end_row();
+            }
             ui_kit::label(ui, "Mostki");
             let mut on = p.tabs.is_some();
             if ui.checkbox(&mut on, "").changed() {
@@ -594,6 +602,12 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
             changed |= entry_ui(ui, &mut p.entry);
             changed |= num(ui, "Naddatek ścian", &mut p.stock_to_leave, 0.0..=50.0, 0.01, " mm");
             changed |= finish_ui(ui, &mut p.finish, &mut p.finish_feed_pct, feed);
+            ui_kit::label(ui, "Uszka w narożnikach");
+            changed |= ui
+                .checkbox(&mut p.corners, "")
+                .on_hover_text("Frez dojeżdża do samego rogu ścian (dog-bone), żeby wszedł tam kwadratowy element")
+                .changed();
+            ui.end_row();
         }
         OpKind::Drill(p) => {
             ui_kit::label(ui, "Frezowanie po helisie");

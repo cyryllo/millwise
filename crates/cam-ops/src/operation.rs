@@ -107,6 +107,9 @@ pub struct ProfileParams {
     pub finish_feed_pct: f64,
     /// Wejście i wyjście po łuku stycznym o tym promieniu [mm] (zejście w odpadzie, obok ścianki).
     pub lead: Option<f64>,
+    /// Uszka (dog-bone) w narożnikach profilu wewnętrznego: frez dojeżdża do samego
+    /// rogu, żeby wszedł tam kwadratowy element.
+    pub corners: bool,
 }
 
 impl Default for ProfileParams {
@@ -120,6 +123,7 @@ impl Default for ProfileParams {
             finish: None,
             finish_feed_pct: 70.0,
             lead: None,
+            corners: false,
         }
     }
 }
@@ -148,6 +152,8 @@ pub struct PocketParams {
     pub finish: Option<f64>,
     /// Posuw przejścia wykańczającego w % posuwu zgrubnego.
     pub finish_feed_pct: f64,
+    /// Uszka (dog-bone) w narożnikach ścian kieszeni.
+    pub corners: bool,
 }
 
 impl Default for PocketParams {
@@ -161,6 +167,7 @@ impl Default for PocketParams {
             stock_to_leave: 0.0,
             finish: None,
             finish_feed_pct: 70.0,
+            corners: false,
         }
     }
 }
@@ -278,6 +285,49 @@ pub(crate) fn ramp_length(entry: Entry, dz: f64) -> Option<f64> {
             Some(dz.max(0.0) / a.tan())
         }
     }
+}
+
+/// Kierunek (jednostkowy) segmentu (a, b, bulge) w jego początku i końcu.
+fn seg_tangents(a: cam_geom::Vec2, b: cam_geom::Vec2, bulge: f64) -> (cam_geom::Vec2, cam_geom::Vec2) {
+    if bulge.abs() < 1e-9 {
+        let d = (b - a).normalized();
+        return (d, d);
+    }
+    let g = cam_geom::contour::ArcGeom::from_bulge(a, b, bulge);
+    let s = g.sweep.signum();
+    ((a - g.center).normalized().perp() * s, (b - g.center).normalized().perp() * s)
+}
+
+/// Uszka (dog-bone) w ostrych narożnikach ścieżki środka narzędzia: w każdym
+/// narożniku narzędzie jedzie po dwusiecznej do rogu, aż dotknie go krawędzią
+/// (środek w odległości `r` od rogu), i wraca. W ścieżce odsuniętej o promień
+/// ostre narożniki są dokładnie tam, gdzie frez nie sięga rogu — przy rogach
+/// odwrotnych odsunięcie daje łuki, więc nic nie wcina się w detal.
+pub(crate) fn dogbones(c: &Contour, r: f64) -> Contour {
+    let n = c.verts.len();
+    if !c.closed || n < 3 || r <= 0.0 {
+        return c.clone();
+    }
+    let mut out = Contour::new(true);
+    for i in 0..n {
+        let v = c.verts[i];
+        let (pa, pb, pbulge) = c.segment((i + n - 1) % n);
+        let (a, b, bulge) = c.segment(i);
+        let (_, t_in) = seg_tangents(pa, pb, pbulge);
+        let (t_out, _) = seg_tangents(a, b, bulge);
+        let cos_theta = (t_in * -1.0).dot(t_out).clamp(-1.0, 1.0);
+        let theta = cos_theta.acos(); // kąt narożnika między ścianami
+        let sharp = theta > 5f64.to_radians() && theta < 175f64.to_radians();
+        if sharp && pa.distance(pb) > 1e-9 && a.distance(b) > 1e-9 {
+            let u = (t_in - t_out).normalized();
+            let d = r / (theta * 0.5).sin() - r;
+            let q = v.p + u * d;
+            out.verts.push(cam_geom::Vertex::new(v.p.x, v.p.y, 0.0));
+            out.verts.push(cam_geom::Vertex::new(q.x, q.y, 0.0));
+        }
+        out.verts.push(v);
+    }
+    out
 }
 
 /// Odległość od `pos` do miejsca, w którym narzędzie zacznie kontur: najbliższy

@@ -9,6 +9,8 @@ pub enum Interaction<'a> {
     Op { kind: &'a cam_ops::OpKind, members: &'a [usize], color: eframe::egui::Color32 },
     /// Wskazanie punktu (z przyciąganiem).
     PickPoint,
+    /// Klik krzywej zgłasza ją aplikacji (np. narożniki operacji); bez zaznaczania.
+    PickContour,
 }
 
 /// Zdarzenia z widoku obsługiwane przez aplikację.
@@ -183,6 +185,11 @@ impl View2D {
                     }
                 }
             }
+            Interaction::PickContour if clicked => match self.hovered {
+                Some(i) => events.push(ViewEvent::Contour(i)),
+                None if !additive => events.push(ViewEvent::Empty),
+                None => {}
+            },
             Interaction::PickPoint if clicked => {
                 if let Some(p) = snapped {
                     events.push(ViewEvent::Point(p));

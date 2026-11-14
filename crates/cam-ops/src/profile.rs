@@ -2,7 +2,8 @@
 //! wewnątrz lub po linii), wiele przejść w Z, rampa, mostki.
 
 use crate::operation::{
-    order_inside_first, ramp_length, start_near, CutParams, Direction, Entry, OpResult, ProfileParams, ProfileSide, Tabs,
+    dogbones, order_inside_first, ramp_length, start_near, CutParams, Direction, Entry, OpResult, ProfileParams, ProfileSide,
+    Tabs,
 };
 use crate::path::{z_levels, PathWalk, WalkSpec};
 use crate::tool::Tool;
@@ -66,6 +67,9 @@ pub(crate) fn generate(cut: &CutParams, p: &ProfileParams, tool: &Tool, contours
                 let pos = res.toolpath.pos().map_or(Vec2::ZERO, |q| q.xy());
                 start_near(&mut lp, pos, lead.is_some());
                 orient(&mut lp, p);
+                if p.corners && p.side == ProfileSide::Inside {
+                    lp = dogbones(&lp, r);
+                }
                 let tabs = tabs.map(|t| (t, tool.diameter));
                 match lead {
                     Some(lr) => {
@@ -358,6 +362,35 @@ mod tests {
         // wykańczanie tylko na pełnej głębokości
         assert!(!left(-2.0).is_empty());
         assert!(left(-2.0).iter().all(|x| (x + 3.0).abs() > 1e-6));
+    }
+
+    #[test]
+    fn dogbones_reach_the_corners_of_an_inside_profile() {
+        let tool = Tool { diameter: 6.0, ..Default::default() };
+        let r = 3.0;
+        for finish in [None, Some(0.3)] {
+            let o = with(ProfileSide::Inside, |p| {
+                p.corners = true;
+                p.finish = finish;
+            });
+            let res = generate(&o, &tool, &[square(20.0)]);
+            assert!(res.warnings.is_empty(), "{:?}", res.warnings);
+            let pts = cutting(&res.toolpath);
+            for corner in [Vec2::new(0.0, 0.0), Vec2::new(20.0, 0.0), Vec2::new(20.0, 20.0), Vec2::new(0.0, 20.0)] {
+                // najbliższy punkt środka narzędzia jest dokładnie r od rogu: krawędź dotyka rogu
+                let d = pts.iter().map(|p| p.xy().distance(corner)).fold(f64::MAX, f64::min);
+                assert!((d - r).abs() < 1e-6, "róg {corner:?}: {d}");
+            }
+            // środek narzędzia zawsze w otworze, krawędź nigdy poza nim (poza samymi rogami)
+            for p in &pts {
+                assert!(p.x >= r / 2f64.sqrt() - 1e-6 && p.x <= 20.0 - r / 2f64.sqrt() + 1e-6, "{p:?}");
+                assert!(p.y >= r / 2f64.sqrt() - 1e-6 && p.y <= 20.0 - r / 2f64.sqrt() + 1e-6, "{p:?}");
+            }
+        }
+        // bez uszek narzędzie nie dochodzi do rogu
+        let res = generate(&op(ProfileSide::Inside), &tool, &[square(20.0)]);
+        let d = cutting(&res.toolpath).iter().map(|p| p.xy().distance(Vec2::new(0.0, 0.0))).fold(f64::MAX, f64::min);
+        assert!(d > r * 1.4, "{d}");
     }
 
     #[test]

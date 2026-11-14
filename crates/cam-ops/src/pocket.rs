@@ -1,7 +1,7 @@
 //! Kieszeń: ścieżki równoległe do konturu (offsetowe) od środka na zewnątrz,
 //! z obsługą wysp. Kontury zagnieżdżone na zmianę: granica / wyspa / granica…
 
-use crate::operation::{ramp_length, CutParams, Direction, Entry, OpResult, PocketParams, PocketStrategy};
+use crate::operation::{dogbones, ramp_length, CutParams, Direction, Entry, OpResult, PocketParams, PocketStrategy};
 use crate::path::{z_levels, PathWalk, WalkSpec};
 use crate::tool::Tool;
 use crate::toolpath::P3;
@@ -71,9 +71,9 @@ pub(crate) fn generate(cut: &CutParams, p: &PocketParams, tool: &Tool, contours:
         if p.direction == Direction::Conventional {
             boundary.iter_mut().for_each(|c| c.reverse());
         }
-        zigzag(cut, p, &boundary, stepover, res);
+        zigzag(cut, p, &boundary, stepover, p.corners.then_some(tool.radius()), res);
         if finish.is_some() {
-            finish_walls(&cut.finishing(p.finish_feed_pct), p, &shape.parallel_offset(tool.radius() + p.stock_to_leave, &opts), res);
+            finish_walls(&cut.finishing(p.finish_feed_pct), p, &shape.parallel_offset(tool.radius() + p.stock_to_leave, &opts), tool.radius(), res);
         }
         return;
     }
@@ -138,6 +138,9 @@ pub(crate) fn generate(cut: &CutParams, p: &PocketParams, tool: &Tool, contours:
         let mut at_depth = false;
         for &i in &order {
             let mut lp = loops[i].contour.clone();
+            if p.corners && loops[i].level == 0 {
+                lp = dogbones(&lp, tool.radius());
+            }
             let cur = tp.pos();
             if let Some(c) = cur {
                 if let Some((seg, q)) = lp.closest_point(c.xy()) {
@@ -185,13 +188,13 @@ pub(crate) fn generate(cut: &CutParams, p: &PocketParams, tool: &Tool, contours:
         prev = z;
     }
     if finish.is_some() {
-        finish_walls(&cut.finishing(p.finish_feed_pct), p, &shape.parallel_offset(tool.radius() + p.stock_to_leave, &opts), res);
+        finish_walls(&cut.finishing(p.finish_feed_pct), p, &shape.parallel_offset(tool.radius() + p.stock_to_leave, &opts), tool.radius(), res);
     }
 }
 
 /// Przejście wykańczające ścian kieszeni i wysp: jedno okrążenie każdej pętli
 /// na pełnej głębokości, wejście pionowe w wybranym już obszarze.
-fn finish_walls(cut: &CutParams, p: &PocketParams, sh: &cavalier_contours::shape_algorithms::Shape<f64>, res: &mut OpResult) {
+fn finish_walls(cut: &CutParams, p: &PocketParams, sh: &cavalier_contours::shape_algorithms::Shape<f64>, r: f64, res: &mut OpResult) {
     let mut loops: Vec<Contour> = sh
         .ccw_plines
         .iter()
@@ -213,6 +216,9 @@ fn finish_walls(cut: &CutParams, p: &PocketParams, sh: &cavalier_contours::shape
             .min_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
             .unwrap();
         let mut lp = loops.swap_remove(k);
+        if p.corners {
+            lp = dogbones(&lp, r);
+        }
         if let Some((seg, q)) = lp.closest_point(pos) {
             lp.rotate_start_to(seg, q);
         }
@@ -323,6 +329,21 @@ mod tests {
     }
 
     #[test]
+    fn pocket_dogbones_reach_the_corners() {
+        let tool = Tool { diameter: 6.0, ..Default::default() };
+        for strategy in [PocketStrategy::Offset, PocketStrategy::Zigzag] {
+            for finish in [None, Some(0.3)] {
+                let mut o = pocket_op();
+                o.kind = OpKind::Pocket(PocketParams { strategy, finish, corners: true, ..Default::default() });
+                let res = generate(&o, &tool, &[rect(0.0, 0.0, 60.0, 40.0)]);
+                let pts: Vec<_> = res.toolpath.polyline(0.01).into_iter().filter(|(p, r)| !r && p.z < -2.9).map(|(p, _)| p).collect();
+                let d = pts.iter().map(|p| p.xy().distance(Vec2::new(60.0, 40.0))).fold(f64::MAX, f64::min);
+                assert!((d - 3.0).abs() < 1e-3, "{strategy:?} {finish:?}: {d}");
+            }
+        }
+    }
+
+    #[test]
     fn too_small_pocket_warns() {
         let tool = Tool { diameter: 10.0, ..Default::default() };
         let res = generate(&pocket_op(), &tool, &[rect(0.0, 0.0, 8.0, 8.0)]);
@@ -332,7 +353,7 @@ mod tests {
 
 /// Kieszeń zygzak: przejścia równoległe w obszarze środka narzędzia (`boundary`),
 /// łączone krótkimi przejściami, potem przejście wykańczające po obrysie.
-fn zigzag(cut: &CutParams, p: &PocketParams, boundary: &[Contour], stepover: f64, res: &mut OpResult) {
+fn zigzag(cut: &CutParams, p: &PocketParams, boundary: &[Contour], stepover: f64, corners: Option<f64>, res: &mut OpResult) {
     let ang = p.zigzag_angle.to_radians();
     let (sa, ca) = ang.sin_cos();
     // obrót o -kąt: przejścia stają się poziome
@@ -439,7 +460,10 @@ fn zigzag(cut: &CutParams, p: &PocketParams, boundary: &[Contour], stepover: f64
         }
         // przejście wykańczające po obrysie
         for c in boundary {
-            let mut lp = c.clone();
+            let mut lp = match corners {
+                Some(r) => dogbones(c, r),
+                None => c.clone(),
+            };
             if let Some(pos) = tp.pos() {
                 if let Some((seg, q)) = lp.closest_point(pos.xy()) {
                     lp.rotate_start_to(seg, q);

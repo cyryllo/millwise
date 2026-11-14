@@ -7,6 +7,18 @@ Version numbers:
   when a new module is added);
 - the **third number** goes up for releases that only fix bugs.
 
+## Unreleased
+
+### Added
+
+- **Corners (dog-bones) for parts that fit inside each other:** in inside
+  profiles and pockets the cutter can go into every sharp inner corner along
+  its diagonal until its edge touches the corner, leaving a round relief, so
+  a square part goes all the way in. Switch it on in the operation settings
+  („Uszka w narożnikach”) or with the new tool Profil → Narożniki: click a
+  curve of an inside profile or a pocket to switch the corners on or off.
+  Rounded corners and corners of the part itself are left as they are.
+
 ## 0.4.0 (2026-11-14)
 
 ### Added

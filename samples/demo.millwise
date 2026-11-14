@@ -1896,7 +1896,8 @@
           },
           "stock_to_leave": 0.0,
           "finish": null,
-          "finish_feed_pct": 70.0
+          "finish_feed_pct": 70.0,
+          "corners": false
         }
       },
       "tool_id": 1,
@@ -1936,7 +1937,8 @@
           },
           "finish": null,
           "finish_feed_pct": 70.0,
-          "lead": null
+          "lead": null,
+          "corners": false
         }
       },
       "tool_id": 2,

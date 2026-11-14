@@ -425,6 +425,43 @@ impl CamApp {
         }
     }
 
+    /// Narzędzie „Narożniki”: klik krzywej włącza lub wyłącza uszka (dog-bone)
+    /// w operacjach wewnętrznych (profil wewnętrzny, kieszeń), do których należy.
+    fn toggle_corners(&mut self, i: usize, ctx: &egui::Context) {
+        use cam_ops::{OpKind, ProfileSide};
+        let now = Self::now(ctx);
+        let ops: Vec<usize> = (0..self.doc.ops.len())
+            .filter(|&k| self.doc.ops[k].contours.contains(&i))
+            .filter(|&k| match &self.doc.ops[k].kind {
+                OpKind::Profile(p) => p.side == ProfileSide::Inside,
+                OpKind::Pocket(_) => true,
+                _ => false,
+            })
+            .collect();
+        let Some(&first) = ops.first() else {
+            self.view2d.flash("Ta krzywa nie należy do profilu wewnętrznego ani kieszeni", now);
+            return;
+        };
+        let on = match &self.doc.ops[first].kind {
+            OpKind::Profile(p) => !p.corners,
+            OpKind::Pocket(p) => !p.corners,
+            _ => false,
+        };
+        for &k in &ops {
+            match &mut self.doc.ops[k].kind {
+                OpKind::Profile(p) => p.corners = on,
+                OpKind::Pocket(p) => p.corners = on,
+                _ => {}
+            }
+        }
+        self.doc.ops_dirty = true;
+        let names: Vec<String> = ops.iter().map(|&k| self.doc.ops[k].name.clone()).collect();
+        let state = if on { "włączone" } else { "wyłączone" };
+        let mark = crate::history::Mark::op(first, &self.doc.ops[first], crate::history::Badge::Edit);
+        self.doc.label(mark, format!("Uszka w narożnikach {state}: {}", names.join(", ")));
+        self.view2d.flash(format!("Uszka w narożnikach {state}: {}", names.join(", ")), now);
+    }
+
     /// Kliknięcie obok (w puste miejsce rysunku): koniec dodawania krzywych i
     /// zamknięcie ustawień operacji. Zmiany są już zapisane w projekcie; operację
     /// otwiera ponownie kliknięcie na liście po lewej albo w historii.
@@ -549,6 +586,7 @@ impl CamApp {
     fn handle_view_events(&mut self, events: Vec<ViewEvent>, ctx: &egui::Context) {
         for ev in events {
             match ev {
+                ViewEvent::Contour(i) if self.toolbar.current() == Sub::Corners => self.toggle_corners(i, ctx),
                 ViewEvent::Contour(i) => {
                     if let Some(t) = self.ensure_target() {
                         if let Err(e) = self.doc.toggle_op_contour(t, i) {
@@ -634,6 +672,17 @@ impl CamApp {
                                         apply(doc.move_selected(Vec2::new(e.dx, e.dy)));
                                     }
                                 });
+                            }
+                            Sub::Corners => {
+                                ui.horizontal(|ui| {
+                                    ui.strong("Narożniki");
+                                    ui.label("kliknij krzywą profilu wewnętrznego albo kieszeni — uszka w jej narożnikach włączą się lub wyłączą");
+                                });
+                                ui.label(
+                                    RichText::new("Frez dojeżdża do samego rogu (okrągłe wybranie), więc kwadratowy element wchodzi do końca.")
+                                        .small()
+                                        .weak(),
+                                );
                             }
                             Sub::Rotate => {
                                 ui.horizontal(|ui| {
@@ -1758,6 +1807,7 @@ impl eframe::App for CamApp {
                     },
                     (None, Sub::Move) => Interaction::Move,
                     (None, Sub::ZeroPick) => Interaction::PickPoint,
+                    (None, Sub::Corners) => Interaction::PickContour,
                     _ => Interaction::Select,
                 };
                 events = self.view2d.ui(ui, rect, &mut self.doc, &tool_d, inter, Some((machine.travel_x, machine.travel_y)));
