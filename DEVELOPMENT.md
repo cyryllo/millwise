@@ -41,7 +41,9 @@ not build exactly.
 
 Millwise targets Linux only for now; Windows is not built or tested.
 
-User data: `~/.config/millwise/` (`tools.json`, `machines.json`). On the first start after the rename they are
+User data: `~/.config/millwise/` (`tools.json`, `machines.json`, and
+`use-opengl` when the default graphics did not open the window and Millwise
+switched to OpenGL — delete it or start with `--vulkan` to try again). On the first start after the rename they are
 copied from the old `camsoft` folder; projects saved as `.camsoft` still open.
 
 ## Linux AppImage

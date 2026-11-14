@@ -63,6 +63,8 @@ pub struct CamApp {
     gcode_preview: Option<Vec<String>>,
     about_open: bool,
     shortcuts_open: bool,
+    /// Grafika, przez którą działa okno (do „O programie”).
+    graphics: String,
     logo: Option<egui::TextureHandle>,
     history: History,
     show_history: bool,
@@ -102,6 +104,14 @@ impl CamApp {
             gcode_preview: None,
             about_open: false,
             shortcuts_open: false,
+            graphics: cc
+                .wgpu_render_state
+                .as_ref()
+                .map(|rs| {
+                    let i = rs.adapter.get_info();
+                    format!("{:?} · {}", i.backend, i.name)
+                })
+                .unwrap_or_else(|| "—".into()),
             logo: None,
             history,
             show_history: true,
@@ -1525,6 +1535,8 @@ impl CamApp {
             ui.image((logo.id(), egui::vec2(490.0, 140.0)));
             ui.add_space(6.0);
             ui.label(format!("Wersja {}", env!("CARGO_PKG_VERSION")));
+            ui.label(RichText::new(format!("Grafika: {}", self.graphics)).small().weak())
+                .on_hover_text("Gdy okno się nie otwiera, uruchom z opcją --gl (OpenGL)");
             ui.label("Ścieżki narzędzia i G-code dla frezarek CNC 3-osiowych (GRBL, FluidNC, LinuxCNC).");
             ui.add_space(6.0);
             ui.label(format!("Copyright © 2026 {}", COPYRIGHT_HOLDER));
@@ -1622,6 +1634,7 @@ fn dev_screenshot(ctx: &egui::Context) {
 
 impl eframe::App for CamApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        crate::FIRST_FRAME.store(true, std::sync::atomic::Ordering::SeqCst);
         let ctx = ui.ctx().clone();
         dev_screenshot(&ctx);
         // upuszczone pliki: dochodzą do projektu jako kolejne elementy

@@ -23,6 +23,29 @@ fn config_file(name: &str) -> Option<PathBuf> {
     Some(path)
 }
 
+// ---------- grafika ----------
+
+/// Plik-znacznik: ten komputer potrzebuje grafiki przez OpenGL (Vulkan nie otworzył okna).
+fn gl_marker() -> Option<PathBuf> {
+    config_file("use-opengl")
+}
+
+pub fn gl_remembered() -> bool {
+    gl_marker().is_some_and(|p| p.exists())
+}
+
+pub fn remember_gl() {
+    if let Some(p) = gl_marker() {
+        if let Some(dir) = p.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let _ = std::fs::write(
+            &p,
+            "Millwise używa tu grafiki przez OpenGL, bo domyślna (Vulkan) nie otworzyła okna.\nUsuń ten plik albo uruchom z --vulkan, żeby spróbować ponownie.\n",
+        );
+    }
+}
+
 pub fn tools_path() -> Option<PathBuf> {
     config_file("tools.json")
 }

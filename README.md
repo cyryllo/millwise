@@ -65,6 +65,10 @@ chmod +x Millwise-0.3.0-x86_64.AppImage
 ./Millwise-0.3.0-x86_64.AppImage
 ```
 
+If the window does not open (seen with NVIDIA cards), start it with `--gl`
+to draw through OpenGL. Newer versions choose OpenGL by themselves on NVIDIA
+and when the default graphics fail.
+
 ## Building from source
 
 With a recent stable Rust (tested with 1.99):

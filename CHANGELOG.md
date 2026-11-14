@@ -9,6 +9,15 @@ Version numbers:
 
 ## Unreleased
 
+### Fixed
+
+- **The window did not open on Linux with NVIDIA cards** (only with OpenGL
+  forced by hand). Millwise now draws through OpenGL when it finds the NVIDIA
+  driver, and if the default graphics (Vulkan) cannot open the window on
+  another computer, it starts itself again with OpenGL and remembers that for
+  the next starts. `--gl` and `--vulkan` choose by hand; Pomoc → O programie
+  shows which graphics are used.
+
 ### Changed
 
 - **An opened DXF drawing always lands at the program zero:** the bottom left
