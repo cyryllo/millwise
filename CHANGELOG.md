@@ -95,21 +95,17 @@ Version numbers:
 - **Very dense toolpaths** (e.g. 3D finishing every 0.1 mm with a fine
   engraving cutter) no longer stall the simulation. Dragging the time slider
   shows a quick preview and the exact solid follows when the slider is
-  released. A program with more than 40 000 moves switches to the Fast engine
-  by itself (with a note; choosing the engine by hand still works), which
-  gained a „very high” accuracy. The Fast engine builds its surface up to
-  ~250× faster where the passes are denser than its grid, and its flat
-  bottom is drawn with far fewer triangles. 3D parallel finishing is
-  computed on all processor cores. The finishing pass spacing is entered in
-  millimetres.
+  released. A program with more than 40 000 moves, or a solid that grows
+  beyond 2 million triangles, switches by itself to the GPU engine (or, with
+  the GPU turned off, to „Toolpaths”), with a note; choosing the engine by
+  hand still works. 3D parallel finishing is computed on all processor
+  cores. The finishing pass spacing is entered in millimetres.
 
-- **„Toolpaths” simulation mode**, the default for programs with 3D
-  operations: no material removal is computed — the target model is shown
-  as a solid, the toolpaths done so far in the operation colour, the layer
-  being cut now (the current Z level, or the current line of parallel
-  finishing) in yellow, and the rest dimmed. Playback and seeking are
-  instant for any program size. The Solid and Fast engines can still be
-  chosen by hand.
+- **„Toolpaths” simulation mode**: no material removal is computed — the
+  target model is shown as a solid, the toolpaths done so far in the
+  operation colour, the layer being cut now (the current Z level, or the
+  current line of parallel finishing) in yellow, and the rest dimmed.
+  Playback and seeking are instant for any program size.
 
 - **Material simulation on the graphics card (GPU engine).** Each tool move
   is drawn by the graphics card into a height texture as the exact shape of
@@ -119,20 +115,22 @@ Version numbers:
   and seeking stay smooth for programs of any size, also through OpenGL.
   Accuracy from 1024 to 8192 pixels along the stock. It is the default for
   3D and very dense programs; View › „Material simulation on the graphics
-  card (GPU)” turns it off for weak graphics cards (the simulation is then
-  computed by the processor, as before).
+  card (GPU)” turns it off for weak graphics cards (3D programs are then
+  shown in the „Toolpaths” mode).
+
+- **Simulation engines: Solid, Toolpaths and GPU.** The „Fast” height-map
+  engine is no longer offered — its surface was too coarse for 3D work; the
+  GPU engine replaces it.
 
 ### Fixed
 
 - **Crash in the simulation of very detailed material** („Buffer size … is
   greater than the maximum buffer size”). The material surface now goes to
-  the graphics card in parts that fit its limits, a solid that grows beyond
-  2 million triangles switches the simulation to the Fast engine (with a
-  note), and a graphics error no longer closes the program.
-- **Holes in walls in the Fast engine** after the speed-up for dense
-  toolpaths: exact and simplified cells were mixed in one surface. The
-  choice is now made for the whole surface (simplified only when the
-  toolpath is dense across most of the stock), so walls stay closed.
+  the graphics card in parts that fit its limits, and a graphics error no
+  longer closes the program.
+- **Stripes on finished surfaces** when the 3D model is shown in the
+  simulation: where the material touches the model (no stock left), the
+  see-through model no longer shows through it.
 
 ## 0.5.0 (2026-11-15)
 

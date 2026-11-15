@@ -192,7 +192,7 @@ impl Renderer {
                     depth_write_enabled: Some(depth_write),
                     depth_compare: Some(wgpu::CompareFunction::LessEqual),
                     stencil: Default::default(),
-                    bias: wgpu::DepthBiasState { constant: bias, slope_scale: if bias != 0 { 1.0 } else { 0.0 }, clamp: 0.0 },
+                    bias: wgpu::DepthBiasState { constant: bias, slope_scale: if bias > 2 { 4.0 } else if bias != 0 { 1.0 } else { 0.0 }, clamp: 0.0 },
                 }),
                 multisample: wgpu::MultisampleState { count: SAMPLES, ..Default::default() },
                 fragment: Some(wgpu::FragmentState {
@@ -216,6 +216,8 @@ impl Renderer {
             make("millwise_lines", "vs_line", "fs_line", &line_layout, wgpu::PrimitiveTopology::LineList, true, 0);
         let mesh_pipeline =
             make("millwise_mesh", "vs_mesh", "fs_mesh", &mesh_layout, wgpu::PrimitiveTopology::TriangleList, true, 2);
+        // przezroczyste (model w symulacji, półfabrykat) odsunięte dalej niż materiał: na
+        // styku z wykończoną powierzchnią (naddatek 0) wygrywa materiał — bez prążków
         let transparent_pipeline = make(
             "millwise_mesh_transparent",
             "vs_mesh",
@@ -223,7 +225,7 @@ impl Renderer {
             &mesh_layout,
             wgpu::PrimitiveTopology::TriangleList,
             false,
-            2,
+            64,
         );
 
         Self {

@@ -228,6 +228,7 @@ impl CamApp {
                         app.sim.jump_to_fraction = w[6..].parse().ok();
                     }
                     "model" => app.mode = ViewMode::Model,
+                    "hidepaths" => app.sim.show_paths = false,
                     "nopaths" => {
                         app.sim.show_paths = false;
                         app.sim.show_model = false;

@@ -254,7 +254,17 @@ pub struct SimState {
     gpu_bottom: f64,
 }
 
-/// Od tylu ruchów silnik bryłowy liczyłby za długo — automatycznie „Szybki”.
+/// Piksele tekstury wysokości silnika GPU (wzdłuż dłuższego boku) dla poziomu dokładności.
+fn gpu_px(level: usize) -> u32 {
+    match level {
+        200 => 1024,
+        400 => 2048,
+        800 => 4096,
+        _ => 8192,
+    }
+}
+
+/// Od tylu ruchów silnik bryłowy liczyłby za długo — automatycznie lżejszy silnik.
 const DENSE_MOVES: usize = 40_000;
 
 impl Default for SimState {
@@ -330,7 +340,7 @@ impl SimState {
             self.engine = if self.gpu_enabled { Engine::Gpu } else { Engine::Paths };
             self.dense = None;
         } else if self.engine_auto {
-            if self.engine.instant() {
+            if self.engine.instant() || self.engine == Engine::Fast {
                 self.engine = Engine::Solid;
             }
             let moves: usize = doc
@@ -343,12 +353,7 @@ impl SimState {
                 .sum();
             if moves > DENSE_MOVES {
                 if self.dense.is_none() {
-                    if self.gpu_enabled {
-                        self.engine = Engine::Gpu;
-                    } else {
-                        self.engine = Engine::Fast;
-                        self.resolution = self.resolution.max(800);
-                    }
+                    self.engine = if self.gpu_enabled { Engine::Gpu } else { Engine::Paths };
                 }
                 self.dense = Some(moves);
             } else {
@@ -467,14 +472,10 @@ impl SimState {
                     self.pending = false;
                 }
                 Msg::SolidTooBig(n) => {
-                    // wątek liczy już na mapie wysokości — bez przebudowy symulacji
-                    self.engine = Engine::Fast;
+                    // bryła za szczegółowa — karta graficzna albo same ścieżki (przebudowa w `sync`)
+                    self.engine = if self.gpu_enabled { Engine::Gpu } else { Engine::Paths };
                     self.engine_auto = false;
                     self.too_big = Some(n);
-                    if let Some(k) = &mut self.built_for {
-                        k.4 .0 = false;
-                        k.5 = Engine::Fast.code();
-                    }
                 }
             }
         }
@@ -587,13 +588,7 @@ impl SimState {
                 None
             };
             let gpu = self.engine == Engine::Gpu;
-            // piksele tekstury wysokości dla wybranej dokładności
-            let px = match self.resolution {
-                200 => 1024,
-                400 => 2048,
-                800 => 4096,
-                _ => 8192,
-            };
+            let px = gpu_px(self.resolution);
             return Some(SimDisplay {
                 mesh: &self.empty_mesh,
                 key: (self.sim_serial, u64::MAX),
@@ -718,9 +713,6 @@ impl SimState {
             let a = ui
                 .selectable_value(&mut self.engine, Engine::Solid, tr!("Bryła"))
                 .on_hover_text(tr!("Dokładna bryła (operacje boolowskie) — czyste ściany, fazy i zaokrąglenia; dłuższe przeliczenie"));
-            let b = ui
-                .selectable_value(&mut self.engine, Engine::Fast, tr!("Szybki"))
-                .on_hover_text(tr!("Mapa wysokości — natychmiastowe przeliczenie, dla bardzo dużych programów"));
             let c = ui
                 .selectable_value(&mut self.engine, Engine::Paths, tr!("Ścieżki"))
                 .on_hover_text(tr!("Bez materiału: model docelowy, wykonane ścieżki i ostatnia warstwa wyróżniona — płynnie przy każdej wielkości programu"));
@@ -731,26 +723,26 @@ impl SimState {
             } else {
                 false
             };
-            if a.clicked() || b.clicked() || c.clicked() || g {
+            if a.clicked() || c.clicked() || g {
                 self.engine_auto = false;
                 self.too_big = None;
             }
         });
-        if let (Some(n), Engine::Fast) = (self.too_big, self.engine) {
+        if let (Some(n), true) = (self.too_big, self.engine.instant()) {
             ui.label(
-                RichText::new(tr!("Bryła za szczegółowa ({:.1} mln trójkątów) — symulacja na silniku Szybkim.", n as f64 / 1e6))
+                RichText::new(tr!("Bryła za szczegółowa ({:.1} mln trójkątów) — przełączono na lżejszy silnik.", n as f64 / 1e6))
                     .small()
                     .color(Color32::from_rgb(230, 180, 80)),
             );
         }
-        if let (Some(n), true, Engine::Fast) = (self.dense, self.engine_auto, self.engine) {
+        if let (Some(n), true, true) = (self.dense, self.engine_auto, self.engine.instant()) {
             ui.label(
-                RichText::new(tr!("Bardzo gęsta ścieżka ({} ruchów) — wybrano silnik Szybki; Bryła liczyłaby się bardzo długo.", n))
+                RichText::new(tr!("Bardzo gęsta ścieżka ({} ruchów) — Bryła liczyłaby się bardzo długo, wybrano lżejszy silnik.", n))
                     .small()
                     .color(Color32::from_rgb(230, 180, 80)),
             );
         }
-        ui.add_enabled_ui(matches!(self.engine, Engine::Fast | Engine::Gpu), |ui| ui.horizontal(|ui| {
+        ui.add_enabled_ui(self.engine == Engine::Gpu, |ui| ui.horizontal(|ui| {
             ui.label(tr!("Dokładność"));
             let label = |n: usize| match n {
                 200 => tr!("zgrubna"),
@@ -760,7 +752,7 @@ impl SimState {
             };
             egui::ComboBox::from_id_salt("sim_res").selected_text(label(self.resolution)).show_ui(ui, |ui| {
                 for n in [200, 400, 800, 1600] {
-                    ui.selectable_value(&mut self.resolution, n, tr!("{} ({} kom.)", label(n), n));
+                    ui.selectable_value(&mut self.resolution, n, tr!("{} ({} px)", label(n), gpu_px(n)));
                 }
             });
         }));
