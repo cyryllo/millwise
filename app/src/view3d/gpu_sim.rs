@@ -568,6 +568,7 @@ mod tests {
             (cam_ops::ToolKind::BallEnd, 6.0),
             (cam_ops::ToolKind::BullNose { corner_radius: 1.0 }, 6.0),
             (cam_ops::ToolKind::VBit { angle: 60.0, tip_diameter: 0.2 }, 3.0),
+            (cam_ops::ToolKind::TaperedBall { angle: 20.0, tip_diameter: 0.5 }, 3.175),
         ] {
             let t = ToolShape::new(&kind, d);
             let v = tool_template(&t);

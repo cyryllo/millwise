@@ -230,6 +230,10 @@ impl CamApp {
                     "model" => app.mode = ViewMode::Model,
                     "hidepaths" => app.sim.show_paths = false,
                     "simpaths" => app.sim.choose_paths(),
+                    w if w.starts_with("tool=") => {
+                        let n = w[5..].parse().unwrap_or(1);
+                        app.tools_window.open_number(&app.tools, n);
+                    }
                     "nopaths" => {
                         app.sim.show_paths = false;
                         app.sim.show_model = false;
@@ -854,7 +858,7 @@ impl CamApp {
             tool
         };
         // wykańczanie 3D: najlepiej frez kulowy (albo z promieniem naroża)
-        let is_round = |t: &cam_ops::Tool| matches!(t.kind, cam_ops::ToolKind::BallEnd | cam_ops::ToolKind::BullNose { .. });
+        let is_round = |t: &cam_ops::Tool| matches!(t.kind, cam_ops::ToolKind::BallEnd | cam_ops::ToolKind::BullNose { .. } | cam_ops::ToolKind::TaperedBall { .. });
         let tool = if matches!(kind, cam_ops::OpKind::Finish3D(_)) && !is_round(tool) {
             self.tools.tools.iter().find(|t| matches!(t.kind, cam_ops::ToolKind::BallEnd)).unwrap_or(tool)
         } else {

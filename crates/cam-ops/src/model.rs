@@ -488,6 +488,8 @@ enum ProfileKind {
     Ball,
     Bull { rc: f64 },
     Cone { tip_r: f64, slope: f64 },
+    /// Stożek z kulką na końcu: promień kulki, połowa kąta [rad].
+    TaperedBall { rb: f64, half: f64 },
 }
 
 impl ToolProfile {
@@ -497,6 +499,9 @@ impl ToolProfile {
             ToolKind::FlatEnd | ToolKind::Drill { .. } => ProfileKind::Flat,
             ToolKind::BallEnd => ProfileKind::Ball,
             ToolKind::BullNose { corner_radius } => ProfileKind::Bull { rc: corner_radius.clamp(0.0, r) },
+            ToolKind::TaperedBall { angle, tip_diameter } => {
+                ProfileKind::TaperedBall { rb: (tip_diameter * 0.5).clamp(1e-3, r), half: (angle.clamp(1.0, 179.0) * 0.5).to_radians() }
+            }
             ToolKind::VBit { angle, tip_diameter } | ToolKind::Engraver { angle, tip_diameter } => {
                 ProfileKind::Cone { tip_r: tip_diameter * 0.5, slope: 1.0 / (angle.clamp(1.0, 179.0) * 0.5).to_radians().tan() }
             }
@@ -519,6 +524,7 @@ impl ToolProfile {
                 }
             }
             ProfileKind::Cone { tip_r, slope } => (d - tip_r).max(0.0) * slope,
+            ProfileKind::TaperedBall { rb, half } => crate::tool::tapered_ball_height(d, rb, half),
         }
     }
 }
@@ -742,6 +748,7 @@ mod tests {
             Tool { diameter: 3.0, kind: ToolKind::BallEnd, ..Default::default() },
             Tool { diameter: 6.0, kind: ToolKind::BullNose { corner_radius: 1.0 }, ..Default::default() },
             Tool { diameter: 6.0, kind: ToolKind::VBit { angle: 60.0, tip_diameter: 0.2 }, ..Default::default() },
+            Tool { diameter: 3.175, kind: ToolKind::TaperedBall { angle: 20.0, tip_diameter: 0.5 }, ..Default::default() },
         ];
         for tool in &tools {
             let prof = ToolProfile::of(tool);
@@ -758,5 +765,26 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn tapered_ball_profile() {
+        let (rb, half) = (0.25f64, 10f64.to_radians());
+        let h = |d| crate::tool::tapered_ball_height(d, rb, half);
+        assert_eq!(h(0.0), 0.0);
+        // na kulce jak frez kulowy
+        assert!((h(0.1) - (rb - (rb * rb - 0.01f64).sqrt())).abs() < 1e-12);
+        // ciągła i gładka w punkcie styczności
+        let dt = rb * half.cos();
+        assert!((h(dt - 1e-7) - h(dt + 1e-7)).abs() < 1e-5, "ciągłość");
+        let slope = |d: f64| (h(d + 1e-6) - h(d - 1e-6)) / 2e-6;
+        assert!((slope(dt) - 1.0 / half.tan()).abs() < 1e-3);
+        // dalej stożek: kąt 20° (po 10° na stronę)
+        assert!((slope(1.0) - 1.0 / half.tan()).abs() < 1e-6);
+        // opuszczony na płytę: czubek na płycie
+        let t = Tool { diameter: 3.175, kind: ToolKind::TaperedBall { angle: 20.0, tip_diameter: 0.5 }, ..Default::default() };
+        let quad = |z: f32| [[[0.0, 0.0, z], [10.0, 0.0, z], [10.0, 10.0, z]], [[0.0, 0.0, z], [10.0, 10.0, z], [0.0, 10.0, z]]];
+        let hm = ModelHeights::from_triangles(&quad(-2.0), 0.05).unwrap();
+        assert!((hm.drop_tool(Vec2::new(5.0, 5.0), &ToolProfile::of(&t), 0.0).unwrap() + 2.0).abs() < 1e-6);
     }
 }

@@ -20,13 +20,14 @@ pub struct ToolsWindow {
     note: Option<String>,
 }
 
-fn kind_options() -> [ToolKind; 6] {
+fn kind_options() -> [ToolKind; 7] {
     [
         ToolKind::FlatEnd,
         ToolKind::BallEnd,
         ToolKind::BullNose { corner_radius: 1.0 },
         ToolKind::VBit { angle: 90.0, tip_diameter: 0.0 },
         ToolKind::Engraver { angle: 30.0, tip_diameter: 0.2 },
+        ToolKind::TaperedBall { angle: 20.0, tip_diameter: 0.5 },
         ToolKind::Drill { point_angle: 118.0 },
     ]
 }
@@ -38,6 +39,7 @@ fn kind_short(k: &ToolKind) -> &'static str {
         ToolKind::BullNose { .. } => tr!("Z promieniem"),
         ToolKind::VBit { .. } => tr!("V (fazowanie)"),
         ToolKind::Engraver { .. } => tr!("Grawerski"),
+        ToolKind::TaperedBall { .. } => tr!("Kulowy stożkowy"),
         ToolKind::Drill { .. } => tr!("Wiertło"),
     }
 }
@@ -47,6 +49,13 @@ fn same_kind(a: &ToolKind, b: &ToolKind) -> bool {
 }
 
 impl ToolsWindow {
+    /// Otwiera okno z wybranym narzędziem o numerze T (dla programisty / zrzutów ekranu).
+    pub fn open_number(&mut self, lib: &ToolLibrary, number: u32) {
+        self.open = true;
+        self.selected = lib.tools.iter().find(|t| t.number == number).map(|t| t.id);
+        self.preset = None;
+    }
+
     /// Zwraca true, jeśli biblioteka została zmieniona.
     pub fn show(&mut self, ctx: &egui::Context, lib: &mut ToolLibrary, used: &[u32]) -> bool {
         if !self.open {
@@ -241,6 +250,7 @@ fn big_drawing(ui: &mut egui::Ui, t: &Tool) {
     // kąt / promień
     let extra = match t.kind {
         ToolKind::VBit { angle, .. } | ToolKind::Engraver { angle, .. } => Some(format!("{}°", trim(angle))),
+        ToolKind::TaperedBall { angle, tip_diameter } => Some(format!("{}° · R {}", trim(angle), trim(tip_diameter * 0.5))),
         ToolKind::Drill { point_angle } => Some(format!("{}°", trim(point_angle))),
         ToolKind::BullNose { corner_radius } => Some(format!("R {}", trim(corner_radius))),
         _ => None,
@@ -295,6 +305,10 @@ fn params(ui: &mut egui::Ui, t: &mut Tool, preset: &mut Option<usize>) -> bool {
             ToolKind::VBit { angle, tip_diameter } | ToolKind::Engraver { angle, tip_diameter } => {
                 changed |= row(ui, tr!("Kąt"), angle, 5.0..=170.0, 0.5, "°", None);
                 changed |= row(ui, tr!("Średnica czubka"), tip_diameter, 0.0..=10.0, 0.01, " mm", None);
+            }
+            ToolKind::TaperedBall { angle, tip_diameter } => {
+                changed |= row(ui, tr!("Kąt stożka"), angle, 1.0..=120.0, 0.5, "°", None);
+                changed |= row(ui, tr!("Średnica kulki"), tip_diameter, 0.05..=20.0, 0.01, " mm", None);
             }
             ToolKind::Drill { point_angle } => {
                 changed |= row(ui, tr!("Kąt wierzchołkowy"), point_angle, 60.0..=180.0, 0.5, "°", None);

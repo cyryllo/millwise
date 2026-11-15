@@ -8,6 +8,15 @@ Version numbers:
 
 ## Unreleased
 
+### Added
+
+- **Tapered ball cutters** — sides like a V-bit with a small ball at the
+  tip, ideal for 3D finishing. A new type in the tool library (taper angle
+  and ball diameter, with a drawing), supported in 3D toolpaths (the cutter
+  dropped onto the model with its real shape), in every simulation view and
+  in the scallop height shown for parallel finishing. The basic set gets one
+  (R0.25, 20°, Ø3.175); an existing library receives it automatically, once.
+
 ### Changed
 
 - **Tool lists grouped by type.** The drop-down lists of tools (for new

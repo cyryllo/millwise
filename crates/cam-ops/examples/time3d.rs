@@ -48,4 +48,10 @@ fn main() {
     let t = Instant::now();
     let r = generate_with_model(&op, &tool, &[], Some(&ModelInput { heights: &h, stock, ref_tool: None }));
     println!("grawerski 0,2 / co 0,1 mm: {} ruchów, {:?}", r.toolpath.moves.len(), t.elapsed());
+    // frez stożkowy kulowy R0,25 · 20°, przejścia co 0,2 mm
+    let tool = Tool { diameter: 3.175, kind: ToolKind::TaperedBall { angle: 20.0, tip_diameter: 0.5 }, ..Default::default() };
+    let op = Operation { kind: OpKind::Finish3D(Finish3DParams { stepover: 0.2 / 3.175, ..Default::default() }), ..op.clone() };
+    let t = Instant::now();
+    let r = generate_with_model(&op, &tool, &[], Some(&ModelInput { heights: &h, stock, ref_tool: None }));
+    println!("kulowy stożkowy co 0,2 mm: {} ruchów, {:?}, {:?}", r.toolpath.moves.len(), t.elapsed(), r.warnings);
 }

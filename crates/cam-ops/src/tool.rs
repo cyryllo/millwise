@@ -15,6 +15,9 @@ pub enum ToolKind {
     VBit { angle: f64, tip_diameter: f64 },
     /// Frez grawerski stożkowy z płaskim czubkiem.
     Engraver { angle: f64, tip_diameter: f64 },
+    /// Frez stożkowy kulowy: boki jak w V (kąt wierzchołkowy w stopniach), na końcu
+    /// kulka o średnicy `tip_diameter` przechodząca stycznie w stożek — do wykańczania 3D.
+    TaperedBall { angle: f64, tip_diameter: f64 },
     /// Wiertło, kąt wierzchołkowy w stopniach.
     Drill { point_angle: f64 },
 }
@@ -27,8 +30,21 @@ impl ToolKind {
             ToolKind::BullNose { .. } => tr!("Z promieniem naroża"),
             ToolKind::VBit { .. } => tr!("V (fazowanie)"),
             ToolKind::Engraver { .. } => tr!("Grawerski"),
+            ToolKind::TaperedBall { .. } => tr!("Kulowy stożkowy"),
             ToolKind::Drill { .. } => tr!("Wiertło"),
         }
+    }
+}
+
+/// Wysokość powierzchni frezu stożkowego kulowego nad czubkiem w odległości `d` od osi:
+/// kulka o promieniu `rb` do punktu styczności, dalej stożek o połowie kąta `half` (rad).
+pub fn tapered_ball_height(d: f64, rb: f64, half: f64) -> f64 {
+    let rb = rb.max(1e-6);
+    let dt = rb * half.cos();
+    if d <= dt {
+        rb - (rb * rb - d * d).max(0.0).sqrt()
+    } else {
+        rb * (1.0 - half.sin()) + (d - dt) / half.tan().max(1e-9)
     }
 }
 
@@ -174,8 +190,9 @@ fn fmt_num(v: f64) -> String {
     t.trim_end_matches('0').trim_end_matches('.').to_string()
 }
 
-/// Wersja zestawu startowego: 1 — pierwsze 7 narzędzi, 2 — zestaw podstawowy 3 / 4 / 6 mm.
-pub const DEFAULTS_VERSION: u32 = 2;
+/// Wersja zestawu startowego: 1 — pierwsze 7 narzędzi, 2 — zestaw podstawowy 3 / 4 / 6 mm,
+/// 3 — frez stożkowy kulowy.
+pub const DEFAULTS_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ToolLibrary {
@@ -345,6 +362,19 @@ impl ToolLibrary {
                 ..base.clone()
             },
             Tool {
+                number: 16,
+                name: tr!("Kulowy stożkowy R0,25 · 20°").into(),
+                kind: ToolKind::TaperedBall { angle: 20.0, tip_diameter: 0.5 },
+                diameter: 3.175,
+                shank_diameter: 3.175,
+                flute_length: 15.0,
+                feed: 1000.0,
+                plunge_feed: 200.0,
+                step_down: 0.5,
+                stepover: 0.1,
+                ..base.clone()
+            },
+            Tool {
                 number: 15,
                 name: tr!("Wiertło 4 mm").into(),
                 kind: ToolKind::Drill { point_angle: 118.0 },
@@ -369,7 +399,7 @@ impl ToolLibrary {
     pub fn add_missing_defaults(&mut self) -> usize {
         let same = |a: &Tool, b: &Tool| {
             let angle = |k: &ToolKind| match *k {
-                ToolKind::VBit { angle, .. } | ToolKind::Engraver { angle, .. } => angle,
+                ToolKind::VBit { angle, .. } | ToolKind::Engraver { angle, .. } | ToolKind::TaperedBall { angle, .. } => angle,
                 _ => 0.0,
             };
             std::mem::discriminant(&a.kind) == std::mem::discriminant(&b.kind)

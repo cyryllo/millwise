@@ -612,6 +612,18 @@ pub fn draw_tool(painter: &egui::Painter, r: Rect, kind: &ToolKind) -> (Rect, Re
             painter.line_segment([p(15.0, 58.0), p(19.5, 94.0)], helix);
             cutting = rr(11.0, 56.0, 18.0, 39.0);
         }
+        ToolKind::TaperedBall { .. } => {
+            // stożek jak w V, zakończony kulką
+            painter.rect(rr(13.0, 1.0, 14.0, 55.0), k, shank, outline, StrokeKind::Middle);
+            let mut pts = vec![p(11.0, 56.0), p(29.0, 56.0)];
+            for i in 0..=12 {
+                let a = PI * 0.08 + PI * 0.84 * i as f32 / 12.0;
+                pts.push(p(20.0 + 4.0 * a.cos(), 92.0 + 4.0 * a.sin()));
+            }
+            path(pts);
+            painter.line_segment([p(14.5, 58.0), p(19.0, 92.0)], helix);
+            cutting = rr(11.0, 56.0, 18.0, 40.0);
+        }
         ToolKind::Drill { .. } => {
             painter.rect(rr(14.0, 1.0, 12.0, 39.0), k, shank, outline, StrokeKind::Middle);
             painter.rect(rr(12.0, 40.0, 16.0, 48.0), 0.0, body, outline, StrokeKind::Middle);

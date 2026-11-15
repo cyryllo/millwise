@@ -32,16 +32,17 @@ pub struct OpsUi {
     pub palette_tool: Option<u32>,
 }
 
-/// Kolejność grup frezów na listach: płaskie, kulowe, z promieniem, V, grawerskie, wiertła.
+/// Kolejność grup frezów na listach: płaskie, kulowe, kulowe stożkowe, z promieniem, V, grawerskie, wiertła.
 fn kind_rank(k: &cam_ops::ToolKind) -> u8 {
     use cam_ops::ToolKind::*;
     match k {
         FlatEnd => 0,
         BallEnd => 1,
-        BullNose { .. } => 2,
-        VBit { .. } => 3,
-        Engraver { .. } => 4,
-        Drill { .. } => 5,
+        TaperedBall { .. } => 2,
+        BullNose { .. } => 3,
+        VBit { .. } => 4,
+        Engraver { .. } => 5,
+        Drill { .. } => 6,
     }
 }
 
@@ -781,9 +782,19 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
             });
             ui.end_row();
             // wysokość grzbietów między przejściami (frez kulowy, płaska powierzchnia)
-            if let Some(t) = tool.filter(|t| matches!(t.kind, cam_ops::ToolKind::BallEnd) && !waterline) {
-                let (r, s) = (t.radius(), p.stepover * t.diameter * 0.5);
-                let scallop = r - (r * r - s * s).max(0.0).sqrt();
+            // frez kulowy albo stożkowy kulowy: grzbiet na płaskim = wysokość profilu w połowie odstępu
+            let half = tool.map_or(0.0, |t| p.stepover * t.diameter * 0.5);
+            let scallop = tool.and_then(|t| match t.kind {
+                cam_ops::ToolKind::BallEnd => {
+                    let r = t.radius();
+                    Some(r - (r * r - half.min(r).powi(2)).max(0.0).sqrt())
+                }
+                cam_ops::ToolKind::TaperedBall { angle, tip_diameter } => {
+                    Some(cam_ops::tapered_ball_height(half, tip_diameter * 0.5, (angle.clamp(1.0, 179.0) * 0.5).to_radians()))
+                }
+                _ => None,
+            });
+            if let (Some(scallop), false) = (scallop, waterline) {
                 ui.label("");
                 ui.label(RichText::new(tr!("grzbiety ok. {:.3} mm", scallop)).small().color(ui_kit::LABEL));
                 ui.end_row();

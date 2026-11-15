@@ -23,6 +23,8 @@ enum Profile {
     Bull { r: f64 },
     /// Stożek: tangens połówki kąta, promień płaskiego czubka.
     Cone { tan_half: f64, tip_r: f64 },
+    /// Stożek z kulką na końcu: promień kulki, połowa kąta [rad].
+    TaperedBall { rb: f64, half: f64 },
 }
 
 impl ToolShape {
@@ -35,6 +37,10 @@ impl ToolShape {
             ToolKind::VBit { angle, tip_diameter } | ToolKind::Engraver { angle, tip_diameter } => Profile::Cone {
                 tan_half: (angle.clamp(1.0, 179.0).to_radians() * 0.5).tan(),
                 tip_r: (tip_diameter * 0.5).clamp(0.0, radius),
+            },
+            ToolKind::TaperedBall { angle, tip_diameter } => Profile::TaperedBall {
+                rb: (tip_diameter * 0.5).clamp(1e-3, radius),
+                half: (angle.clamp(1.0, 179.0) * 0.5).to_radians(),
             },
             ToolKind::Drill { point_angle } => {
                 Profile::Cone { tan_half: (point_angle.clamp(1.0, 179.0).to_radians() * 0.5).tan(), tip_r: 0.0 }
@@ -57,6 +63,16 @@ impl ToolShape {
                 let flat = (r - rc).max(0.0);
                 let mut v: Vec<f64> = if flat > 1e-6 { vec![flat] } else { Vec::new() };
                 v.extend(arc(flat, r - flat, 6));
+                v
+            }
+            // kulka do punktu styczności (łuk do kąta stożka), dalej prosty stożek do obwodu
+            Profile::TaperedBall { rb, half } => {
+                let dt = (rb * half.cos()).min(r);
+                let mut v: Vec<f64> = (1..=6).map(|k| rb * (k as f64 / 6.0 * (std::f64::consts::FRAC_PI_2 - half)).sin()).filter(|&d| d < dt - 1e-9).collect();
+                v.push(dt);
+                if r > dt + 1e-6 {
+                    v.push(r);
+                }
                 v
             }
         }
@@ -89,6 +105,7 @@ impl ToolShape {
                 }
             }
             Profile::Cone { tan_half, tip_r } => ((d - tip_r).max(0.0)) / tan_half.max(1e-6),
+            Profile::TaperedBall { rb, half } => cam_ops::tapered_ball_height(d, rb, half),
         })
     }
 }
@@ -255,7 +272,8 @@ pub fn seg_height(p: Vec2, a: P3, b: P3, tool: &ToolShape) -> Option<f64> {
             }
             Some(cand[..nc].iter().map(|&t| f(t)).fold(f64::INFINITY, f64::min))
         }
-        Profile::Ball | Profile::Bull { .. } => {
+        // kula, zaokrąglenie i stożek z kulką — funkcja wypukła
+        Profile::Ball | Profile::Bull { .. } | Profile::TaperedBall { .. } => {
             // funkcja wypukła — przeszukiwanie złotym podziałem
             let (mut lo, mut hi) = (t0, t1);
             let g = 0.618_033_988_749_894_9;
@@ -705,6 +723,7 @@ mod tests {
             ToolShape::new(&ToolKind::BallEnd, 6.0),
             ToolShape::new(&ToolKind::BullNose { corner_radius: 1.0 }, 6.0),
             ToolShape::new(&ToolKind::Drill { point_angle: 118.0 }, 5.0),
+            ToolShape::new(&ToolKind::TaperedBall { angle: 20.0, tip_diameter: 0.5 }, 3.175),
         ];
         for tool in &tools {
             for _ in 0..300 {

@@ -11,12 +11,10 @@ use manifold_rust::manifold::Manifold;
 /// Pierścienie profilu narzędzia: (promień, wysokość nad czubkiem).
 pub fn tool_rings(tool: &ToolShape, height: f64) -> Vec<(f64, f64)> {
     let r = tool.radius;
-    let n = 8;
-    let mut rings: Vec<(f64, f64)> = (0..=n)
-        .map(|k| {
-            let d = r * k as f64 / n as f64;
-            (d, tool.profile(d).unwrap_or(0.0))
-        })
+    // pierścienie jak w siatce narzędzia: gęściej na kulkach i zaokrągleniach
+    let mut rings: Vec<(f64, f64)> = std::iter::once(0.0)
+        .chain(tool.ring_radii())
+        .map(|d| (d, tool.profile(d).unwrap_or(0.0)))
         .collect();
     rings.push((r, height));
     // pierścienie leżące na prostej między sąsiadami nie zmieniają otoczki
