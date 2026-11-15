@@ -714,16 +714,21 @@ pub fn draw_tool(painter: &egui::Painter, r: Rect, kind: &ToolKind) -> (Rect, Re
             cutting = rr(11.0, 47.5, 18.0, 48.5);
         }
         ToolKind::VBit { .. } | ToolKind::Engraver { .. } | ToolKind::TaperedBall { .. } => {
-            shank(11.0, 29.0, 55.0);
-            let top = |_: f32| 57.5;
+            // kulowy stożkowy: długi, smukły stożek od pełnej średnicy aż do kulki
+            let tapered = matches!(kind, ToolKind::TaperedBall { .. });
+            let len = if tapered { 33.0 } else { 55.0 };
+            let y0 = len + 2.5;
+            shank(11.0, 29.0, len);
+            let top = move |_: f32| y0;
             let bot = move |x: f32| -> f32 {
                 let dx = (x - 20.0).abs();
-                let cone = |tip_dx: f32, tip_y: f32| 57.5 + (tip_y - 57.5) * (9.0 - dx) / (9.0 - tip_dx);
+                let cone = |tip_dx: f32, tip_y: f32| y0 + (tip_y - y0) * (9.0 - dx) / (9.0 - tip_dx);
                 match kind {
                     ToolKind::Engraver { .. } if dx <= 1.5 => 95.0,
                     ToolKind::Engraver { .. } => cone(1.5, 95.0),
-                    ToolKind::TaperedBall { .. } if dx <= 2.8 => 92.8 + (9.0 - dx * dx).max(0.0).sqrt(),
-                    ToolKind::TaperedBall { .. } => cone(2.8, 91.8),
+                    // kulka r = 3.4 (środek 92.6), styczna ze stożkiem
+                    ToolKind::TaperedBall { .. } if dx <= 3.35 => 92.6 + (11.56 - dx * dx).max(0.0).sqrt(),
+                    ToolKind::TaperedBall { .. } => cone(3.35, 93.2),
                     _ => cone(0.0, 97.0),
                 }
             };
@@ -731,13 +736,13 @@ pub fn draw_tool(painter: &egui::Painter, r: Rect, kind: &ToolKind) -> (Rect, Re
             match kind {
                 ToolKind::Engraver { .. } => groove([(14.6, 58.5), (19.4, 94.2), (18.1, 58.5)]),
                 ToolKind::TaperedBall { .. } => {
-                    groove([(14.5, 58.5), (18.4, 90.8), (17.9, 58.5)]);
-                    painter.circle_filled(p(18.9, 93.6), k, Color32::from_rgba_unmultiplied(255, 255, 255, 200));
+                    groove([(14.4, y0 + 1.0), (18.2, 91.5), (17.8, y0 + 1.0)]);
+                    painter.circle_filled(p(18.8, 94.0), 1.1 * k, Color32::from_rgba_unmultiplied(255, 255, 255, 200));
                 }
                 _ => groove([(14.4, 58.5), (20.0, 95.5), (18.0, 58.5)]),
             }
             outline(11.0, 29.0, &top, &bot);
-            cutting = rr(11.0, 57.5, 18.0, 39.5);
+            cutting = rr(11.0, y0, 18.0, 96.0 - y0);
         }
         ToolKind::Drill { .. } => {
             let (t, b) = (|_: f32| 2.0, |_: f32| 39.0);
