@@ -3,7 +3,7 @@
 **Po polsku:** [README_pl.md](README_pl.md) · **Changes:** [CHANGELOG.md](CHANGELOG.md) · **For developers:** [DEVELOPMENT.md](DEVELOPMENT.md)
 
 > **Early development — not ready for use.** Millwise is at a very early stage
-> (version 0.4.0). It changes every day and the G-code it writes has not been
+> (version 0.5.0). It changes every day and the G-code it writes has not been
 > tested on real machines. **Please do not use it to run a CNC machine yet.**
 > A first test version for Linux can be downloaded (see below). Feedback and
 > ideas are welcome in the issues.
@@ -15,7 +15,7 @@ not planned for now). The user interface is in Polish for now.
 
 ![Millwise main window](docs/screenshot.png)
 
-## What it does (0.4.0)
+## What it does (0.5.0)
 
 - **DXF import:** lines, arcs, circles, polylines with arcs, splines,
   ellipses and blocks; loose pieces are joined into contours, inches are
@@ -26,10 +26,21 @@ not planned for now). The user interface is in Polish for now.
   same tool together, for fewer tool changes.
   - **Profile** outside / inside, with tabs, ramp or arc lead-in, stock to
     leave and a finishing pass (with its own feed).
-  - **Pocket** offset or zigzag, with islands and a finishing pass.
+  - **Pocket** offset, zigzag or HSM (small even step-over, rounded loops),
+    with islands and a finishing pass.
+  - **Corners (dog-bones)** in inside profiles and pockets, so square parts
+    fit.
   - **Drilling:** single, peck, or helical hole milling.
-  - **Engraving** on the line, on its left or on its right.
-- **Editing:** move, rotate, mirror, scale, align, array, cut / copy / paste;
+  - **Engraving** on the line, on its left or on its right, with a ramp
+    entry.
+  - **V-carving:** a V cutter with the depth following the width of the
+    shape.
+- **Text** turned into curves (built-in fonts or any .ttf / .otf).
+- **Automation:** operations for all free curves by layer, corners, tabs by
+  perimeter and order by tool in one step.
+- **Two-sided machining** with dowel pin holes and mirrored side B.
+- **Editing:** move, rotate, mirror, scale, align, array, cut / copy / paste,
+  measure;
   set the program zero at a stock corner, its centre or a picked point.
   **Undo and redo** with a history bar: one icon per action, a click goes
   back to it.
@@ -62,8 +73,8 @@ The [Releases](https://github.com/cyryllo/millwise/releases) page has an
 Ubuntu 22.04 or newer and other distributions of that age.
 
 ```sh
-chmod +x Millwise-0.4.0-x86_64.AppImage
-./Millwise-0.4.0-x86_64.AppImage
+chmod +x Millwise-0.5.0-x86_64.AppImage
+./Millwise-0.5.0-x86_64.AppImage
 ```
 
 Millwise chooses OpenGL by itself on NVIDIA cards and when the default

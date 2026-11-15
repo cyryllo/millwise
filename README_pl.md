@@ -3,7 +3,7 @@
 **English:** [README.md](README.md) · **Zmiany:** [CHANGELOG.md](CHANGELOG.md) · **Dla programistów:** [DEVELOPMENT.md](DEVELOPMENT.md)
 
 > **Wczesny etap rozwoju — jeszcze nie do użytku.** Millwise jest na bardzo
-> wczesnym etapie (wersja 0.4.0). Zmienia się codziennie, a tworzony G-code
+> wczesnym etapie (wersja 0.5.0). Zmienia się codziennie, a tworzony G-code
 > nie był testowany na prawdziwych maszynach. **Na razie nie zalecamy używania
 > go do sterowania frezarką.** Pierwszą wersję testową dla Linuksa można
 > pobrać (niżej). Uwagi i pomysły chętnie przyjmujemy w zgłoszeniach (Issues).
@@ -15,7 +15,7 @@ razie nie planujemy).
 
 ![Główne okno Millwise](docs/screenshot.png)
 
-## Co potrafi (0.4.0)
+## Co potrafi (0.5.0)
 
 - **Import DXF:** linie, łuki, okręgi, polilinie z łukami, splajny, elipsy i
   bloki; luźne elementy są łączone w kontury, cale przeliczane na milimetry.
@@ -25,11 +25,20 @@ razie nie planujemy).
   po sobie, żeby było mniej zmian narzędzia.
   - **Profil** zewnętrzny / wewnętrzny, z mostkami, rampą albo wejściem po
     łuku, naddatkiem i przejściem wykańczającym (z własnym posuwem).
-  - **Kieszeń** offsetowa albo zygzak, z wyspami i przejściem wykańczającym.
+  - **Kieszeń** offsetowa, zygzak albo HSM (mały, równy krok, zaokrąglone
+    pętle), z wyspami i przejściem wykańczającym.
+  - **Uszka w narożnikach** profili wewnętrznych i kieszeni — kwadratowe
+    elementy wchodzą do końca.
   - **Wiercenie:** pojedyncze, z wycofaniem albo frezowanie otworu po helisie.
-  - **Grawer** po linii, z lewej albo z prawej strony linii.
+  - **Grawer** po linii, z lewej albo z prawej strony linii, z rampą.
+  - **V-carving:** frez V, głębokość wynika z szerokości kształtu.
+- **Napisy** zamieniane na krzywe (wbudowane czcionki albo dowolny plik
+  .ttf / .otf).
+- **Automatyzacja:** operacje dla wszystkich wolnych krzywych według warstw,
+  uszka, mostki według obwodu i kolejność według narzędzi jednym krokiem.
+- **Obróbka dwustronna** z otworami na kołki ustalające i odbitą stroną B.
 - **Edycja:** przesuń, obróć, odbij, skaluj, wyrównaj, szyk, wytnij / kopiuj /
-  wklej; zero programu w rogu półfabrykatu, w jego środku albo we wskazanym
+  wklej, zmierz; zero programu w rogu półfabrykatu, w jego środku albo we wskazanym
   punkcie. **Cofanie i ponawianie** z paskiem historii: jedna ikona na
   czynność, kliknięcie wraca do niej.
 - **Kilka plików w jednym projekcie:** do bieżącego projektu można dodać
@@ -63,8 +72,8 @@ Na stronie [Releases](https://github.com/cyryllo/millwise/releases) jest
 22.04 lub nowszym i innych dystrybucjach z tego okresu.
 
 ```sh
-chmod +x Millwise-0.4.0-x86_64.AppImage
-./Millwise-0.4.0-x86_64.AppImage
+chmod +x Millwise-0.5.0-x86_64.AppImage
+./Millwise-0.5.0-x86_64.AppImage
 ```
 
 Na kartach NVIDIA i wtedy, gdy domyślna grafika nie otwiera okna, Millwise sam
