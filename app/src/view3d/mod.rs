@@ -25,6 +25,9 @@ pub struct View3D {
     sim_key: Option<(u64, u64)>,
     auto_fit: bool,
     last_size: egui::Vec2,
+    /// Zakładka modelu: pokazywać ścieżki i półfabrykat.
+    show_paths: bool,
+    show_stock: bool,
 }
 
 impl Default for View3D {
@@ -41,8 +44,19 @@ impl Default for View3D {
             sim_key: None,
             auto_fit: true,
             last_size: egui::Vec2::ZERO,
+            show_paths: true,
+            show_stock: true,
         }
     }
+}
+
+/// Do czego służy widok 3D.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum ViewKind {
+    /// Symulacja obróbki (z przyciskiem zamknięcia).
+    Simulation,
+    /// Zakładka „Model 3D”: model, półfabrykat i ścieżki — praca nad operacjami 3D.
+    Model,
 }
 
 impl View3D {
@@ -54,6 +68,7 @@ impl View3D {
         frame: &eframe::Frame,
         doc: &Document,
         sim: Option<&SimDisplay>,
+        kind: ViewKind,
     ) -> bool {
         let mut close = false;
         let resp = ui.allocate_rect(rect, Sense::click_and_drag());
@@ -69,13 +84,15 @@ impl View3D {
         };
         let renderer = self.renderer.get_or_insert_with(|| Renderer::new(&rs.device));
 
+        let model_view = kind == ViewKind::Model;
         let opts = SceneOpts {
-            stock_box: sim.is_none_or(|s| !s.show_material),
-            paths: sim.is_none_or(|s| s.show_paths),
-            rapids: sim.is_none_or(|s| s.show_rapids),
+            stock_box: sim.is_none_or(|s| !s.show_material) && (!model_view || self.show_stock),
+            paths: sim.is_none_or(|s| s.show_paths) && (!model_view || self.show_paths),
+            rapids: sim.is_none_or(|s| s.show_rapids) && !model_view,
             contours: sim.is_none(),
             side: sim.and_then(|s| s.side),
             model: sim.is_none_or(|s| s.show_model),
+            model_solid: kind == ViewKind::Model,
         };
         let scene_key = (doc.revision, opts.key());
         if self.built_key != Some(scene_key) {
@@ -195,20 +212,25 @@ impl View3D {
             );
         }
 
-        // --- pasek widoków ---
-        let bar = Rect::from_min_size(rect.min + egui::vec2(10.0, 10.0), egui::vec2(rect.width() - 20.0, 40.0));
+        // --- pasek widoków (w zakładce modelu na dole — u góry jest pasek narzędzia) ---
+        let bar = match kind {
+            ViewKind::Simulation => Rect::from_min_size(rect.min + egui::vec2(10.0, 10.0), egui::vec2(rect.width() - 20.0, 40.0)),
+            ViewKind::Model => Rect::from_min_size(egui::pos2(rect.left() + 10.0, rect.bottom() - 34.0), egui::vec2(rect.width() - 20.0, 26.0)),
+        };
         ui.scope_builder(egui::UiBuilder::new().max_rect(bar), |ui| {
             ui.horizontal(|ui| {
-                let b = egui::Button::new(
-                    egui::RichText::new(tr!("Zamknij symulację  (Esc)")).strong().color(Color32::WHITE).size(14.0),
-                )
-                .fill(Color32::from_rgb(61, 127, 224))
-                .min_size(egui::vec2(0.0, 38.0))
-                .corner_radius(8.0);
-                if ui.add(b).clicked() {
-                    close = true;
+                if kind == ViewKind::Simulation {
+                    let b = egui::Button::new(
+                        egui::RichText::new(tr!("Zamknij symulację  (Esc)")).strong().color(Color32::WHITE).size(14.0),
+                    )
+                    .fill(Color32::from_rgb(61, 127, 224))
+                    .min_size(egui::vec2(0.0, 38.0))
+                    .corner_radius(8.0);
+                    if ui.add(b).clicked() {
+                        close = true;
+                    }
+                    ui.add_space(10.0);
                 }
-                ui.add_space(10.0);
                 if ui.small_button(tr!("Izo")).clicked() {
                     self.camera.set_iso();
                 }
@@ -225,6 +247,11 @@ impl View3D {
                     self.fit_requested = true;
                 }
                 ui.checkbox(&mut self.camera.orthographic, tr!("Ortho"));
+                if kind == ViewKind::Model {
+                    ui.add_space(10.0);
+                    ui.checkbox(&mut self.show_paths, tr!("Ścieżki"));
+                    ui.checkbox(&mut self.show_stock, tr!("Półfabrykat"));
+                }
             });
         });
         close
@@ -275,6 +302,8 @@ struct SceneOpts {
     contours: bool,
     side: Option<cam_ops::Side>,
     model: bool,
+    /// Model jako nieprzezroczysta, cieniowana bryła (zakładka „Model 3D”).
+    model_solid: bool,
 }
 
 impl SceneOpts {
@@ -290,6 +319,7 @@ impl SceneOpts {
             | (self.contours as u8) << 3
             | side << 4
             | (self.model as u8) << 6
+            | (self.model_solid as u8) << 7
     }
 }
 
@@ -307,12 +337,16 @@ fn build_scene(doc: &Document, opts: &SceneOpts) -> (SceneData, Vec3, f32) {
 
     // model 3D (STL): półprzezroczysty — w materiale widać go tam, gdzie materiał jest już zdjęty
     if let (true, Some(m)) = (opts.model, &doc.stock.model) {
-        let col = [0.42, 0.62, 0.92, 0.45];
+        let (col, out) = if opts.model_solid {
+            ([0.55, 0.68, 0.85, 1.0], &mut s.opaque)
+        } else {
+            ([0.42, 0.62, 0.92, 0.45], &mut s.transparent)
+        };
         for t in m.placed() {
             let p = t.map(|v| Vec3::new(v[0], v[1], v[2]));
             let n = (p[1] - p[0]).cross(p[2] - p[0]).normalize_or_zero();
             for v in p {
-                s.transparent.push(MeshVertex { pos: v.to_array(), normal: n.to_array(), color: col });
+                out.push(MeshVertex { pos: v.to_array(), normal: n.to_array(), color: col });
             }
         }
     }
@@ -343,7 +377,7 @@ fn build_scene(doc: &Document, opts: &SceneOpts) -> (SceneData, Vec3, f32) {
     // półfabrykat: przezroczysta bryła + krawędzie
     if doc.bbox.is_some() {
         if opts.stock_box {
-            let a = 0.22;
+            let a = if opts.model_solid { 0.12 } else { 0.22 };
             let base = egui::Rgba::from(Color32::from_rgb(196, 160, 110));
             let col = [base.r() * a, base.g() * a, base.b() * a, a];
             push_box(&mut s.transparent, min, max, col);

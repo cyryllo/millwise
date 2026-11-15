@@ -28,6 +28,13 @@ Version numbers:
   with all 2D operations — for example a profile that cuts the part out, or a
   pocket around an island down to that depth.
 
+- **„3D model” tab.** With an STL model loaded, a third tab sits between
+  „2D project” and „Simulation”: the model as a shaded solid in the stock,
+  with the toolpaths (the selected operation highlighted), turned and zoomed
+  with the mouse. The operations and the panels on both sides stay as in the
+  2D tab. Choosing the „3D” group in the toolbar opens this tab; other groups
+  go back to the 2D drawing, where curves are clicked.
+
 - **3D roughing.** A new „3D” group in the toolbar. „Roughing” clears the
   stock around the model in Z layers, leaving the chosen stock on the model
   (sideways and downwards). Each layer is cleared like a pocket, with the

@@ -9,7 +9,7 @@ use crate::ui_machines::MachinesWindow;
 use crate::ui_ops::{self, OpsAction, OpsUi};
 use crate::ui_tools::ToolsWindow;
 use crate::view2d::{colors, op_color, Interaction, View2D, ViewEvent};
-use crate::view3d::View3D;
+use crate::view3d::{View3D, ViewKind};
 use cam_geom::Vec2;
 use cam_ops::{CutParams, Operation, ToolLibrary};
 use cam_post::{Machine, MachineLibrary};
@@ -76,10 +76,12 @@ impl TextTool {
     }
 }
 
-/// Projekt 2D — praca na krzywych i operacjach; Wizualizacja 3D — tylko podgląd.
+/// Projekt 2D — praca na krzywych i operacjach; Model 3D — model i operacje 3D
+/// w widoku przestrzennym; Symulacja — tylko podgląd obróbki.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ViewMode {
     Project,
+    Model,
     Visual,
 }
 
@@ -113,8 +115,12 @@ pub struct CamApp {
     edit: EditParams,
     view2d: View2D,
     view3d: View3D,
+    /// Widok zakładki „Model 3D” (własna kamera).
+    view_model: View3D,
     sim: SimState,
     mode: ViewMode,
+    /// Zakładka robocza (Projekt 2D albo Model 3D), do której wraca zamknięta symulacja.
+    work_mode: ViewMode,
     ops_ui: OpsUi,
     error: Option<String>,
     info: Option<String>,
@@ -162,8 +168,10 @@ impl CamApp {
             edit: EditParams::default(),
             view2d: View2D::default(),
             view3d: View3D::default(),
+            view_model: View3D::default(),
             sim: SimState::default(),
             mode: ViewMode::Project,
+            work_mode: ViewMode::Project,
             ops_ui: OpsUi::default(),
             error: tools_warning.or(machines_warning),
             info: None,
@@ -209,6 +217,7 @@ impl CamApp {
                         app.mode = ViewMode::Visual;
                         app.sim.jump_to_fraction = w[6..].parse().ok();
                     }
+                    "model" => app.mode = ViewMode::Model,
                     "nopaths" => {
                         app.sim.show_paths = false;
                         app.sim.show_model = false;
@@ -527,7 +536,15 @@ impl CamApp {
 
     fn handle_toolbar(&mut self, action: ToolbarAction, ctx: &egui::Context) {
         match action {
-            ToolbarAction::Changed => self.pick_target = None,
+            ToolbarAction::Changed => {
+                self.pick_target = None;
+                // grupa 3D — zakładka modelu; inne grupy potrzebują rysunku 2D
+                if self.toolbar.group == Group::Model3D && self.doc.stock.model.is_some() {
+                    self.mode = ViewMode::Model;
+                } else if self.toolbar.group != Group::Model3D && self.mode == ViewMode::Model {
+                    self.mode = ViewMode::Project;
+                }
+            }
             ToolbarAction::Command(sub) => {
                 let ok = match sub {
                     Sub::FlipH => self.doc.flip_selected(true),
@@ -817,6 +834,7 @@ impl CamApp {
         let now = Self::now(ctx);
         let mut nothing_selected = false;
         let mut create3d = false;
+        let mode3d = self.mode == ViewMode::Model;
         egui::Area::new(egui::Id::unique("tool_options"))
             .fixed_pos(view.min + egui::vec2(10.0, 10.0))
             .order(egui::Order::Middle)
@@ -995,8 +1013,25 @@ impl CamApp {
                                     {
                                         create3d = true;
                                     }
-                                    ui.label(RichText::new(tr!("albo kliknij krzywe — granice obróbki")).weak());
+                                    let hint = if mode3d {
+                                        tr!("granice: krzywe w zakładce Projekt 2D")
+                                    } else {
+                                        tr!("albo kliknij krzywe — granice obróbki")
+                                    };
+                                    ui.label(RichText::new(hint).weak());
                                     if ui.button(tr!("Anuluj")).clicked() {
+                                        close = true;
+                                    }
+                                });
+                            }
+                            s if mode3d && s.group() == Group::Model3D => {
+                                let target = self.pick_target.filter(|&t| t < doc.ops.len());
+                                ui.horizontal(|ui| {
+                                    if let Some(t) = target {
+                                        ui.label(RichText::new(doc.ops[t].name.clone()).strong().color(Color32::WHITE));
+                                    }
+                                    ui.label(RichText::new(tr!("granice: krzywe w zakładce Projekt 2D")).weak());
+                                    if ui.button(tr!("Zakończ (Enter)")).clicked() {
                                         close = true;
                                     }
                                 });
@@ -1090,7 +1125,7 @@ impl CamApp {
         });
         if self.mode == ViewMode::Visual {
             if esc || tab {
-                self.mode = ViewMode::Project;
+                self.mode = self.work_mode;
                 self.sim.playing = false;
             }
             if ctx.input(|i| i.key_pressed(Key::Space)) {
@@ -1111,6 +1146,7 @@ impl CamApp {
         if f {
             self.view2d.fit_requested = true;
             self.view3d.fit_requested = true;
+            self.view_model.fit_requested = true;
         }
         if del && self.mode == ViewMode::Project {
             self.delete(now);
@@ -1371,6 +1407,7 @@ impl CamApp {
             });
             ui.menu_button(tr!("Widok"), |ui| {
                 ui.radio_value(&mut self.mode, ViewMode::Project, tr!("Projekt 2D  (Tab)"));
+                ui.add_enabled_ui(self.doc.stock.model.is_some(), |ui| ui.radio_value(&mut self.mode, ViewMode::Model, tr!("Model 3D")));
                 ui.radio_value(&mut self.mode, ViewMode::Visual, tr!("Symulacja  (Tab)"));
                 ui.separator();
                 if ui.button(tr!("Dopasuj  (F)")).clicked() {
@@ -1423,6 +1460,10 @@ impl CamApp {
             });
             ui.separator();
             ui.selectable_value(&mut self.mode, ViewMode::Project, RichText::new(tr!("  Projekt 2D  ")).strong());
+            if self.doc.stock.model.is_some() {
+                ui.selectable_value(&mut self.mode, ViewMode::Model, RichText::new(tr!("  Model 3D  ")).strong())
+                    .on_hover_text(tr!("Model, półfabrykat i ścieżki w widoku przestrzennym"));
+            }
             ui.selectable_value(&mut self.mode, ViewMode::Visual, RichText::new(tr!("  Symulacja  ")).strong());
         });
     }
@@ -2300,6 +2341,15 @@ impl eframe::App for CamApp {
 
         egui::Panel::top("menu").show(ui, |ui| self.menu(ui));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
+        if self.mode == ViewMode::Model && self.doc.stock.model.is_none() {
+            self.mode = ViewMode::Project;
+        }
+        if self.work_mode == ViewMode::Model && self.doc.stock.model.is_none() {
+            self.work_mode = ViewMode::Project;
+        }
+        if self.mode != ViewMode::Visual {
+            self.work_mode = self.mode;
+        }
 
         if self.mode == ViewMode::Visual {
             // wizualizacja: tylko podgląd + symulacja
@@ -2329,10 +2379,10 @@ impl eframe::App for CamApp {
             egui::CentralPanel::no_frame().show(ui, |ui| {
                 let rect = ui.available_rect_before_wrap();
                 let display = self.sim.display(&self.doc, &self.tools);
-                close = self.view3d.ui(ui, rect, frame, &self.doc, display.as_ref());
+                close = self.view3d.ui(ui, rect, frame, &self.doc, display.as_ref(), ViewKind::Simulation);
             });
             if close {
-                self.mode = ViewMode::Project;
+                self.mode = self.work_mode;
                 self.sim.playing = false;
             }
         } else {
@@ -2352,7 +2402,8 @@ impl eframe::App for CamApp {
             }
 
             let machine_label = self.machine().controller.label().to_string();
-            let picking = self.pick_target.filter(|_| self.toolbar.current().op_template(1.0).is_some());
+            // w zakładce modelu nie klika się krzywych
+            let picking = self.pick_target.filter(|_| self.toolbar.current().op_template(1.0).is_some() && self.mode != ViewMode::Model);
             let mut action = OpsAction::None;
             egui::Panel::left("ops").resizable(true).default_size(310.0).show(ui, |ui| {
                 action = ui_ops::ops_panel(ui, &mut self.doc, &self.tools, &mut self.ops_ui, picking, &machine_label);
@@ -2417,7 +2468,11 @@ impl eframe::App for CamApp {
                     (None, Sub::Text) => Interaction::PlaceText { preview: &self.text_tool.preview },
                     _ => Interaction::Select,
                 };
-                events = self.view2d.ui(ui, rect, &mut self.doc, &tool_d, inter, Some((machine.travel_x, machine.travel_y)));
+                if self.mode == ViewMode::Model {
+                    self.view_model.ui(ui, rect, frame, &self.doc, None, ViewKind::Model);
+                } else {
+                    events = self.view2d.ui(ui, rect, &mut self.doc, &tool_d, inter, Some((machine.travel_x, machine.travel_y)));
+                }
             });
             self.handle_view_events(events, &ctx);
             if self.param_edit.is_some() {
