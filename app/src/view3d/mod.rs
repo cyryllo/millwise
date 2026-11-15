@@ -21,8 +21,9 @@ pub struct View3D {
     pub fit_requested: bool,
     /// Ustaw widok od spodu przy następnej klatce (dla programisty).
     pub bottom_view: bool,
-    built_key: Option<(u64, u8)>,
+    built_key: Option<(u64, u8, u8)>,
     sim_key: Option<(u64, u64)>,
+    progress_key: Option<(u64, u64)>,
     auto_fit: bool,
     last_size: egui::Vec2,
     /// Zakładka modelu: pokazywać ścieżki i półfabrykat.
@@ -44,6 +45,7 @@ impl Default for View3D {
             bottom_view: false,
             built_key: None,
             sim_key: None,
+            progress_key: None,
             auto_fit: true,
             last_size: egui::Vec2::ZERO,
             show_paths: true,
@@ -95,9 +97,11 @@ impl View3D {
             contours: sim.is_none(),
             side: sim.and_then(|s| s.side),
             model: sim.is_none_or(|s| s.show_model),
-            model_solid: kind == ViewKind::Model,
+            // zakładka modelu i symulacja „Ścieżki”: model docelowy jako pełna bryła
+            model_solid: kind == ViewKind::Model || sim.is_some_and(|s| s.progress.is_some()),
+            faint_paths: sim.is_some_and(|s| s.progress.is_some()),
         };
-        let scene_key = (doc.revision, opts.key());
+        let scene_key = (doc.revision, opts.key(), opts.key2());
         if self.built_key != Some(scene_key) {
             let (scene, center, radius) = build_scene(doc, &opts);
             renderer.upload(&rs.device, &scene);
@@ -128,6 +132,24 @@ impl View3D {
                     self.sim_key = None;
                 }
             }
+        }
+        // symulacja „Ścieżki”: linie postępu (przebudowa tylko po zmianie czasu)
+        let pkey = sim.and_then(|s| s.progress.map(|p| p.1));
+        if self.progress_key != pkey {
+            let lines: Vec<LineVertex> = sim
+                .and_then(|s| s.progress)
+                .map(|(segs, _)| {
+                    let mut v = Vec::with_capacity(segs.len() * 2);
+                    for &(a, b, c) in segs {
+                        let c = lin(c);
+                        v.push(LineVertex { pos: [a.x as f32, a.y as f32, a.z as f32], color: c });
+                        v.push(LineVertex { pos: [b.x as f32, b.y as f32, b.z as f32], color: c });
+                    }
+                    v
+                })
+                .unwrap_or_default();
+            renderer.upload_progress_lines(&rs.device, &rs.queue, &lines);
+            self.progress_key = pkey;
         }
         let tool_lines = sim.and_then(|s| s.tool).map(|(p, r, len, col)| tool_outline(p, r, len, col)).unwrap_or_default();
         renderer.upload_dynamic_lines(&rs.device, &rs.queue, &tool_lines);
@@ -305,6 +327,8 @@ pub struct SimDisplay<'a> {
     pub show_model: bool,
     /// Obróbka dwustronna: pokazywana strona (B w układzie odwróconej płyty).
     pub side: Option<cam_ops::Side>,
+    /// Tryb „Ścieżki” (bez materiału): linie postępu (od, do, kolor) i ich wersja.
+    pub progress: Option<(&'a [(cam_ops::P3, cam_ops::P3, Color32)], (u64, u64))>,
 }
 
 struct SceneOpts {
@@ -316,6 +340,8 @@ struct SceneOpts {
     model: bool,
     /// Model jako nieprzezroczysta, cieniowana bryła (zakładka „Model 3D”).
     model_solid: bool,
+    /// Ścieżki przyciemnione (pod liniami postępu w symulacji „Ścieżki”).
+    faint_paths: bool,
 }
 
 impl SceneOpts {
@@ -332,6 +358,10 @@ impl SceneOpts {
             | side << 4
             | (self.model as u8) << 6
             | (self.model_solid as u8) << 7
+    }
+
+    fn key2(&self) -> u8 {
+        self.faint_paths as u8
     }
 }
 
@@ -446,7 +476,11 @@ fn build_scene(doc: &Document, opts: &SceneOpts) -> (SceneData, Vec3, f32) {
         };
         let selected = doc.selected_op == Some(i);
         let base = crate::view2d::op_color(i);
-        let col = lin(if selected || doc.selected_op.is_none() { base } else { base.gamma_multiply(0.3) });
+        let col = if opts.faint_paths {
+            lin(Color32::from_gray(150).gamma_multiply(0.22))
+        } else {
+            lin(if selected || doc.selected_op.is_none() { base } else { base.gamma_multiply(0.3) })
+        };
         let rapid = lin(Color32::from_rgb(220, 60, 60).gamma_multiply(if selected { 0.8 } else { 0.3 }));
         let mut prev: Option<Vec3> = None;
         for &(p, is_rapid) in pts {

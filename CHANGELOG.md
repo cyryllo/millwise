@@ -103,6 +103,14 @@ Version numbers:
   computed on all processor cores. The finishing pass spacing is entered in
   millimetres.
 
+- **„Toolpaths” simulation mode**, the default for programs with 3D
+  operations: no material removal is computed — the target model is shown
+  as a solid, the toolpaths done so far in the operation colour, the layer
+  being cut now (the current Z level, or the current line of parallel
+  finishing) in yellow, and the rest dimmed. Playback and seeking are
+  instant for any program size. The Solid and Fast engines can still be
+  chosen by hand.
+
 ### Fixed
 
 - **Crash in the simulation of very detailed material** („Buffer size … is

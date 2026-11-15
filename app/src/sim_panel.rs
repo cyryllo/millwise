@@ -62,6 +62,9 @@ pub enum Engine {
     Solid,
     /// Mapa wysokości — bardzo szybka, dla dużych programów.
     Fast,
+    /// Bez materiału: model docelowy, ścieżki wykonane i ostatnia warstwa — natychmiast,
+    /// przy dowolnej liczbie ruchów (domyślny dla obróbki 3D).
+    Paths,
 }
 
 fn spawn_worker(
@@ -176,7 +179,7 @@ fn spawn_worker(
 pub struct SimState {
     worker: Option<Worker>,
     /// Klucz danych, z których zbudowano symulację.
-    built_for: Option<(u64, u64, u64, usize, (bool, bool))>,
+    built_for: Option<(u64, u64, u64, usize, (bool, bool), bool)>,
     /// Numer symulacji (zmienia się przy przebudowie).
     sim_serial: u64,
     ops: Vec<(usize, String)>,
@@ -216,6 +219,14 @@ pub struct SimState {
     dense: Option<usize>,
     /// Bryła przerosła limit (liczba trójkątów) — przełączono na „Szybki”.
     too_big: Option<usize>,
+    /// Tryb „Ścieżki”: oś czasu programu (bez wątku symulacji).
+    timeline: Vec<cam_sim::SimPoint>,
+    /// Dla każdej operacji symulacji: wykańczanie równoległe (warstwa = bieżąca linia).
+    raster: Vec<bool>,
+    /// Linie postępu (wykonane i ostatnia warstwa) dla czasu `progress_time`.
+    progress_lines: Vec<(P3, P3, Color32)>,
+    progress_time: f64,
+    progress_serial: u64,
 }
 
 /// Od tylu ruchów silnik bryłowy liczyłby za długo — automatycznie „Szybki”.
@@ -256,6 +267,11 @@ impl Default for SimState {
             engine_auto: true,
             dense: None,
             too_big: None,
+            timeline: Vec::new(),
+            raster: Vec::new(),
+            progress_lines: Vec::new(),
+            progress_time: f64::NAN,
+            progress_serial: 0,
         }
     }
 }
@@ -265,7 +281,15 @@ impl SimState {
     pub fn sync(&mut self, ctx: &egui::Context, doc: &Document, lib: &ToolLibrary, machine: &Machine) {
         self.sides = doc.stock.two_sided.is_some() && doc.ops.iter().any(|o| o.enabled && o.side == cam_ops::Side::B);
         let side_b = self.sides && self.side == cam_ops::Side::B;
-        if self.engine_auto {
+        let has3d = doc.ops.iter().any(|o| o.enabled && cam_ops::needs_model(&o.kind));
+        if self.engine_auto && has3d {
+            // obróbka 3D: bez symulacji ubytku — model docelowy i ścieżki (zawsze płynnie)
+            self.engine = Engine::Paths;
+            self.dense = None;
+        } else if self.engine_auto {
+            if self.engine == Engine::Paths {
+                self.engine = Engine::Solid;
+            }
             let moves: usize = doc
                 .ops
                 .iter()
@@ -293,6 +317,7 @@ impl SimState {
             doc.stock.margin.to_bits(),
             self.resolution,
             (self.engine == Engine::Solid, side_b),
+            self.engine == Engine::Paths,
         );
         if self.built_for == Some(key) {
             return;
@@ -308,6 +333,10 @@ impl SimState {
         self.collisions.clear();
         self.sim_serial += 1;
         self.ops.clear();
+        self.timeline.clear();
+        self.raster.clear();
+        self.progress_lines.clear();
+        self.progress_time = f64::NAN;
         let Some(area) = doc.stock_box() else { return };
         let mut data: Vec<OpData> = Vec::new();
         for (i, (op, cache)) in doc.ops.iter().zip(&doc.op_cache).enumerate() {
@@ -321,8 +350,27 @@ impl SimState {
             }
             data.push((ToolShape::new(&tool.kind, tool.diameter), cache.result.toolpath.polyline_with_feed(0.01)));
             self.ops.push((i, op.name.clone()));
+            self.raster.push(matches!(&op.kind, cam_ops::OpKind::Finish3D(p) if p.strategy == cam_ops::Finish3DStrategy::Raster));
         }
         if data.is_empty() {
+            return;
+        }
+        if self.engine == Engine::Paths {
+            // bez wątku: tylko oś czasu — gotowe od razu
+            let ops: Vec<SimOp> = data.iter().map(|(t, p)| SimOp { tool: t.clone(), points: p }).collect();
+            let (path, op_start) = cam_sim::timeline(&ops, machine.rapid_xy);
+            self.duration = path.last().map_or(0.0, |p| p.t);
+            self.op_start = op_start;
+            self.timeline = path;
+            self.ready = true;
+            self.cell = 0.0;
+            self.millis = 0;
+            if std::mem::take(&mut self.jump_to_end) {
+                self.time = self.duration;
+            }
+            if let Some(f) = self.jump_to_fraction.take() {
+                self.time = self.duration * f.clamp(0.0, 1.0);
+            }
             return;
         }
         self.worker =
@@ -331,6 +379,20 @@ impl SimState {
 
     /// Odbiór wyników z wątku i postęp odtwarzania; wywoływane co klatkę.
     pub fn tick(&mut self, ctx: &egui::Context) {
+        if self.engine == Engine::Paths && !self.timeline.is_empty() {
+            if self.playing {
+                let dt = ctx.input(|i| i.stable_dt).min(0.1) as f64;
+                self.time = (self.time + dt * self.speed).min(self.duration);
+                if self.time >= self.duration {
+                    self.playing = false;
+                }
+                ctx.request_repaint();
+            }
+            if self.progress_time.to_bits() != self.time.to_bits() {
+                self.build_progress();
+            }
+            return;
+        }
         let Some(w) = &self.worker else { return };
         while let Ok(msg) = w.rx.try_recv() {
             match msg {
@@ -393,7 +455,100 @@ impl SimState {
         }
     }
 
+    /// Tryb „Ścieżki”: indeks bieżącego odcinka osi czasu i pozycja narzędzia w chwili `time`.
+    fn timeline_pos(&self) -> Option<(usize, P3)> {
+        let tl = &self.timeline;
+        let first = tl.first()?;
+        let k = tl.partition_point(|p| p.t <= self.time);
+        if k == 0 {
+            return Some((0, first.p));
+        }
+        if k >= tl.len() {
+            return Some((tl.len() - 1, tl[tl.len() - 1].p));
+        }
+        let (a, b) = (tl[k - 1], tl[k]);
+        let f = if b.t > a.t { ((self.time - a.t) / (b.t - a.t)).clamp(0.0, 1.0) } else { 1.0 };
+        let q = P3::new(a.p.x + (b.p.x - a.p.x) * f, a.p.y + (b.p.y - a.p.y) * f, a.p.z + (b.p.z - a.p.z) * f);
+        Some((k, q))
+    }
+
+    /// Linie postępu: wykonane ruchy robocze w kolorze operacji, ostatnia warstwa
+    /// (bieżący poziom Z albo bieżąca linia wykańczania równoległego) — jaskrawo.
+    fn build_progress(&mut self) {
+        self.progress_time = self.time;
+        self.progress_serial += 1;
+        self.progress_lines.clear();
+        let Some((k, q)) = self.timeline_pos() else { return };
+        let tl = &self.timeline;
+        // odcinki 1..=k (odcinek i: od punktu i-1 do i), ostatni do pozycji narzędzia
+        let seg = |i: usize| -> (P3, P3) { (tl[i - 1].p, if i == k { q } else { tl[i].p }) };
+        let last = k.min(tl.len() - 1);
+        // początek ostatniej warstwy: wstecz do ruchu szybkiego, zmiany operacji, zmiany
+        // poziomu Z (warstwy) albo — przy wykańczaniu równoległym — zmiany kierunku linii
+        let mut start = last + 1;
+        if last >= 1 && !tl[last].rapid {
+            let op = tl[last].op;
+            let raster = self.raster.get(op).copied().unwrap_or(false);
+            let (a0, b0) = seg(last);
+            let dir0 = (b0.xy() - a0.xy()).normalized();
+            let z0 = b0.z;
+            start = last;
+            while start > 1 {
+                let i = start - 1;
+                if tl[i].rapid || tl[i].op != op {
+                    break;
+                }
+                let (a, b) = seg(i);
+                if raster {
+                    let d = b.xy() - a.xy();
+                    if d.length() > 1e-9 && d.normalized().dot(dir0) < 0.5 {
+                        break;
+                    }
+                } else if (a.z - z0).abs() > 0.02 || (b.z - z0).abs() > 0.02 {
+                    break;
+                }
+                start = i;
+            }
+        }
+        let hot = Color32::from_rgb(255, 225, 60);
+        for i in 1..=last {
+            let p = tl[i];
+            if p.rapid {
+                continue;
+            }
+            let (a, b) = seg(i);
+            let doc_i = self.ops.get(p.op).map_or(0, |o| o.0);
+            let col = if i >= start { hot } else { op_color(doc_i).gamma_multiply(0.55) };
+            self.progress_lines.push((a, b, col));
+        }
+    }
+
     pub fn display<'a>(&'a self, doc: &Document, lib: &ToolLibrary) -> Option<SimDisplay<'a>> {
+        if self.engine == Engine::Paths && !self.timeline.is_empty() {
+            let tool = if self.show_tool {
+                self.timeline_pos().and_then(|(k, p)| {
+                    let oi = self.timeline[k].op;
+                    let (doc_i, _) = self.ops.get(oi)?;
+                    let t = lib.get(doc.ops.get(*doc_i)?.tool_id)?;
+                    Some((p, t.diameter * 0.5, t.flute_length, op_color(*doc_i)))
+                })
+            } else {
+                None
+            };
+            return Some(SimDisplay {
+                mesh: &self.empty_mesh,
+                key: (self.sim_serial, u64::MAX),
+                top: 0.0,
+                bottom: -doc.stock.thickness as f32,
+                tool,
+                show_material: false,
+                show_paths: self.show_paths,
+                show_rapids: self.show_rapids,
+                show_model: self.show_model,
+                side: self.sides.then_some(self.side),
+                progress: Some((&self.progress_lines, (self.sim_serial, self.progress_serial))),
+            });
+        }
         let frame = self.frame.as_ref()?;
         let tool = if self.show_tool {
             frame.pos.and_then(|(p, oi)| {
@@ -415,6 +570,7 @@ impl SimState {
             show_rapids: self.show_rapids,
             show_model: self.show_model,
             side: self.sides.then_some(self.side),
+            progress: None,
         })
     }
 
@@ -430,7 +586,7 @@ impl SimState {
                     .on_hover_text(tr!("Płyta odwrócona; strona B liczona na pełnym materiale, bez obróbki strony A"));
             });
         }
-        if self.worker.is_none() {
+        if self.worker.is_none() && self.timeline.is_empty() {
             ui.label(RichText::new(tr!("Brak ścieżek do symulacji — dodaj operacje w Projekcie 2D.")).weak());
             return;
         }
@@ -482,7 +638,7 @@ impl SimState {
 
         ui.separator();
         ui.strong(tr!("Pokaż"));
-        ui.checkbox(&mut self.show_material, tr!("Materiał (usuwanie)"));
+        ui.add_enabled(self.engine != Engine::Paths, egui::Checkbox::new(&mut self.show_material, tr!("Materiał (usuwanie)")));
         ui.checkbox(&mut self.show_paths, tr!("Ścieżki narzędzia"));
         ui.checkbox(&mut self.show_rapids, tr!("Ruchy szybkie (G0)"));
         ui.checkbox(&mut self.show_tool, tr!("Narzędzie"));
@@ -495,7 +651,10 @@ impl SimState {
             let b = ui
                 .selectable_value(&mut self.engine, Engine::Fast, tr!("Szybki"))
                 .on_hover_text(tr!("Mapa wysokości — natychmiastowe przeliczenie, dla bardzo dużych programów"));
-            if a.clicked() || b.clicked() {
+            let c = ui
+                .selectable_value(&mut self.engine, Engine::Paths, tr!("Ścieżki"))
+                .on_hover_text(tr!("Bez materiału: model docelowy, wykonane ścieżki i ostatnia warstwa wyróżniona — płynnie przy każdej wielkości programu"));
+            if a.clicked() || b.clicked() || c.clicked() {
                 self.engine_auto = false;
                 self.too_big = None;
             }
@@ -529,11 +688,19 @@ impl SimState {
             });
         }));
         let frame_ms = self.frame.as_ref().map_or(0, |f| f.millis);
+        if self.engine == Engine::Paths {
+            ui.label(
+                RichText::new(tr!("Model docelowy, wykonane ścieżki w kolorze operacji, ostatnia warstwa na żółto, przyszłe przyciemnione."))
+                    .small()
+                    .weak(),
+            );
+        } else {
         ui.label(
             RichText::new(tr!("komórka {:.2} mm · przeliczenie {} ms · klatka {} ms", self.cell, self.millis, frame_ms))
                 .small()
                 .weak(),
         );
+        }
 
         ui.separator();
         ui.strong(tr!("Operacje"));
@@ -566,7 +733,9 @@ impl SimState {
         }
 
         ui.separator();
-        if self.collisions.is_empty() {
+        if self.engine == Engine::Paths {
+            ui.label(RichText::new(tr!("Kolizje ruchów szybkich sprawdza silnik Bryła albo Szybki.")).small().weak());
+        } else if self.collisions.is_empty() {
             ui.label(RichText::new(tr!("Kolizje ruchów szybkich: brak")).color(Color32::from_rgb(120, 220, 140)));
         } else {
             ui.label(

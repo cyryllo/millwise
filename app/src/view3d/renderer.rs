@@ -106,6 +106,9 @@ pub struct Renderer {
     sim: Vec<(Option<DynBuf>, Option<DynBuf>)>,
     sim_used: usize,
     dyn_lines: Option<DynBuf>,
+    /// Linie postępu symulacji „Ścieżki” (kawałki).
+    progress: Vec<Option<DynBuf>>,
+    progress_used: usize,
     target: Option<Target>,
     texture_id: Option<eframe::egui::TextureId>,
     pub clear_color: wgpu::Color,
@@ -232,6 +235,8 @@ impl Renderer {
             sim: Vec::new(),
             sim_used: 0,
             dyn_lines: None,
+            progress: Vec::new(),
+            progress_used: 0,
             target: None,
             texture_id: None,
             clear_color: wgpu::Color { r: 0.012, g: 0.014, b: 0.018, a: 1.0 },
@@ -271,6 +276,18 @@ impl Renderer {
     /// Ile kawałków siatki materiału rysować (0 = ukryta).
     pub fn set_sim_chunks(&mut self, n: usize) {
         self.sim_used = n.min(self.sim.len());
+    }
+
+    /// Linie postępu symulacji „Ścieżki” (w kawałkach w granicach limitu karty).
+    pub fn upload_progress_lines(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, lines: &[LineVertex]) {
+        let parts: Vec<&[LineVertex]> = lines.chunks(CHUNK_VERTS).collect();
+        while self.progress.len() < parts.len() {
+            self.progress.push(None);
+        }
+        for (slot, part) in self.progress.iter_mut().zip(&parts) {
+            DynBuf::write(slot, device, queue, bytemuck::cast_slice(part), part.len() as u32, wgpu::BufferUsages::VERTEX, "millwise_progress");
+        }
+        self.progress_used = parts.len();
     }
 
     /// Linie zmieniające się co klatkę (narzędzie).
@@ -370,6 +387,11 @@ impl Renderer {
                 }
             }
             for b in &self.lines {
+                pass.set_pipeline(&self.line_pipeline);
+                pass.set_vertex_buffer(0, b.buf.slice(..));
+                pass.draw(0..b.count, 0..1);
+            }
+            for b in self.progress.iter().take(self.progress_used).flatten().filter(|b| b.count > 0) {
                 pass.set_pipeline(&self.line_pipeline);
                 pass.set_vertex_buffer(0, b.buf.slice(..));
                 pass.draw(0..b.count, 0..1);

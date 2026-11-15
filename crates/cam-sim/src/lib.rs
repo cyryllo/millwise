@@ -318,6 +318,27 @@ pub struct Collision {
     pub depth: f32,
 }
 
+/// Oś czasu programu: punkty ścieżki z czasem dojścia [s] (posuwy roboczy i szybki)
+/// oraz czasy rozpoczęcia operacji.
+pub fn timeline(ops: &[SimOp], rapid_rate: f64) -> (Vec<SimPoint>, Vec<f64>) {
+    let mut path = Vec::new();
+    let mut op_start = Vec::new();
+    let mut t = 0.0;
+    let mut prev: Option<P3> = None;
+    for (oi, op) in ops.iter().enumerate() {
+        op_start.push(t);
+        for &(p, rapid, feed) in op.points {
+            if let Some(a) = prev {
+                let rate = if rapid { rapid_rate } else { feed };
+                t += a.distance(p) / rate.max(1.0) * 60.0;
+            }
+            path.push(SimPoint { p, rapid, op: oi, t });
+            prev = Some(p);
+        }
+    }
+    (path, op_start)
+}
+
 /// Powyżej tylu odcinków w kubełku siatka materiału nie liczy dokładnych ścian.
 const DENSE_BUCKET: usize = 192;
 
@@ -346,23 +367,8 @@ pub struct Simulator {
 impl Simulator {
     /// `rapid_rate` — prędkość ruchów szybkich [mm/min].
     pub fn new(map: Heightmap, ops: &[SimOp], rapid_rate: f64) -> Self {
-        let mut path = Vec::new();
-        let mut tools = Vec::new();
-        let mut op_start = Vec::new();
-        let mut t = 0.0;
-        let mut prev: Option<P3> = None;
-        for (oi, op) in ops.iter().enumerate() {
-            tools.push(op.tool.clone());
-            op_start.push(t);
-            for &(p, rapid, feed) in op.points {
-                if let Some(a) = prev {
-                    let rate = if rapid { rapid_rate } else { feed };
-                    t += a.distance(p) / rate.max(1.0) * 60.0;
-                }
-                path.push(SimPoint { p, rapid, op: oi, t });
-                prev = Some(p);
-            }
-        }
+        let (path, op_start) = timeline(ops, rapid_rate);
+        let tools: Vec<ToolShape> = ops.iter().map(|op| op.tool.clone()).collect();
         let max_r = tools.iter().map(|t: &ToolShape| t.radius).fold(0.5, f64::max);
         let bucket = (max_r * 2.0).max(2.0);
         let size = Vec2::new(map.nx as f64 * map.cell, map.ny as f64 * map.cell);
