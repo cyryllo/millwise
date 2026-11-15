@@ -288,7 +288,7 @@ impl Document {
     pub fn contour_fits(&self, kind: &cam_ops::OpKind, i: usize) -> bool {
         let c = &self.contours[i].contour;
         match kind {
-            cam_ops::OpKind::Pocket(_) => c.closed,
+            cam_ops::OpKind::Pocket(_) | cam_ops::OpKind::VCarve(_) => c.closed,
             cam_ops::OpKind::Drill(_) => c.as_circle().is_some(),
             _ => true,
         }
@@ -299,6 +299,7 @@ impl Document {
         if !self.contour_fits(&self.ops[op].kind, i) {
             return Err(match self.ops[op].kind {
                 cam_ops::OpKind::Pocket(_) => "Kieszeń wymaga krzywej zamkniętej",
+                cam_ops::OpKind::VCarve(_) => "V-carving wymaga krzywej zamkniętej",
                 cam_ops::OpKind::Drill(_) => "Wiercenie wymaga okręgu",
                 _ => "Krzywa nie pasuje do operacji",
             });

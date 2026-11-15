@@ -33,8 +33,6 @@ Plan ustalony, start dopiero po dopracowaniu 2D. Szczegóły w
 
 **Frezowanie 2D**
 
-- [ ] V-carving: grawer frezem V o zmiennej głębokości, np. ładne napisy i
-      ozdoby.
 - [ ] Kieszeń adaptacyjna (HSM): stałe obciążenie freza, szybsze i
       bezpieczniejsze wybieranie dużych kieszeni, zwłaszcza w aluminium.
 - [ ] Obróbka dwustronna: odwracanie detalu z bazowaniem.

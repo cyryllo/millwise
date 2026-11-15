@@ -658,6 +658,13 @@ impl CamApp {
         let machine = self.machine();
         let (kind, depth, label) = self.toolbar.current().op_template(self.doc.stock.thickness)?;
         let tool = self.ops_ui.palette_tool.and_then(|id| self.tools.get(id)).or(self.tools.tools.first())?;
+        // V-carving potrzebuje freza stożkowego — weź pierwszy taki z biblioteki, jeśli wybrany nie jest
+        let is_v = |t: &cam_ops::Tool| matches!(t.kind, cam_ops::ToolKind::VBit { .. } | cam_ops::ToolKind::Engraver { .. });
+        let tool = if matches!(kind, cam_ops::OpKind::VCarve(_)) && !is_v(tool) {
+            self.tools.tools.iter().find(|t| is_v(t)).unwrap_or(tool)
+        } else {
+            tool
+        };
         let mut cut = CutParams { depth, safe_z: machine.safe_z, ..Default::default() };
         cut.apply_tool(tool, &self.doc.stock.material);
         let n = self.doc.ops.iter().filter(|o| o.name.starts_with(label)).count() + 1;

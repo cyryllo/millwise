@@ -627,6 +627,21 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
             changed |= ui.checkbox(&mut p.helix, "").on_hover_text("Dla otworów większych niż narzędzie").changed();
             ui.end_row();
         }
+        OpKind::VCarve(p) => {
+            ui_kit::label(ui, "Dokładność");
+            changed |= ui
+                .add(egui::DragValue::new(&mut p.step).range(0.02..=2.0).speed(0.01).suffix(" mm"))
+                .on_hover_text("Odstęp punktów na brzegu: mniejszy = dokładniej, ale dłużej liczy")
+                .changed();
+            ui.end_row();
+            ui.label("");
+            ui.label(
+                RichText::new("Głębokość wynika z szerokości kształtu; „Głębokość” wyżej to limit. Potrzebny frez V albo grawerski.")
+                    .small()
+                    .color(ui_kit::LABEL),
+            );
+            ui.end_row();
+        }
         OpKind::Engrave(p) => {
             ui_kit::label(ui, "Strona");
             ui.horizontal(|ui| {

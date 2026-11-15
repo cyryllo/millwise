@@ -182,6 +182,7 @@ impl View2D {
                     } else {
                         let msg = match kind {
                             cam_ops::OpKind::Pocket(_) => "Kieszeń wymaga krzywej zamkniętej",
+                            cam_ops::OpKind::VCarve(_) => "V-carving wymaga krzywej zamkniętej",
                             cam_ops::OpKind::Drill(_) => "Wiercenie wymaga okręgu",
                             _ => "Krzywa nie pasuje do operacji",
                         };

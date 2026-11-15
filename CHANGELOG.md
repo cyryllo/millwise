@@ -32,6 +32,13 @@ Version numbers:
   will happen; everything is one step in the history. Holes without a drill
   of their size are milled along a helix when they are larger than the
   cutter.
+- **V-carving** (Grawer → V-carve): a V or engraving cutter follows the
+  middle of each shape with a changing depth — deep where the shape is wide,
+  shallow in narrow places, coming up to nothing in sharp corners — so the
+  cone always touches both walls. The set depth is a limit (wider areas get a
+  flat bottom, with a note); deep carving goes down in steps. Letter holes are
+  left standing. Straight stretches of the path are merged, so the G-code is
+  short and the simulation quick.
 - **Text** (Grawer → Tekst): type a text (several lines with Enter), set the
   height of capital letters, the letter spacing and the font — Ubuntu or the
   fixed-width Hack built in, or any .ttf / .otf file — and click the drawing

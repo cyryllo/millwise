@@ -211,6 +211,22 @@ impl Default for EngraveParams {
     }
 }
 
+/// V-carving: frez V po osi kształtu, głębokość wynika z szerokości.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VCarveParams {
+    /// Odstęp punktów na brzegu [mm] (mniejszy = dokładniej, wolniej liczy).
+    pub step: f64,
+    /// Ostrzegaj, gdy limit głębokości zostawia płaskie dno.
+    pub warn_flat: bool,
+}
+
+impl Default for VCarveParams {
+    fn default() -> Self {
+        Self { step: 0.2, warn_flat: true }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum OpKind {
     Profile(ProfileParams),
@@ -218,6 +234,8 @@ pub enum OpKind {
     Drill(DrillParams),
     /// Prowadzenie po linii (grawer, rowki) — środkiem lub bokiem narzędzia.
     Engrave(EngraveParams),
+    /// V-carving: frez V po osi kształtu ze zmienną głębokością.
+    VCarve(VCarveParams),
 }
 
 impl OpKind {
@@ -227,6 +245,7 @@ impl OpKind {
             OpKind::Pocket(_) => "Kieszeń",
             OpKind::Drill(_) => "Wiercenie",
             OpKind::Engrave(_) => "Grawer",
+            OpKind::VCarve(_) => "V-carving",
         }
     }
 }
@@ -271,6 +290,7 @@ pub fn generate(op: &Operation, tool: &Tool, contours: &[Contour]) -> OpResult {
         OpKind::Pocket(p) => crate::pocket::generate(&op.cut, p, tool, contours, &mut res),
         OpKind::Drill(p) => crate::drill::generate(&op.cut, p, tool, contours, &mut res),
         OpKind::Engrave(p) => crate::engrave::generate(&op.cut, p, tool, contours, &mut res),
+        OpKind::VCarve(p) => crate::vcarve::generate(&op.cut, p, tool, contours, &mut res),
     }
     res.toolpath.retract(op.cut.safe_z);
     res

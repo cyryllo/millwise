@@ -161,7 +161,7 @@ impl Sub {
 
     /// Jeszcze nie zaimplementowane.
     pub fn soon(&self) -> bool {
-        matches!(self, Sub::PocketAdaptive | Sub::EngVcarve)
+        matches!(self, Sub::PocketAdaptive)
     }
 
     /// Polecenia wykonywane od razu po kliknięciu (nie zmieniają trybu).
@@ -199,6 +199,7 @@ impl Sub {
             EngCenter => (engrave(EngraveSide::Center), 0.5_f64.min(thickness), "Grawer"),
             EngLeft => (engrave(EngraveSide::Left), 0.5_f64.min(thickness), "Grawer z lewej"),
             EngRight => (engrave(EngraveSide::Right), 0.5_f64.min(thickness), "Grawer z prawej"),
+            EngVcarve => (OpKind::VCarve(Default::default()), 3.0_f64.min(thickness), "V-carving"),
             _ => return None,
         })
     }
@@ -218,6 +219,7 @@ impl Sub {
                 EngraveSide::Left => Sub::EngLeft,
                 EngraveSide::Right => Sub::EngRight,
             },
+            OpKind::VCarve(_) => Sub::EngVcarve,
         }
     }
 }
