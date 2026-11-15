@@ -291,6 +291,27 @@ impl Document {
         self.label(Mark::new(Icon::Stock).badge(Badge::Add), tr!("Model 3D: {}", name));
     }
 
+    /// Obrys modelu z góry jako krzywe na warstwie MODEL: sylwetka (`above` = None)
+    /// albo obszar, w którym model jest wyżej niż Z = `above`. Zwraca liczbę krzywych.
+    pub fn model_outline(&mut self, above: Option<f64>) -> usize {
+        let Some(h) = self.stock.model.as_ref().and_then(|m| m.heights()) else { return 0 };
+        let level = above.unwrap_or(f64::NEG_INFINITY);
+        let contours = h.outline_above(level);
+        let n = contours.len();
+        if n == 0 {
+            return 0;
+        }
+        let source = match above {
+            None => tr!("Model: sylwetka").to_string(),
+            Some(z) => tr!("Model: obrys powyżej Z {:.2}", z),
+        };
+        let items: Vec<ClipItem> =
+            contours.into_iter().map(|contour| ClipItem { contour, layer: "MODEL".into(), source: source.clone() }).collect();
+        self.add_contours(&items, Vec2::ZERO);
+        self.label(Mark::new(Icon::Curve).badge(Badge::Add), tr!("{} ({} krz.)", source, n));
+        n
+    }
+
     pub fn file_name(&self) -> String {
         self.project_path
             .as_ref()
@@ -1183,7 +1204,7 @@ mod model_tests {
     #[test]
     fn model_sets_the_stock_and_moves_with_the_zero() {
         let mesh = cam_io::Mesh {
-            tris: vec![[[0.0, 0.0, 0.0], [40.0, 0.0, 0.0], [40.0, 30.0, 12.0]], [[0.0, 30.0, 12.0], [0.0, 0.0, 0.0], [40.0, 30.0, 0.0]]],
+            tris: vec![[[0.0, 0.0, 0.0], [40.0, 0.0, 0.0], [40.0, 30.0, 12.0]], [[0.0, 0.0, 0.0], [40.0, 30.0, 12.0], [0.0, 30.0, 12.0]]],
         };
         let mut d = Document::default();
         d.finish_load();
@@ -1199,5 +1220,17 @@ mod model_tests {
         d.set_zero(c);
         let fp2 = d.stock.model.as_ref().unwrap().footprint();
         assert!((fp2.center().x).abs() < 1e-6 && (fp2.center().y).abs() < 1e-6);
+        // sylwetka jako krzywa na warstwie MODEL, w miejscu modelu
+        assert_eq!(d.model_outline(None), 1);
+        let c = d.contours.last().unwrap();
+        assert_eq!(d.layers[c.layer].name, "MODEL");
+        let bb = c.contour.bbox();
+        assert!(bb.min.distance(fp2.min) < 0.2 && bb.max.distance(fp2.max) < 0.2, "{bb:?} {fp2:?}");
+        // obrys powyżej połowy wysokości: węższy pas (skośna płaszczyzna)
+        assert_eq!(d.model_outline(Some(-6.0)), 1);
+        let half = d.contours.last().unwrap().contour.bbox();
+        assert!((half.size().x - 40.0).abs() < 0.3 && (half.size().y - 15.0).abs() < 0.3, "{:?}", half.size());
+        // nad modelem nic
+        assert_eq!(d.model_outline(Some(1.0)), 0);
     }
 }

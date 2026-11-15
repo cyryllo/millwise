@@ -121,6 +121,8 @@ pub struct CamApp {
     gcode_preview: Option<Vec<String>>,
     about_open: bool,
     shortcuts_open: bool,
+    /// Wysokość obrysu modelu 3D („Obrys powyżej Z”).
+    outline_z: f64,
     /// Grafika, przez którą działa okno (do „O programie”).
     graphics: String,
     logo: Option<egui::TextureHandle>,
@@ -168,6 +170,7 @@ impl CamApp {
             gcode_preview: None,
             about_open: false,
             shortcuts_open: false,
+            outline_z: -1.0,
             graphics: cc
                 .wgpu_render_state
                 .as_ref()
@@ -215,6 +218,13 @@ impl CamApp {
                     "about" => app.about_open = true,
                     "keys" => app.shortcuts_open = true,
                     "auto" => app.open_automation(),
+                    "silhouette" => {
+                        app.doc.model_outline(None);
+                    }
+                    w if w.starts_with("outline=") => {
+                        let z = w[8..].parse().unwrap_or(-1.0);
+                        app.doc.model_outline(Some(z));
+                    }
                     w if w.starts_with("op=") => {
                         app.doc.selected_op = w[3..].parse().ok().filter(|&i: &usize| i < app.doc.ops.len());
                     }
@@ -1569,6 +1579,7 @@ impl CamApp {
         let mut changed = false;
         let mut remove = false;
         let mut fit_stock = false;
+        let mut outline: Option<Option<f64>> = None;
         let thickness = self.doc.stock.thickness;
         let Some(m) = self.doc.stock.model.as_mut() else { return };
         ui_kit::card(ui, |ui| {
@@ -1614,6 +1625,27 @@ impl CamApp {
                     .clicked();
             }
             ui.label(RichText::new(tr!("Góra modelu na Z = −naddatek; zero w lewym dolnym rogu półfabrykatu.")).small().color(ui_kit::LABEL));
+            ui.add_space(4.0);
+            ui.label(RichText::new(tr!("KRZYWE Z MODELU")).small().strong().color(ui_kit::LABEL));
+            if ui
+                .button(tr!("Sylwetka na krzywe"))
+                .on_hover_text(tr!("Obrys modelu widzianego z góry — np. do wycięcia profilem albo jako granica obróbki"))
+                .clicked()
+            {
+                outline = Some(None);
+            }
+            ui.horizontal(|ui| {
+                if ui
+                    .button(tr!("Obrys powyżej Z na krzywe"))
+                    .on_hover_text(tr!("Obszar, w którym model jest wyżej niż podane Z — np. kieszeń 2,5D do tej głębokości wokół wyspy"))
+                    .clicked()
+                {
+                    outline = Some(Some(self.outline_z));
+                }
+                let top = -m.top_allowance;
+                let bottom = top - m.size()[2];
+                ui.add(egui::DragValue::new(&mut self.outline_z).range(bottom..=top).speed(0.1).prefix("Z ").suffix(" mm"));
+            });
         });
         if changed {
             m.refresh();
@@ -1625,6 +1657,13 @@ impl CamApp {
             if let Some(m) = &self.doc.stock.model {
                 self.doc.stock.thickness = m.stock_thickness();
                 self.doc.revision += 1;
+            }
+        }
+        if let Some(above) = outline {
+            let now = Self::now(ui.ctx());
+            let n = self.doc.model_outline(above);
+            if n == 0 {
+                self.view2d.flash(tr!("Model nie wystaje ponad tę wysokość"), now);
             }
         }
         if remove {

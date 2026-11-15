@@ -20,8 +20,13 @@ Version numbers:
   above it) and the program zero at the stock corner as usual. The 2D view
   shows it from the top, shaded by height; the simulation shows it as a
   see-through solid (with a switch). The project file keeps the model inside,
-  so it opens without the STL. Changes to the model can be undone. Toolpaths
-  on the model come in the next steps.
+  so it opens without the STL. Changes to the model can be undone.
+
+- **Curves from a 3D model.** „Silhouette to curves” adds the outline of the
+  model seen from the top, and „Outline above Z to curves” the area where the
+  model is higher than the given Z, as curves on a new MODEL layer. They work
+  with all 2D operations — for example a profile that cuts the part out, or a
+  pocket around an island down to that depth.
 
 - **English user interface.** Widok → Język / Language switches between
   Polski and English at once, without a restart; the choice is remembered.

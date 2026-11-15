@@ -3,7 +3,8 @@
 
 use cam_io::Mesh;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::sync::Arc;
+use cam_ops::model::ModelHeights;
+use std::sync::{Arc, OnceLock};
 
 /// Macierz obrotu o wielokrotności 90° (wiersze).
 pub type Rot = [[i8; 3]; 3];
@@ -27,6 +28,8 @@ pub struct Model3D {
     placed: Arc<Vec<[[f32; 3]; 3]>>,
     /// Rozmiar po ustawieniu [mm]: X, Y, Z.
     size: [f64; 3],
+    /// Mapa wysokości ustawionego modelu (liczona przy pierwszym użyciu).
+    heights: Arc<OnceLock<Option<Arc<ModelHeights>>>>,
 }
 
 impl PartialEq for Model3D {
@@ -72,6 +75,7 @@ impl Model3D {
             pos: [0.0, 0.0],
             placed: Arc::new(Vec::new()),
             size: [0.0; 3],
+            heights: Arc::default(),
         };
         m.refresh();
         m
@@ -111,6 +115,17 @@ impl Model3D {
         });
         self.size = [(hi[0] - lo[0]) as f64, (hi[1] - lo[1]) as f64, h as f64];
         self.placed = Arc::new(tris);
+        self.heights = Arc::default();
+    }
+
+    /// Mapa wysokości z góry (oczko zależne od rozmiaru: 0,05–0,5 mm).
+    pub fn heights(&self) -> Option<Arc<ModelHeights>> {
+        self.heights
+            .get_or_init(|| {
+                let cell = (self.size[0].max(self.size[1]) / 2000.0).clamp(0.05, 0.5);
+                ModelHeights::from_triangles(&self.placed, cell).map(Arc::new)
+            })
+            .clone()
     }
 
     pub fn placed(&self) -> &[[[f32; 3]; 3]] {

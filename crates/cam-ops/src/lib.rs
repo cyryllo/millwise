@@ -1,5 +1,6 @@
 //! Operacje CAM 2.5D: profil, kieszeń, wiercenie, grawer → ścieżki narzędzia.
 
+pub mod model;
 pub mod operation;
 pub mod path;
 pub mod tool;
