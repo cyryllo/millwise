@@ -317,6 +317,11 @@ impl Default for SimState {
 }
 
 impl SimState {
+    /// Widok „Ścieżki” (dla programisty / zrzutów ekranu).
+    pub fn choose_paths(&mut self) {
+        self.choice = Some(false);
+    }
+
     pub fn with_gpu(on: bool) -> Self {
         SimState { gpu_enabled: on, ..Default::default() }
     }
@@ -569,9 +574,11 @@ impl SimState {
             }
         }
         let hot = Color32::from_rgb(255, 225, 60);
+        // tylko bieżąca operacja — ścieżki wcześniejszych (np. zgrubnej) nie zasłaniają
+        let cur_op = tl[last].op;
         for i in 1..=last {
             let p = tl[i];
-            if p.rapid {
+            if p.rapid || p.op != cur_op {
                 continue;
             }
             let (a, b) = seg(i);
@@ -607,6 +614,7 @@ impl SimState {
                 show_model: self.show_model,
                 side: self.sides.then_some(self.side),
                 progress: (!gpu).then_some((&self.progress_lines[..], (self.sim_serial, self.progress_serial))),
+                only_op: if gpu { None } else { self.timeline_pos().and_then(|(k, _)| self.ops.get(self.timeline[k].op)).map(|o| o.0) },
                 gpu: gpu.then(|| crate::view3d::gpu_sim::GpuSimInput {
                     timeline: &self.timeline,
                     tools: &self.gpu_tools,
@@ -642,6 +650,7 @@ impl SimState {
             side: self.sides.then_some(self.side),
             progress: None,
             gpu: None,
+            only_op: None,
         })
     }
 

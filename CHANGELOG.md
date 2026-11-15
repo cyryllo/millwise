@@ -103,8 +103,9 @@ Version numbers:
 - **„Toolpaths” simulation mode**: no material removal is computed — the
   target model is shown as a solid, the toolpaths done so far in the
   operation colour, the layer being cut now (the current Z level, or the
-  current line of parallel finishing) in yellow, and the rest dimmed.
-  Playback and seeking are instant for any program size.
+  current line of parallel finishing) in yellow, and the rest dimmed. Only
+  the operation being run is shown — e.g. the roughing passes disappear
+  during finishing. Playback and seeking are instant for any program size.
 
 - **Material simulation on the graphics card (GPU engine).** Each tool move
   is drawn by the graphics card into a height texture as the exact shape of

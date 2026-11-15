@@ -22,7 +22,7 @@ pub struct View3D {
     pub fit_requested: bool,
     /// Ustaw widok od spodu przy następnej klatce (dla programisty).
     pub bottom_view: bool,
-    built_key: Option<(u64, u8, u8)>,
+    built_key: Option<(u64, u8, u64)>,
     sim_key: Option<(u64, u64)>,
     progress_key: Option<(u64, u64)>,
     auto_fit: bool,
@@ -101,6 +101,7 @@ impl View3D {
             // zakładka modelu i symulacja „Ścieżki”: model docelowy jako pełna bryła
             model_solid: kind == ViewKind::Model || sim.is_some_and(|s| s.progress.is_some()),
             faint_paths: sim.is_some_and(|s| s.progress.is_some()),
+            only_op: sim.and_then(|s| s.only_op),
         };
         let scene_key = (doc.revision, opts.key(), opts.key2());
         if self.built_key != Some(scene_key) {
@@ -341,6 +342,8 @@ pub struct SimDisplay<'a> {
     pub progress: Option<(&'a [(cam_ops::P3, cam_ops::P3, Color32)], (u64, u64))>,
     /// Silnik „GPU”: materiał liczony i rysowany przez kartę graficzną.
     pub gpu: Option<gpu_sim::GpuSimInput<'a>>,
+    /// Pokazywać ścieżki tylko tej operacji (indeks w dokumencie) — widok „Ścieżki”.
+    pub only_op: Option<usize>,
 }
 
 struct SceneOpts {
@@ -354,6 +357,8 @@ struct SceneOpts {
     model_solid: bool,
     /// Ścieżki przyciemnione (pod liniami postępu w symulacji „Ścieżki”).
     faint_paths: bool,
+    /// Tylko ścieżki tej operacji (widok „Ścieżki”: bieżąca operacja).
+    only_op: Option<usize>,
 }
 
 impl SceneOpts {
@@ -372,8 +377,8 @@ impl SceneOpts {
             | (self.model_solid as u8) << 7
     }
 
-    fn key2(&self) -> u8 {
-        self.faint_paths as u8
+    fn key2(&self) -> u64 {
+        self.faint_paths as u64 | (self.only_op.map_or(0, |i| i as u64 + 1) << 1)
     }
 }
 
@@ -475,7 +480,7 @@ fn build_scene(doc: &Document, opts: &SceneOpts) -> (SceneData, Vec3, f32) {
     // ścieżki narzędzia
     for (i, (op, cache)) in doc.ops.iter().zip(&doc.op_cache).enumerate() {
         let Some(cache) = cache else { continue };
-        if !op.enabled || (!opts.paths && !opts.rapids) || opts.side.is_some_and(|s| s != op.side) {
+        if !op.enabled || (!opts.paths && !opts.rapids) || opts.side.is_some_and(|s| s != op.side) || opts.only_op.is_some_and(|o| o != i) {
             continue;
         }
         // strona B w symulacji: ścieżka w układzie odwróconej płyty (tak jak w G-code)

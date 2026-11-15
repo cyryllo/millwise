@@ -229,6 +229,7 @@ impl CamApp {
                     }
                     "model" => app.mode = ViewMode::Model,
                     "hidepaths" => app.sim.show_paths = false,
+                    "simpaths" => app.sim.choose_paths(),
                     "nopaths" => {
                         app.sim.show_paths = false;
                         app.sim.show_model = false;
