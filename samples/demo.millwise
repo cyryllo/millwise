@@ -1851,7 +1851,8 @@
     "thickness": 18.0,
     "margin": 5.0,
     "material": "Drewno",
-    "two_sided": null
+    "two_sided": null,
+    "model": null
   },
   "operations": [
     {

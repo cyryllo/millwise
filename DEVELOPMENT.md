@@ -9,7 +9,9 @@ cargo run --release -p millwise -- samples/demo.millwise samples/test.dxf   # th
 cargo test --workspace                                     # all tests
 ```
 
-`samples/test.dxf` is made by `cargo run -p cam-io --example make_sample`;
+`samples/test.dxf` is made by `cargo run -p cam-io --example make_sample`,
+`samples/model.stl` (a plate with a hill, for 3D work) by
+`cargo run -p cam-io --example make_stl`;
 `samples/demo.millwise` by the test `cargo test -p millwise project_roundtrip`.
 
 Simulation timing (release build, prints the time of each stage):

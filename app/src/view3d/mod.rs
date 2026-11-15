@@ -75,6 +75,7 @@ impl View3D {
             rapids: sim.is_none_or(|s| s.show_rapids),
             contours: sim.is_none(),
             side: sim.and_then(|s| s.side),
+            model: sim.is_none_or(|s| s.show_model),
         };
         let scene_key = (doc.revision, opts.key());
         if self.built_key != Some(scene_key) {
@@ -262,6 +263,7 @@ pub struct SimDisplay<'a> {
     pub show_material: bool,
     pub show_paths: bool,
     pub show_rapids: bool,
+    pub show_model: bool,
     /// Obróbka dwustronna: pokazywana strona (B w układzie odwróconej płyty).
     pub side: Option<cam_ops::Side>,
 }
@@ -272,6 +274,7 @@ struct SceneOpts {
     rapids: bool,
     contours: bool,
     side: Option<cam_ops::Side>,
+    model: bool,
 }
 
 impl SceneOpts {
@@ -281,7 +284,12 @@ impl SceneOpts {
             Some(cam_ops::Side::A) => 1,
             Some(cam_ops::Side::B) => 2,
         };
-        self.stock_box as u8 | (self.paths as u8) << 1 | (self.rapids as u8) << 2 | (self.contours as u8) << 3 | side << 4
+        self.stock_box as u8
+            | (self.paths as u8) << 1
+            | (self.rapids as u8) << 2
+            | (self.contours as u8) << 3
+            | side << 4
+            | (self.model as u8) << 6
     }
 }
 
@@ -296,6 +304,18 @@ fn build_scene(doc: &Document, opts: &SceneOpts) -> (SceneData, Vec3, f32) {
     let size = max - min;
     let center = (min + max) * 0.5;
     let radius = size.length() * 0.5;
+
+    // model 3D (STL): półprzezroczysty — w materiale widać go tam, gdzie materiał jest już zdjęty
+    if let (true, Some(m)) = (opts.model, &doc.stock.model) {
+        let col = [0.42, 0.62, 0.92, 0.45];
+        for t in m.placed() {
+            let p = t.map(|v| Vec3::new(v[0], v[1], v[2]));
+            let n = (p[1] - p[0]).cross(p[2] - p[0]).normalize_or_zero();
+            for v in p {
+                s.transparent.push(MeshVertex { pos: v.to_array(), normal: n.to_array(), color: col });
+            }
+        }
+    }
 
     // siatka na poziomie stołu (spód materiału)
     let step = nice_step(size.x.max(size.y) / 10.0);

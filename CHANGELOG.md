@@ -11,6 +11,18 @@ Version numbers:
 
 ### Added
 
+- **STL models (first step of 3D machining).** Open an STL file (binary or
+  text) like a drawing — Plik → Otwórz, Dodaj, drag and drop or the command
+  line — or add it to a project. The „3D model” box on the right shows its
+  size and sets the file units (mm or inches), the scale, 90° rotations about
+  X, Y and Z and the stock left above the model; the stock thickness follows
+  the model's height. The model sits with its top at Z0 (or lower by the stock
+  above it) and the program zero at the stock corner as usual. The 2D view
+  shows it from the top, shaded by height; the simulation shows it as a
+  see-through solid (with a switch). The project file keeps the model inside,
+  so it opens without the STL. Changes to the model can be undone. Toolpaths
+  on the model come in the next steps.
+
 - **English user interface.** Widok → Język / Language switches between
   Polski and English at once, without a restart; the choice is remembered.
   On the first start Millwise follows the system language (Polish for a

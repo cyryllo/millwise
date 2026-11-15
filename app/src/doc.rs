@@ -112,11 +112,13 @@ pub struct Stock {
     pub material: String,
     /// Obróbka dwustronna (None = jednostronna).
     pub two_sided: Option<TwoSided>,
+    /// Model 3D (STL) w półfabrykacie.
+    pub model: Option<crate::model3d::Model3D>,
 }
 
 impl Default for Stock {
     fn default() -> Self {
-        Self { thickness: 18.0, margin: 5.0, material: "Drewno".into(), two_sided: None }
+        Self { thickness: 18.0, margin: 5.0, material: "Drewno".into(), two_sided: None, model: None }
     }
 }
 
@@ -257,11 +259,36 @@ impl Document {
         for c in &mut self.contours {
             c.source = c.source.min(last);
         }
-        self.bbox = self.contours.iter().map(|c| c.bbox).reduce(|a, b| a.union(&b));
+        self.recompute_bbox();
         self.selected = vec![false; self.contours.len()];
         self.op_cache = self.ops.iter().map(|_| None).collect();
         self.ops_dirty = true;
         self.revision = 1;
+    }
+
+    /// Obrys rysunku i modelu 3D (z góry).
+    pub fn recompute_bbox(&mut self) {
+        let model = self.stock.model.as_ref().map(|m| m.footprint());
+        self.bbox = self.contours.iter().map(|c| c.bbox).chain(model).reduce(|a, b| a.union(&b));
+    }
+
+    /// Wstawia model 3D (zastępuje poprzedni): obok rysunku albo w zerze,
+    /// grubość półfabrykatu według wysokości modelu.
+    pub fn set_model(&mut self, mut m: crate::model3d::Model3D) {
+        let name = m.name.clone();
+        self.stock.model = None;
+        self.recompute_bbox();
+        if let Some(b) = self.bbox {
+            m.pos = [b.max.x + 10.0, b.min.y];
+        }
+        m.refresh();
+        self.stock.thickness = m.stock_thickness();
+        self.stock.model = Some(m);
+        if !self.sources.contains(&name) {
+            self.sources.push(name.clone());
+        }
+        self.geometry_changed();
+        self.label(Mark::new(Icon::Stock).badge(Badge::Add), tr!("Model 3D: {}", name));
     }
 
     pub fn file_name(&self) -> String {
@@ -521,7 +548,7 @@ impl Document {
     }
 
     fn geometry_changed(&mut self) {
-        self.bbox = self.contours.iter().map(|c| c.bbox).reduce(|a, b| a.union(&b));
+        self.recompute_bbox();
         self.ops_dirty = true;
         self.revision += 1;
         self.geom_revision += 1;
@@ -661,6 +688,9 @@ impl Document {
         for i in 0..self.contours.len() {
             self.contours[i].contour.translate(d);
             self.rebuild(i);
+        }
+        if let Some(m) = &mut self.stock.model {
+            m.translate(d);
         }
         self.geometry_changed();
     }
@@ -896,6 +926,9 @@ impl Document {
         for i in 0..self.contours.len() {
             self.contours[i].contour.translate(-p);
             self.rebuild(i);
+        }
+        if let Some(m) = &mut self.stock.model {
+            m.translate(Vec2::new(0.0, 0.0) - p);
         }
         self.geometry_changed();
         self.label(Mark::new(Icon::ZeroPick), tr!("Zero programu"));
@@ -1140,5 +1173,31 @@ mod two_sided_tests {
         let [a, b] = d.pin_centers().unwrap();
         assert_eq!(a, Vec2::new(10.0 - 8.0 - 3.0, 25.0));
         assert_eq!(b, Vec2::new(60.0 + 8.0 + 3.0, 25.0));
+    }
+}
+
+#[cfg(test)]
+mod model_tests {
+    use super::*;
+
+    #[test]
+    fn model_sets_the_stock_and_moves_with_the_zero() {
+        let mesh = cam_io::Mesh {
+            tris: vec![[[0.0, 0.0, 0.0], [40.0, 0.0, 0.0], [40.0, 30.0, 12.0]], [[0.0, 30.0, 12.0], [0.0, 0.0, 0.0], [40.0, 30.0, 0.0]]],
+        };
+        let mut d = Document::default();
+        d.finish_load();
+        d.set_model(crate::model3d::Model3D::new("m.stl".into(), mesh, 1.0));
+        assert_eq!(d.stock.thickness, 12.0, "grubość według wysokości modelu");
+        d.place_at_origin();
+        let sb = d.stock_box().unwrap();
+        assert!(sb.min.distance(Vec2::new(0.0, 0.0)) < 1e-9, "róg półfabrykatu w zerze");
+        let fp = d.stock.model.as_ref().unwrap().footprint();
+        assert!((fp.min.x - d.stock.margin).abs() < 1e-9 && (fp.size().x - 40.0).abs() < 1e-6);
+        // zero w środku: model przesuwa się razem z rysunkiem
+        let c = sb.center();
+        d.set_zero(c);
+        let fp2 = d.stock.model.as_ref().unwrap().footprint();
+        assert!((fp2.center().x).abs() < 1e-6 && (fp2.center().y).abs() < 1e-6);
     }
 }

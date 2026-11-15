@@ -298,6 +298,38 @@ impl View2D {
             b.add_point(self.to_world(rect, rect.max));
             b
         };
+        // model 3D z góry: trójkąty skierowane w górę, jaśniejsze wyżej
+        if let Some(m) = &doc.stock.model {
+            let fp = m.footprint();
+            if intersects(&fp, &view_bb) {
+                let h = m.size()[2].max(1e-3) as f32;
+                let z_top = -(m.top_allowance as f32);
+                let (lo, hi) = (Color32::from_rgb(52, 66, 84), Color32::from_rgb(130, 160, 196));
+                let mut mesh = egui::Mesh::default();
+                for t in m.placed() {
+                    let (a, b, c) = (t[0], t[1], t[2]);
+                    // tylko trójkąty widoczne z góry (normalna w górę)
+                    if (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]) <= 0.0 {
+                        continue;
+                    }
+                    let f = (((a[2] + b[2] + c[2]) / 3.0 - (z_top - h)) / h).clamp(0.0, 1.0);
+                    let col = Color32::from_rgb(
+                        (lo.r() as f32 + (hi.r() as f32 - lo.r() as f32) * f) as u8,
+                        (lo.g() as f32 + (hi.g() as f32 - lo.g() as f32) * f) as u8,
+                        (lo.b() as f32 + (hi.b() as f32 - lo.b() as f32) * f) as u8,
+                    );
+                    let base = mesh.vertices.len() as u32;
+                    for p in [a, b, c] {
+                        mesh.colored_vertex(self.to_screen(rect, Vec2::new(p[0] as f64, p[1] as f64)), col);
+                    }
+                    mesh.add_triangle(base, base + 1, base + 2);
+                }
+                painter.add(egui::Shape::mesh(mesh));
+                let r = Rect::from_two_pos(self.to_screen(rect, fp.min), self.to_screen(rect, fp.max));
+                painter.rect_stroke(r, 0.0, Stroke::new(1.0, Color32::from_rgb(130, 160, 196)), StrokeKind::Middle);
+            }
+        }
+
         // kolejność: zwykłe, zaznaczone, podświetlony (na wierzchu)
         let (op_kind, members, op_col) = match &inter {
             Interaction::Op { kind, members, color } => (Some(*kind), *members, *color),

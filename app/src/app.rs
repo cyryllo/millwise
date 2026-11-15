@@ -19,6 +19,11 @@ use std::path::{Path, PathBuf};
 /// Właściciel praw autorskich wyświetlany w „O programie”.
 const COPYRIGHT_HOLDER: &str = "Cyryl Sochacki";
 
+/// Czy plik to model STL (po rozszerzeniu).
+fn is_stl(p: &Path) -> bool {
+    p.extension().is_some_and(|e| e.eq_ignore_ascii_case("stl"))
+}
+
 /// Ustawienia narzędzia „Tekst” i podgląd zarysów liter (względem punktu wstawienia).
 struct TextTool {
     text: String,
@@ -229,8 +234,38 @@ impl CamApp {
         let is_project = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("millwise") || e.eq_ignore_ascii_case("camsoft"));
         if is_project {
             self.open_project(&path);
+        } else if is_stl(&path) {
+            // STL otwierany jako nowy projekt z samym modelem
+            let mut doc = Document::default();
+            doc.stock = std::mem::take(&mut self.doc.stock);
+            doc.stock.model = None;
+            doc.stock.two_sided = None;
+            doc.path = Some(path.clone());
+            doc.finish_load();
+            self.set_doc(doc);
+            self.add_stl(&path);
+            self.doc.place_at_origin();
+            self.doc.edit_label = None;
+            self.history.reset(&self.doc, tr!("Otwarto {}", self.doc.file_name()));
         } else {
             self.open_dxf(path);
+        }
+    }
+
+    /// Wczytuje STL jako model 3D bieżącego projektu (zastępuje poprzedni model).
+    fn add_stl(&mut self, path: &Path) -> bool {
+        match cam_io::load_stl(path) {
+            Ok(mesh) => {
+                let name = path.file_name().map_or("model.stl".into(), |n| n.to_string_lossy().into_owned());
+                self.doc.set_model(crate::model3d::Model3D::new(name, mesh, 1.0));
+                self.view2d.fit_requested = true;
+                self.view3d.fit_requested = true;
+                true
+            }
+            Err(e) => {
+                self.error = Some(format!("{}: {e:#}", path.display()));
+                false
+            }
         }
     }
 
@@ -287,8 +322,9 @@ impl CamApp {
 
     fn open_dialog(&mut self) {
         let mut dlg = rfd::FileDialog::new()
-            .add_filter("DXF i projekty", &["dxf", "DXF", "millwise", "camsoft"])
+            .add_filter("DXF, STL i projekty", &["dxf", "DXF", "stl", "STL", "millwise", "camsoft"])
             .add_filter("DXF", &["dxf", "DXF"])
+            .add_filter("STL", &["stl", "STL"])
             .add_filter("Projekt Millwise", &["millwise", "camsoft"]);
         if let Some(dir) = self.doc.project_path.as_ref().or(self.doc.path.as_ref()).and_then(|p| p.parent()) {
             dlg = dlg.set_directory(dir);
@@ -302,8 +338,9 @@ impl CamApp {
     fn add_dialog(&mut self) {
         let mut dlg = rfd::FileDialog::new()
             .set_title(tr!("Dodaj do projektu"))
-            .add_filter("DXF i projekty", &["dxf", "DXF", "millwise", "camsoft"])
+            .add_filter("DXF, STL i projekty", &["dxf", "DXF", "stl", "STL", "millwise", "camsoft"])
             .add_filter("DXF", &["dxf", "DXF"])
+            .add_filter("STL", &["stl", "STL"])
             .add_filter("Projekt Millwise", &["millwise", "camsoft"]);
         if let Some(dir) = self.doc.project_path.as_ref().or(self.doc.path.as_ref()).and_then(|p| p.parent()) {
             dlg = dlg.set_directory(dir);
@@ -317,8 +354,14 @@ impl CamApp {
     fn add_files(&mut self, paths: Vec<PathBuf>) {
         let mut added = Vec::new();
         for path in paths {
-            if self.doc.contours.is_empty() && self.doc.ops.is_empty() {
+            if self.doc.contours.is_empty() && self.doc.ops.is_empty() && self.doc.stock.model.is_none() {
                 self.open_any(path);
+                continue;
+            }
+            if is_stl(&path) {
+                if self.add_stl(&path) {
+                    added.push(tr!("{}: model 3D", self.doc.stock.model.as_ref().map_or(String::new(), |m| m.name.clone())));
+                }
                 continue;
             }
             let is_project =
@@ -1379,6 +1422,10 @@ impl CamApp {
         self.machine_card(ui);
         ui.add_space(6.0);
         self.stock_card(ui);
+        if self.doc.stock.model.is_some() {
+            ui.add_space(6.0);
+            self.model_card(ui);
+        }
         ui.add_space(6.0);
         self.two_sided_card(ui);
         ui.add_space(6.0);
@@ -1406,7 +1453,7 @@ impl CamApp {
                         .clicked();
                 });
             });
-            if shown.is_empty() {
+            if shown.is_empty() && doc.stock.model.is_none() {
                 ui.label(RichText::new(tr!("Otwórz albo dodaj plik DXF lub projekt.")).small().color(ui_kit::LABEL));
             }
             for &i in &shown {
@@ -1487,9 +1534,10 @@ impl CamApp {
                     });
                 }
             }
-            if doc.path.is_some() || !doc.warnings.is_empty() {
+            let units = doc.path.is_some() && !doc.unit_name.is_empty();
+            if units || !doc.warnings.is_empty() {
                 ui.add_space(2.0);
-                if doc.path.is_some() {
+                if units {
                     ui.label(RichText::new(tr!("Jednostki DXF: {}", doc.unit_name)).small().color(ui_kit::LABEL));
                 }
                 for w in &doc.warnings {
@@ -1513,6 +1561,77 @@ impl CamApp {
         }
         if add {
             self.add_dialog();
+        }
+    }
+
+    /// Model 3D: wymiary, jednostki, skala, obrót, naddatek nad modelem.
+    fn model_card(&mut self, ui: &mut egui::Ui) {
+        let mut changed = false;
+        let mut remove = false;
+        let mut fit_stock = false;
+        let thickness = self.doc.stock.thickness;
+        let Some(m) = self.doc.stock.model.as_mut() else { return };
+        ui_kit::card(ui, |ui| {
+            ui.horizontal(|ui| {
+                ui_kit::title(ui, tr!("Model 3D"));
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    remove = ui.small_button(tr!("Usuń")).on_hover_text(tr!("Usuń model z projektu")).clicked();
+                });
+            });
+            ui.add(egui::Label::new(RichText::new(&m.name).color(Color32::WHITE)).truncate());
+            let s = m.size();
+            ui.label(RichText::new(tr!("{:.1} × {:.1} × {:.1} mm  ·  {} trójkątów", s[0], s[1], s[2], m.mesh.tris.len())).small().color(ui_kit::LABEL));
+            egui::Grid::new("model3d").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                ui_kit::label(ui, tr!("Jednostki pliku"));
+                ui.horizontal(|ui| {
+                    changed |= ui.radio_value(&mut m.units, 1.0, "mm").changed();
+                    changed |= ui.radio_value(&mut m.units, 25.4, tr!("cale")).changed();
+                });
+                ui.end_row();
+                ui_kit::label(ui, tr!("Skala"));
+                let mut pct = m.scale * 100.0;
+                if ui.add(egui::DragValue::new(&mut pct).range(1.0..=10000.0).speed(0.5).suffix(" %")).changed() {
+                    m.scale = pct / 100.0;
+                    changed = true;
+                }
+                ui.end_row();
+                ui_kit::label(ui, tr!("Obróć o 90°"));
+                ui.horizontal(|ui| {
+                    for (axis, name) in [(0, "X"), (1, "Y"), (2, "Z")] {
+                        if ui.button(name).on_hover_text(tr!("Obrót o 90° wokół osi {}", name)).clicked() {
+                            m.rotate(axis);
+                            changed = true;
+                        }
+                    }
+                });
+                ui.end_row();
+                changed |= ui_kit::num(ui, tr!("Naddatek nad modelem"), &mut m.top_allowance, 0.0..=500.0, 0.1, " mm");
+            });
+            if (m.stock_thickness() - thickness).abs() > 1e-6 {
+                fit_stock = ui
+                    .small_button(tr!("Półfabrykat według modelu ({:.1} mm)", m.stock_thickness()))
+                    .on_hover_text(tr!("Grubość półfabrykatu = wysokość modelu + naddatek nad nim"))
+                    .clicked();
+            }
+            ui.label(RichText::new(tr!("Góra modelu na Z = −naddatek; zero w lewym dolnym rogu półfabrykatu.")).small().color(ui_kit::LABEL));
+        });
+        if changed {
+            m.refresh();
+            self.doc.recompute_bbox();
+            self.doc.ops_dirty = true;
+            self.doc.revision += 1;
+        }
+        if fit_stock {
+            if let Some(m) = &self.doc.stock.model {
+                self.doc.stock.thickness = m.stock_thickness();
+                self.doc.revision += 1;
+            }
+        }
+        if remove {
+            let name = self.doc.stock.model.take().map(|m| m.name).unwrap_or_default();
+            self.doc.recompute_bbox();
+            self.doc.revision += 1;
+            self.doc.label(crate::history::Mark::new(crate::icons::Icon::Delete), tr!("Usunięto model 3D: {}", name));
         }
     }
 

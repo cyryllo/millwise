@@ -14,6 +14,7 @@ mod ui_ops;
 mod ui_tools;
 mod doc;
 mod history;
+mod model3d;
 mod i18n_check;
 mod view2d;
 mod view3d;

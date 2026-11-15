@@ -21,7 +21,6 @@ weszło do programu, jest w [CHANGELOG.md](CHANGELOG.md) i w historii gita.
 Plan ustalony, start dopiero po dopracowaniu 2D. Szczegóły w
 [ROADMAP.md](ROADMAP.md).
 
-- [ ] Import STL i ustawienie modelu w półfabrykacie (0.10.0, nowy moduł).
 - [ ] Kontur z góry (sylwetka) i przekrój na wysokości Z jako krzywe dla
       operacji 2.5D.
 - [ ] Zgrubna 3D warstwami Z (z silnika kieszeni).

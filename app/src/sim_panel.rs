@@ -184,6 +184,7 @@ pub struct SimState {
     show_paths: bool,
     show_rapids: bool,
     show_tool: bool,
+    show_model: bool,
     /// Obróbka dwustronna: która strona jest symulowana, i czy w ogóle są dwie.
     pub side: cam_ops::Side,
     sides: bool,
@@ -219,6 +220,7 @@ impl Default for SimState {
             show_paths: true,
             show_rapids: false,
             show_tool: true,
+            show_model: true,
             side: cam_ops::Side::A,
             sides: false,
             jump_to_end: false,
@@ -344,6 +346,7 @@ impl SimState {
             show_material: self.show_material,
             show_paths: self.show_paths,
             show_rapids: self.show_rapids,
+            show_model: self.show_model,
             side: self.sides.then_some(self.side),
         })
     }
@@ -414,6 +417,7 @@ impl SimState {
         ui.checkbox(&mut self.show_paths, tr!("Ścieżki narzędzia"));
         ui.checkbox(&mut self.show_rapids, tr!("Ruchy szybkie (G0)"));
         ui.checkbox(&mut self.show_tool, tr!("Narzędzie"));
+        ui.checkbox(&mut self.show_model, tr!("Model 3D")).on_hover_text(tr!("Model STL — widoczny tam, gdzie materiał jest zdjęty, albo po wyłączeniu materiału"));
         ui.horizontal(|ui| {
             ui.label(tr!("Silnik"));
             ui.selectable_value(&mut self.engine, Engine::Solid, tr!("Bryła"))
