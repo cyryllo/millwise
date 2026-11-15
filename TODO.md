@@ -38,7 +38,6 @@ Plan ustalony, start dopiero po dopracowaniu 2D. Szczegóły w
 - [ ] Kieszeń adaptacyjna (HSM): stałe obciążenie freza, szybsze i
       bezpieczniejsze wybieranie dużych kieszeni, zwłaszcza w aluminium.
 - [ ] Obróbka dwustronna: odwracanie detalu z bazowaniem.
-- [ ] Napisy (tekst) w programie do graweru, bez osobnego CAD-a.
 
 **Paczki i program**
 

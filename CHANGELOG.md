@@ -32,6 +32,12 @@ Version numbers:
   will happen; everything is one step in the history. Holes without a drill
   of their size are milled along a helix when they are larger than the
   cutter.
+- **Text** (Grawer → Tekst): type a text (several lines with Enter), set the
+  height of capital letters, the letter spacing and the font — Ubuntu or the
+  fixed-width Hack built in, or any .ttf / .otf file — and click the drawing
+  to place it; a preview follows the pointer. The letters become ordinary
+  curves on a TEKST layer, ready for engraving or a pocket, and appear as an
+  element in the list on the right.
 - **Measuring** (Zaznacz → Zmierz): click two points — they snap to corners
   and circle centres — to see the distance on the drawing and the length,
   ΔX, ΔY and angle in the tool box; a third click starts a new measurement.

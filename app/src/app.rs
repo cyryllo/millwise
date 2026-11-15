@@ -18,6 +18,58 @@ use std::path::{Path, PathBuf};
 /// Właściciel praw autorskich wyświetlany w „O programie”.
 const COPYRIGHT_HOLDER: &str = "Cyryl Sochacki";
 
+/// Ustawienia narzędzia „Tekst” i podgląd zarysów liter (względem punktu wstawienia).
+struct TextTool {
+    text: String,
+    height: f64,
+    spacing: f64,
+    font: crate::text::FontChoice,
+    preview: Vec<Vec<Vec2>>,
+    /// Dla jakich ustawień policzono podgląd.
+    preview_key: Option<(String, u64, u64, crate::text::FontChoice)>,
+    error: Option<String>,
+}
+
+impl Default for TextTool {
+    fn default() -> Self {
+        TextTool {
+            text: "Millwise".into(),
+            height: 10.0,
+            spacing: 0.0,
+            font: crate::text::FontChoice::Ubuntu,
+            preview: Vec::new(),
+            preview_key: None,
+            error: None,
+        }
+    }
+}
+
+impl TextTool {
+    fn contours(&self) -> Result<Vec<cam_geom::Contour>, String> {
+        let bytes = self.font.bytes()?;
+        crate::text::text_contours(&bytes, &self.text, self.height, self.spacing)
+    }
+
+    /// Przelicza podgląd, gdy zmieniły się ustawienia.
+    fn refresh(&mut self) {
+        let key = (self.text.clone(), self.height.to_bits(), self.spacing.to_bits(), self.font.clone());
+        if self.preview_key.as_ref() == Some(&key) {
+            return;
+        }
+        self.preview_key = Some(key);
+        match self.contours() {
+            Ok(cs) => {
+                self.preview = cs.iter().map(|c| c.verts.iter().map(|v| v.p).collect()).collect();
+                self.error = None;
+            }
+            Err(e) => {
+                self.preview.clear();
+                self.error = Some(e);
+            }
+        }
+    }
+}
+
 /// Projekt 2D — praca na krzywych i operacjach; Wizualizacja 3D — tylko podgląd.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum ViewMode {
@@ -72,6 +124,8 @@ pub struct CamApp {
     param_edit: Option<usize>,
     /// Pomiar: punkty A i B.
     measure: (Option<Vec2>, Option<Vec2>),
+    /// Narzędzie „Tekst”: treść, wysokość, odstęp, czcionka i podgląd.
+    text_tool: TextTool,
     /// Okno automatyzacji (Some = otwarte).
     auto: Option<crate::automation::AutoOptions>,
     /// Element projektu rozwinięty na liście po prawej.
@@ -122,6 +176,7 @@ impl CamApp {
             param_edit: None,
             measure: (None, None),
             auto: None,
+            text_tool: TextTool::default(),
             open_source: None,
             history_seen: u64::MAX,
             clipboard: Vec::new(),
@@ -433,6 +488,27 @@ impl CamApp {
         }
     }
 
+    /// Wstawia napis: lewy koniec linii bazowej pierwszego wiersza w punkcie `p`.
+    fn place_text(&mut self, p: Vec2, ctx: &egui::Context) {
+        let now = Self::now(ctx);
+        let t = &self.text_tool;
+        match t.contours() {
+            Ok(cs) if !cs.is_empty() => {
+                let first_line = t.text.lines().next().unwrap_or("").to_string();
+                let items: Vec<crate::doc::ClipItem> = cs
+                    .into_iter()
+                    .map(|contour| crate::doc::ClipItem { contour, layer: "TEKST".into(), source: format!("Tekst: {first_line}") })
+                    .collect();
+                let n = items.len();
+                self.doc.add_contours(&items, p);
+                self.doc.label(crate::history::Mark::new(crate::icons::Icon::Text).badge(crate::history::Badge::Add), format!("Napis: {first_line}"));
+                self.view2d.flash(format!("Wstawiono napis ({n} krzywych, zaznaczone) — teraz np. Grawer albo Kieszeń"), now);
+            }
+            Ok(_) => self.view2d.flash("Wpisz tekst", now),
+            Err(e) => self.error = Some(e),
+        }
+    }
+
     /// Narzędzie „Narożniki”: klik krzywej włącza lub wyłącza uszka (dog-bone)
     /// w operacjach wewnętrznych (profil wewnętrzny, kieszeń), do których należy.
     fn toggle_corners(&mut self, i: usize, ctx: &egui::Context) {
@@ -609,6 +685,7 @@ impl CamApp {
                         self.doc.add_op_contours(t, &found);
                     }
                 }
+                ViewEvent::Point(p) if self.toolbar.current() == Sub::Text => self.place_text(p, ctx),
                 ViewEvent::Point(p) if self.toolbar.current() == Sub::Measure => {
                     self.measure = match self.measure {
                         (Some(a), None) => (Some(a), Some(p)),
@@ -686,6 +763,34 @@ impl CamApp {
                                         apply(doc.move_selected(Vec2::new(e.dx, e.dy)));
                                     }
                                 });
+                            }
+                            Sub::Text => {
+                                let tt = &mut self.text_tool;
+                                ui.horizontal(|ui| {
+                                    ui.strong("Tekst");
+                                    ui.add(egui::TextEdit::multiline(&mut tt.text).desired_rows(1).desired_width(220.0))
+                                        .on_hover_text("Nowy wiersz: Enter");
+                                    ui.label("wysokość");
+                                    ui.add(egui::DragValue::new(&mut tt.height).range(0.5..=1000.0).speed(0.1).suffix(" mm"))
+                                        .on_hover_text("Wysokość wielkich liter");
+                                    ui.label("odstęp");
+                                    ui.add(egui::DragValue::new(&mut tt.spacing).range(-50.0..=200.0).speed(0.05).suffix(" mm"));
+                                    egui::ComboBox::from_id_salt("text_font").selected_text(tt.font.label()).show_ui(ui, |ui| {
+                                        ui.selectable_value(&mut tt.font, crate::text::FontChoice::Ubuntu, "Ubuntu");
+                                        ui.selectable_value(&mut tt.font, crate::text::FontChoice::Hack, "Hack (stała szerokość)");
+                                        if ui.selectable_label(matches!(tt.font, crate::text::FontChoice::File(_)), "Z pliku…").clicked() {
+                                            if let Some(p) = rfd::FileDialog::new().add_filter("Czcionka", &["ttf", "otf", "TTF", "OTF"]).pick_file() {
+                                                tt.font = crate::text::FontChoice::File(p);
+                                            }
+                                        }
+                                    });
+                                });
+                                tt.refresh();
+                                let hint = match &tt.error {
+                                    Some(e) => RichText::new(e.clone()).small().color(Color32::LIGHT_RED),
+                                    None => RichText::new("Kliknij na rysunku, aby wstawić napis (lewy dolny róg w punkcie kliknięcia, przyciąga do wierzchołków).").small().weak(),
+                                };
+                                ui.label(hint);
                             }
                             Sub::Measure => {
                                 let m = self.measure;
@@ -1946,6 +2051,7 @@ impl eframe::App for CamApp {
                     (None, Sub::ZeroPick) => Interaction::PickPoint,
                     (None, Sub::Corners) => Interaction::PickContour,
                     (None, Sub::Measure) => Interaction::Measure { a: self.measure.0, b: self.measure.1 },
+                    (None, Sub::Text) => Interaction::PlaceText { preview: &self.text_tool.preview },
                     _ => Interaction::Select,
                 };
                 events = self.view2d.ui(ui, rect, &mut self.doc, &tool_d, inter, Some((machine.travel_x, machine.travel_y)));

@@ -8,6 +8,7 @@ mod icons;
 mod toolbar;
 mod ui_machines;
 mod storage;
+mod text;
 mod ui_kit;
 mod ui_ops;
 mod ui_tools;

@@ -28,6 +28,7 @@ pub enum Icon {
     EngLeft,
     EngRight,
     EngVcarve,
+    Text,
     ZeroBL,
     ZeroCenter,
     ZeroTL,
@@ -261,6 +262,13 @@ pub fn draw(painter: &egui::Painter, r: Rect, icon: Icon) {
             poly(&[(20.0, 5.0), (34.0, 13.0), (20.0, 21.0), (6.0, 13.0)], BLUE_LIGHT, st(1.0, OUTLINE));
             poly(&[(6.0, 13.0), (20.0, 21.0), (20.0, 36.0), (6.0, 28.0)], BLUE, st(1.0, OUTLINE));
             poly(&[(34.0, 13.0), (34.0, 28.0), (20.0, 36.0), (20.0, 21.0)], BLUE_DARK, st(1.0, OUTLINE));
+        }
+        Icon::Text => {
+            // litera „A” z zarysu i linia bazowa
+            let a = [(6.0, 34.0), (17.0, 6.0), (23.0, 6.0), (34.0, 34.0), (28.0, 34.0), (25.5, 27.0), (14.5, 27.0), (12.0, 34.0)];
+            painter.add(Shape::closed_line(a.iter().map(|&(x, y)| p(x, y)).collect(), st(2.2, BLUE_LIGHT)));
+            painter.add(Shape::closed_line(vec![p(16.5, 21.5), p(20.0, 12.0), p(23.5, 21.5)], st(1.8, BLUE_LIGHT)));
+            line(&[(3.0, 37.0), (37.0, 37.0)], st(1.2, AMBER));
         }
         Icon::Measure => {
             // linijka z podziałką i strzałka wymiaru

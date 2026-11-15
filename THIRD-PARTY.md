@@ -7,7 +7,7 @@ Pełne teksty licencji znajdują się w repozytoriach bibliotek.
 Wbudowane czcionki interfejsu (egui / epaint_default_fonts): Ubuntu Font Licence 1.0,
 SIL Open Font License 1.1 (Hack, Noto Emoji, emoji-icon-font).
 
-Liczba bibliotek: 417
+Liczba bibliotek: 418
 
 | Biblioteka | Wersja | Licencja | Źródło |
 |---|---|---|---|
@@ -340,6 +340,7 @@ Liczba bibliotek: 417
 | tracing-attributes | 0.1.31 | MIT | https://github.com/tokio-rs/tracing |
 | tracing-core | 0.1.36 | MIT | https://github.com/tokio-rs/tracing |
 | tree_magic_mini | 3.2.2 | MIT | https://github.com/mbrubeck/tree_magic/ |
+| ttf-parser | 0.25.1 | MIT OR Apache-2.0 | https://github.com/harfbuzz/ttf-parser |
 | type-map | 0.5.1 | MIT/Apache-2.0 | https://github.com/kardeiz/type-map |
 | uds_windows | 1.2.1 | MIT | https://github.com/haraldh/rust_uds_windows |
 | unicode-general-category | 1.1.0 | Apache-2.0 | https://github.com/yeslogic/unicode-general-category |

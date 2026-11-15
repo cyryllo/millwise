@@ -491,7 +491,14 @@ impl Document {
         for it in items {
             let mut c = it.contour.clone();
             c.translate(d);
-            let layer = self.layers.iter().position(|l| l.name == it.layer).unwrap_or(0);
+            let layer = match self.layers.iter().position(|l| l.name == it.layer) {
+                Some(i) => i,
+                None if !it.layer.is_empty() => {
+                    self.layers.push(Layer { name: it.layer.clone(), visible: true });
+                    self.layers.len() - 1
+                }
+                None => 0,
+            };
             let source = self.source_index(&it.source);
             self.contours.push(DocContour::new(c, layer).with_source(source));
             self.selected.push(true);

@@ -11,6 +11,8 @@ pub enum Interaction<'a> {
     PickPoint,
     /// Klik krzywej zgłasza ją aplikacji (np. narożniki operacji); bez zaznaczania.
     PickContour,
+    /// Wstawianie napisu: podgląd (łamane względem punktu wstawienia) za kursorem, klik = punkt.
+    PlaceText { preview: &'a [Vec<cam_geom::Vec2>] },
     /// Pomiar: punkty z przyciąganiem; `a` — pierwszy punkt, `b` — drugi (gdy pomiar zamknięty).
     Measure { a: Option<cam_geom::Vec2>, b: Option<cam_geom::Vec2> },
 }
@@ -154,7 +156,7 @@ impl View2D {
         }
 
         let pick_tol = 6.0 / self.scale;
-        let picking_point = matches!(inter, Interaction::PickPoint | Interaction::Measure { .. });
+        let picking_point = matches!(inter, Interaction::PickPoint | Interaction::Measure { .. } | Interaction::PlaceText { .. });
         self.hovered = if self.box_start.is_none() && !picking_point {
             self.cursor_world.and_then(|p| doc.pick(p, pick_tol))
         } else {
@@ -192,7 +194,7 @@ impl View2D {
                 None if !additive => events.push(ViewEvent::Empty),
                 None => {}
             },
-            Interaction::PickPoint | Interaction::Measure { .. } if clicked => {
+            Interaction::PickPoint | Interaction::Measure { .. } | Interaction::PlaceText { .. } if clicked => {
                 if let Some(p) = snapped {
                     events.push(ViewEvent::Point(p));
                 }
@@ -350,6 +352,17 @@ impl View2D {
             painter.rect_stroke(r, 0.0, Stroke::new(1.0, col), StrokeKind::Middle);
         }
 
+        // napis: podgląd za kursorem (lewy koniec linii bazowej w punkcie wstawienia)
+        if let (Interaction::PlaceText { preview }, Some(at)) = (&inter, snapped) {
+            let col = Color32::from_rgb(230, 150, 70).gamma_multiply(0.8);
+            for poly in preview.iter() {
+                let mut pts: Vec<Pos2> = poly.iter().map(|&q| self.to_screen(rect, at + q)).collect();
+                if let Some(&f) = pts.first() {
+                    pts.push(f);
+                }
+                painter.add(egui::Shape::line(pts, Stroke::new(1.2, col)));
+            }
+        }
         // pomiar: linia od A do B (albo do kursora) z długością
         if let Interaction::Measure { a: Some(a), b } = inter {
             if let Some(b) = b.or(snapped) {

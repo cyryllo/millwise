@@ -109,7 +109,7 @@ pub fn ops_panel(
             });
         });
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Wybierz operację na pasku po lewej i klikaj krzywe w widoku 2D.").small().weak());
+        ui.label(RichText::new("Wybierz operację po lewej i klikaj krzywe.").small().weak());
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
                 .small_button("Automatyzacja…")

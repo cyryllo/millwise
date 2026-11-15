@@ -37,7 +37,7 @@ impl Group {
             Group::Profile => &[ProfileOut, ProfileIn, Corners],
             Group::Pocket => &[PocketOffset, PocketZigzag, PocketAdaptive],
             Group::Drill => &[DrillSimple, DrillPeck, DrillHelix],
-            Group::Engrave => &[EngCenter, EngLeft, EngRight, EngVcarve],
+            Group::Engrave => &[EngCenter, EngLeft, EngRight, EngVcarve, Text],
             Group::Zero => &[ZeroBL, ZeroCenter, ZeroTL, ZeroPick],
         }
     }
@@ -84,6 +84,8 @@ pub enum Sub {
     EngLeft,
     EngRight,
     EngVcarve,
+    /// Napis: tekst zamieniany na krzywe.
+    Text,
     ZeroBL,
     ZeroCenter,
     ZeroTL,
@@ -116,6 +118,7 @@ impl Sub {
             EngLeft => "Z lewej",
             EngRight => "Z prawej",
             EngVcarve => "V-carve",
+            Text => "Tekst",
             ZeroBL => "Lewy dolny",
             ZeroCenter => "Środek",
             ZeroTL => "Lewy górny",
@@ -148,6 +151,7 @@ impl Sub {
             EngLeft => Icon::EngLeft,
             EngRight => Icon::EngRight,
             EngVcarve => Icon::EngVcarve,
+            Text => Icon::Text,
             ZeroBL => Icon::ZeroBL,
             ZeroCenter => Icon::ZeroCenter,
             ZeroTL => Icon::ZeroTL,
