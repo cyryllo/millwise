@@ -18,14 +18,32 @@ weszło do programu, jest w [CHANGELOG.md](CHANGELOG.md) i w historii gita.
 
 ## 2. STL i obróbka 3D
 
-Jest: model STL w półfabrykacie, krzywe z modelu, zgrubna warstwami Z,
-wykańczająca równoległa. Szczegóły w [ROADMAP.md](ROADMAP.md).
+Jest: model STL w półfabrykacie (zakładka „Model 3D”), krzywe z modelu,
+zgrubna warstwami Z, wykańczająca równoległa i warstwicowa, resztki, wycięcie
+po sylwetce, symulacja „Ścieżki”. Szczegóły w [ROADMAP.md](ROADMAP.md).
 
 - [ ] Warstwice tylko na stromych miejscach + równoległa tylko na łagodnych (jedna operacja).
 - [ ] Resztki po obróbce zgrubnej (ponowna zgrubna mniejszym frezem).
 - [ ] Obróbka 3D na stronie B (dwustronna).
 
-## 3. Pomysły na dalej
+## 3. Karta graficzna (GPU)
+
+Teraz karta tylko rysuje, wszystko liczy procesor. Dwa etapy (po wydaniu 0.7.0):
+
+- [ ] **Symulacja ubytku materiału na karcie.** Każdy ruch frezu „rysowany”
+      do tekstury wysokości (zostaje najniższy punkt — zwykłe rysowanie z testem
+      głębokości, bez obliczeń ogólnych, więc działa też przez OpenGL), a
+      powierzchnia materiału wyświetlana wprost z tej tekstury. Miliony ruchów
+      w czasie rzeczywistym, bez gotowania klatek i wielkich siatek w pamięci.
+      Zostaje obok silników Bryła / Szybki / Ścieżki; trzeba pilnować limitów
+      karty (rozmiar tekstury, OpenGL na kartach NVIDIA).
+- [ ] **Ścieżki w widoku 2D rysowane przez kartę.** Teraz procesor przygotowuje
+      każdą linię w każdej klatce — przy gęstych ścieżkach 3D (np. co 0,1 mm)
+      widok 2D zwalnia przy przesuwaniu i powiększaniu. Ścieżki wysyłane na
+      kartę raz po zmianie (jak w widoku 3D), rysowane w każdej klatce bez
+      przeliczania.
+
+## 4. Pomysły na dalej
 
 **Frezowanie 2D**
 
