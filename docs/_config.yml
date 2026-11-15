@@ -1,0 +1,11 @@
+# Millwise project website (GitHub Pages, built from the docs/ folder of the
+# main branch). Pages in English at the top level, Polish in pl/.
+title: Millwise
+description: Free CAM software for 3-axis CNC routers and mills. From DXF drawings and STL models to G-code for GRBL, FluidNC and LinuxCNC. For Linux.
+url: "https://cyryllo.github.io"
+baseurl: "/millwise"
+repo: "https://github.com/cyryllo/millwise"
+markdown: kramdown
+kramdown:
+  input: GFM
+  hard_wrap: false

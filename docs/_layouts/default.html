@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="{{ page.lang | default: 'en' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% if page.title %}{{ page.title }} · {% endif %}Millwise</title>
+  <meta name="description" content="{{ page.description | default: site.description }}">
+  <link rel="icon" type="image/svg+xml" href="{{ '/assets/logo.svg' | relative_url }}">
+  <link rel="stylesheet" href="{{ '/assets/style.css' | relative_url }}">
+</head>
+<body>
+{% assign pl = false %}{% if page.lang == 'pl' %}{% assign pl = true %}{% endif %}
+{% if pl %}{% assign home = '/pl/' %}{% else %}{% assign home = '/' %}{% endif %}
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="{{ home | relative_url }}">
+      <img src="{{ '/assets/logo.svg' | relative_url }}" alt="" width="36" height="36">
+      <span>Millwise</span>
+    </a>
+    <nav>
+      {% if pl %}
+      <a href="{{ '/pl/' | relative_url }}">Start</a>
+      <a href="{{ '/pl/guide.html' | relative_url }}">Instrukcja</a>
+      <a href="{{ site.repo }}/releases/latest">Pobierz</a>
+      <a href="{{ site.repo }}/blob/main/CHANGELOG.md">Zmiany</a>
+      <a href="{{ site.repo }}/issues">Zgłoś problem</a>
+      <a href="{{ site.repo }}">GitHub</a>
+      {% else %}
+      <a href="{{ '/' | relative_url }}">Home</a>
+      <a href="{{ '/guide.html' | relative_url }}">Guide</a>
+      <a href="{{ site.repo }}/releases/latest">Download</a>
+      <a href="{{ site.repo }}/blob/main/CHANGELOG.md">Changes</a>
+      <a href="{{ site.repo }}/issues">Report a problem</a>
+      <a href="{{ site.repo }}">GitHub</a>
+      {% endif %}
+      {% if page.other_lang %}
+      <a class="lang" href="{{ page.other_lang | prepend: '/' | relative_url }}" hreflang="{% if pl %}en{% else %}pl{% endif %}">{% if pl %}English{% else %}Polski{% endif %}</a>
+      {% endif %}
+    </nav>
+  </div>
+</header>
+<main class="wrap{% if page.wide %} wide{% endif %}">
+{{ content }}
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    {% if pl %}
+    Millwise jest wolnym oprogramowaniem na licencji GPL-3.0-or-later.
+    Program tworzy G-code dla frezarki i jest dostarczany bez gwarancji: zawsze sprawdzaj
+    program przed uruchomieniem i nie zostawiaj pracującej maszyny bez nadzoru.
+    · <a href="{{ site.repo }}/blob/main/DEVELOPMENT.md">Dla programistów</a>
+    · <a href="{{ site.repo }}/blob/main/THIRD-PARTY.md">Biblioteki</a>
+    {% else %}
+    Millwise is free software under the GPL-3.0-or-later.
+    It writes G-code for a milling machine and comes without any warranty: always check the
+    program before running it and never leave a running machine unattended.
+    · <a href="{{ site.repo }}/blob/main/DEVELOPMENT.md">For developers</a>
+    · <a href="{{ site.repo }}/blob/main/THIRD-PARTY.md">Libraries</a>
+    {% endif %}
+  </div>
+</footer>
+</body>
+</html>
