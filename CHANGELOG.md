@@ -44,7 +44,9 @@ Version numbers:
   stock; clicked closed curves limit it to their inside. By default it goes
   down to the lowest surface seen from the top, so the stock is not cut
   through. The result is kept and only recalculated when something it
-  depends on changes.
+  depends on changes; 3D toolpaths are computed in the background, so the
+  window keeps working (the operation shows „computing…” until it is ready;
+  G-code export and the simulation wait for it).
 
 - **3D finishing.** „Finishing” in the 3D group runs parallel passes over the
   model: the cutter is dropped onto the surface at close points (more of them

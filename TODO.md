@@ -23,7 +23,6 @@ wykańczająca równoległa. Szczegóły w [ROADMAP.md](ROADMAP.md).
 
 - [ ] Wykańczająca 3D po warstwicach (waterline) — gładsze strome ściany.
 - [ ] Obróbka resztek i kontrola podcięć modelu.
-- [ ] Liczenie ścieżek 3D w tle (duże modele nie zatrzymują okna).
 - [ ] Obróbka 3D na stronie B (dwustronna).
 
 ## 3. Pomysły na dalej

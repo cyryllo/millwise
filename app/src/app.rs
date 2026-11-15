@@ -465,8 +465,17 @@ impl CamApp {
         }
     }
 
-    fn export_gcode(&mut self) {
+    /// Ścieżki gotowe do G-code: czeka na operacje 3D liczone w tle.
+    fn ensure_complete(&mut self) {
         self.ensure_generated();
+        if self.doc.computing_3d() {
+            self.doc.wait_3d();
+            self.ensure_generated();
+        }
+    }
+
+    fn export_gcode(&mut self) {
+        self.ensure_complete();
         let machine = self.machine();
         let files = match self.doc.gcode(&self.tools, &machine) {
             Ok(f) => f,
@@ -501,6 +510,9 @@ impl CamApp {
     }
 
     fn ensure_generated(&mut self) {
+        // w oknie programu operacje 3D liczą się w tle
+        self.doc.background3d = true;
+        self.doc.poll_3d();
         if self.doc.ops_dirty {
             let machine = self.machine();
             self.doc.regenerate(&self.tools, Some(&machine));
@@ -2338,6 +2350,9 @@ impl eframe::App for CamApp {
         }
         self.shortcuts(&ctx);
         self.ensure_generated();
+        if self.doc.computing_3d() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        }
 
         egui::Panel::top("menu").show(ui, |ui| self.menu(ui));
         egui::Panel::bottom("status").show(ui, |ui| self.status_bar(ui));
@@ -2352,7 +2367,8 @@ impl eframe::App for CamApp {
         }
 
         if self.mode == ViewMode::Visual {
-            // wizualizacja: tylko podgląd + symulacja
+            // wizualizacja: tylko podgląd + symulacja (ze wszystkimi ścieżkami 3D)
+            self.ensure_complete();
             let machine = self.machine();
             self.sim.sync(&ctx, &self.doc, &self.tools, &machine);
             self.sim.tick(&ctx);
@@ -2367,7 +2383,7 @@ impl eframe::App for CamApp {
             match gcode_action {
                 Some(OpsAction::ExportGcode) => self.export_gcode(),
                 Some(OpsAction::PreviewGcode) => {
-                    self.ensure_generated();
+                    self.ensure_complete();
                     match self.preview_lines() {
                         Ok(l) => self.gcode_preview = Some(l),
                         Err(e) => self.error = Some(e),
@@ -2425,7 +2441,7 @@ impl eframe::App for CamApp {
                     self.mode = ViewMode::Visual;
                 }
                 OpsAction::PreviewGcode => {
-                    self.ensure_generated();
+                    self.ensure_complete();
                     match self.preview_lines() {
                         Ok(l) => self.gcode_preview = Some(l),
                         Err(e) => self.error = Some(e),

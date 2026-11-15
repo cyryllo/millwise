@@ -180,16 +180,55 @@ pub enum AlignMode {
     Bottom,
 }
 
-/// Zapamiętany wynik operacji 3D (liczy się długo) — ponownie liczony dopiero,
-/// gdy zmieni się operacja, narzędzie, krzywe, model albo półfabrykat.
-pub(crate) struct Cache3D {
+/// Dane, od których zależy wynik operacji 3D.
+#[derive(Clone)]
+pub(crate) struct Key3D {
     kind: cam_ops::OpKind,
     cut: cam_ops::CutParams,
     tool: cam_ops::Tool,
     geom: Vec<Contour>,
     heights: std::sync::Arc<cam_ops::model::ModelHeights>,
     stock: Aabb2,
+}
+
+impl PartialEq for Key3D {
+    fn eq(&self, o: &Self) -> bool {
+        self.kind == o.kind
+            && self.cut == o.cut
+            && self.tool == o.tool
+            && self.geom == o.geom
+            && std::sync::Arc::ptr_eq(&self.heights, &o.heights)
+            && self.stock == o.stock
+    }
+}
+
+/// Zapamiętany wynik operacji 3D (liczy się długo) — ponownie liczony dopiero,
+/// gdy zmieni się operacja, narzędzie, krzywe, model albo półfabrykat.
+pub(crate) struct Cache3D {
+    key: Key3D,
     result: OpResult,
+}
+
+/// Operacja 3D liczona w tle.
+pub(crate) struct Job3D {
+    key: Key3D,
+    rx: std::sync::mpsc::Receiver<OpResult>,
+}
+
+impl Key3D {
+    /// Uruchamia liczenie w osobnym wątku.
+    fn spawn(&self, op: &Operation) -> Job3D {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let (key, op) = (self.clone(), op.clone());
+        std::thread::Builder::new()
+            .name("millwise-3d".into())
+            .spawn(move || {
+                let m = cam_ops::ModelInput { heights: &key.heights, stock: key.stock };
+                let _ = tx.send(cam_ops::generate_with_model(&op, &key.tool, &key.geom, Some(&m)));
+            })
+            .expect("nie można uruchomić wątku obliczeń 3D");
+        Job3D { key: self.clone(), rx }
+    }
 }
 
 /// Wynik generowania operacji + dane do wyświetlania.
@@ -198,6 +237,8 @@ pub struct OpCache {
     /// Spłaszczona ścieżka: (punkt, czy ruch szybki).
     pub display: Vec<(P3, bool)>,
     pub minutes: f64,
+    /// Ścieżka 3D jeszcze się liczy (w tle).
+    pub computing: bool,
 }
 
 
@@ -233,6 +274,10 @@ pub struct Document {
     pub step_param: Option<ParamEdit>,
     /// Wyniki operacji 3D (ostatnie kilka).
     pub(crate) cache3d: Vec<Cache3D>,
+    /// Operacje 3D liczone w tle.
+    pub(crate) jobs3d: Vec<Job3D>,
+    /// Liczyć operacje 3D w tle (okno programu); bez tego — od razu (testy, zapis).
+    pub background3d: bool,
 }
 
 impl Document {
@@ -537,6 +582,8 @@ impl Document {
     pub fn regenerate(&mut self, lib: &ToolLibrary, machine: Option<&Machine>) {
         let mut cache3d = std::mem::take(&mut self.cache3d);
         let mut used3d = Vec::new();
+        let mut jobs3d = std::mem::take(&mut self.jobs3d);
+        let background = self.background3d;
         let heights = self.stock.model.as_ref().and_then(|m| m.heights());
         let stock_box = self.stock_box();
         self.op_cache = self
@@ -552,33 +599,36 @@ impl Document {
                 if let Some(t) = flip {
                     geom.iter_mut().for_each(|c| t.mirror(c));
                 }
+                let mut computing = false;
                 let mut result = match (is3d, &heights, stock_box) {
                     (false, _, _) => cam_ops::generate(op, tool, &geom),
                     (true, Some(h), Some(sb)) => {
-                        let hit = cache3d.iter().position(|c| {
-                            c.kind == op.kind
-                                && c.cut == op.cut
-                                && c.tool == *tool
-                                && c.geom == geom
-                                && std::sync::Arc::ptr_eq(&c.heights, h)
-                                && c.stock == sb
-                        });
-                        let result = match hit {
-                            Some(k) => cache3d[k].result.clone(),
-                            None => {
-                                let m = cam_ops::ModelInput { heights: h, stock: sb };
-                                cam_ops::generate_with_model(op, tool, &geom, Some(&m))
-                            }
-                        };
-                        used3d.push(Cache3D {
+                        let key = Key3D {
                             kind: op.kind.clone(),
                             cut: op.cut.clone(),
                             tool: tool.clone(),
                             geom: geom.clone(),
                             heights: h.clone(),
                             stock: sb,
-                            result: result.clone(),
-                        });
+                        };
+                        let result = match cache3d.iter().position(|c| c.key == key) {
+                            Some(k) => cache3d[k].result.clone(),
+                            None if background => {
+                                // w tle: na razie pusta ścieżka, wynik dojdzie w `poll_3d`
+                                if !jobs3d.iter().any(|j| j.key == key) {
+                                    jobs3d.push(key.spawn(op));
+                                }
+                                computing = true;
+                                OpResult::default()
+                            }
+                            None => {
+                                let m = cam_ops::ModelInput { heights: h, stock: sb };
+                                cam_ops::generate_with_model(op, tool, &geom, Some(&m))
+                            }
+                        };
+                        if !computing {
+                            used3d.push(Cache3D { key, result: result.clone() });
+                        }
                         result
                     }
                     (true, _, _) => cam_ops::generate_with_model(op, tool, &geom, None),
@@ -602,15 +652,52 @@ impl Document {
                 };
                 let rapid = machine.map_or(3000.0, |m| m.rapid_xy);
                 let minutes = result.toolpath.estimate_minutes(rapid);
-                Some(OpCache { result, display, minutes })
+                Some(OpCache { result, display, minutes, computing })
             })
             .collect();
         // zostają wyniki obecnych operacji 3D
         cache3d.clear();
         self.cache3d = used3d;
+        self.jobs3d = jobs3d;
         self.ops_dirty = false;
         self.revision += 1;
         self.paths_revision += 1;
+    }
+
+    /// Odbiera wyniki operacji 3D policzone w tle. Zwraca true, gdy coś doszło
+    /// (ścieżki trzeba wtedy przebudować — wynik jest już w pamięci).
+    pub fn poll_3d(&mut self) -> bool {
+        let mut got = false;
+        let jobs = std::mem::take(&mut self.jobs3d);
+        for j in jobs {
+            match j.rx.try_recv() {
+                Ok(result) => {
+                    self.cache3d.push(Cache3D { key: j.key, result });
+                    got = true;
+                }
+                Err(std::sync::mpsc::TryRecvError::Empty) => self.jobs3d.push(j),
+                Err(std::sync::mpsc::TryRecvError::Disconnected) => got = true,
+            }
+        }
+        if got {
+            self.ops_dirty = true;
+        }
+        got
+    }
+
+    /// Czy jakaś operacja 3D jeszcze się liczy.
+    pub fn computing_3d(&self) -> bool {
+        !self.jobs3d.is_empty()
+    }
+
+    /// Czeka na wszystkie operacje 3D liczone w tle (przed G-code i symulacją).
+    pub fn wait_3d(&mut self) {
+        for j in std::mem::take(&mut self.jobs3d) {
+            if let Ok(result) = j.rx.recv() {
+                self.cache3d.push(Cache3D { key: j.key, result });
+            }
+            self.ops_dirty = true;
+        }
     }
 
     // ---------- edycja geometrii ----------
@@ -1082,6 +1169,9 @@ impl Document {
             let Some(cache) = self.op_cache.get(i).and_then(|c| c.as_ref()) else {
                 return Err(tr!("Operacja „{}” nie ma wygenerowanej ścieżki", op.name));
             };
+            if cache.computing {
+                return Err(tr!("Operacja „{}”: ścieżka 3D jeszcze się liczy", op.name));
+            }
             if cache.result.toolpath.moves.is_empty() {
                 continue;
             }
@@ -1288,5 +1378,27 @@ mod model_tests {
         assert!((half.size().x - 40.0).abs() < 0.3 && (half.size().y - 15.0).abs() < 0.3, "{:?}", half.size());
         // nad modelem nic
         assert_eq!(d.model_outline(Some(1.0)), 0);
+
+        // operacja 3D liczona w tle: najpierw „liczy się”, potem wynik z pamięci
+        let lib = ToolLibrary::with_defaults();
+        let tool = lib.tools[0].clone();
+        let cut = cam_ops::CutParams { depth: 12.0, step_down: 4.0, ..Default::default() };
+        d.add_op(Operation { side: cam_ops::Side::A, name: "z".into(), enabled: true, kind: cam_ops::OpKind::Rough3D(Default::default()), tool_id: tool.id, cut, contours: vec![] });
+        d.background3d = true;
+        d.regenerate(&lib, None);
+        let c = d.op_cache[0].as_ref().unwrap();
+        assert!(c.computing && c.result.toolpath.moves.is_empty());
+        assert!(d.computing_3d());
+        let machine = cam_post::Machine::default();
+        assert!(d.gcode(&lib, &machine).is_err(), "G-code bez policzonej ścieżki 3D");
+        d.wait_3d();
+        assert!(!d.computing_3d() && d.ops_dirty);
+        d.regenerate(&lib, None);
+        let c = d.op_cache[0].as_ref().unwrap();
+        assert!(!c.computing && !c.result.toolpath.moves.is_empty());
+        assert!(d.gcode(&lib, &machine).is_ok());
+        // bez zmian: nic nowego się nie liczy
+        d.regenerate(&lib, None);
+        assert!(!d.computing_3d());
     }
 }

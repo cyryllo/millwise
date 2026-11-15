@@ -405,7 +405,7 @@ fn op_row(ui: &mut egui::Ui, doc: &Document, lib: &ToolLibrary, i: usize) -> Opt
         painter.text(
             egui::pos2(rect.right() - 8.0, rect.top() + 12.0),
             egui::Align2::RIGHT_CENTER,
-            fmt_time(c.minutes),
+            if c.computing { tr!("liczy się…").to_string() } else { fmt_time(c.minutes) },
             egui::FontId::proportional(11.0),
             Color32::from_gray(150),
         );
@@ -795,7 +795,12 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
         for w in &cache.result.warnings {
             ui.label(RichText::new(tr!("Uwaga: {}", w)).color(Color32::from_rgb(230, 180, 80)));
         }
-        if cache.result.toolpath.moves.is_empty() {
+        if cache.computing {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(RichText::new(tr!("Ścieżka 3D liczy się w tle…")).color(ui_kit::LABEL));
+            });
+        } else if cache.result.toolpath.moves.is_empty() {
             ui.label(RichText::new(tr!("Brak ścieżki — dodaj krzywe")).color(Color32::LIGHT_RED));
         } else {
             ui.label(
