@@ -3,19 +3,19 @@
 **English:** [README.md](README.md) · **Zmiany:** [CHANGELOG.md](CHANGELOG.md) · **Dla programistów:** [DEVELOPMENT.md](DEVELOPMENT.md)
 
 > **Wczesny etap rozwoju — jeszcze nie do użytku.** Millwise jest na bardzo
-> wczesnym etapie (wersja 0.5.0). Zmienia się codziennie, a tworzony G-code
+> wczesnym etapie (wersja 0.7.0). Zmienia się codziennie, a tworzony G-code
 > nie był testowany na prawdziwych maszynach. **Na razie nie zalecamy używania
 > go do sterowania frezarką.** Pierwszą wersję testową dla Linuksa można
 > pobrać (niżej). Uwagi i pomysły chętnie przyjmujemy w zgłoszeniach (Issues).
 
 Millwise to darmowy program CAM dla 3-osiowych frezarek CNC. Z rysunków DXF
-tworzy ścieżki narzędzia i zapisuje G-code dla **GRBL / FluidNC** oraz
-**LinuxCNC**. Jest napisany w Rust i działa na Linuksie (wersji dla Windows na
+i modeli STL tworzy ścieżki narzędzia i zapisuje G-code dla **GRBL /
+FluidNC** oraz **LinuxCNC**. Jest napisany w Rust i działa na Linuksie (wersji dla Windows na
 razie nie planujemy). Interfejs jest po polsku i po angielsku.
 
 ![Główne okno Millwise](docs/screenshot.png)
 
-## Co potrafi (0.5.0)
+## Co potrafi (0.7.0)
 
 - **Import DXF:** linie, łuki, okręgi, polilinie z łukami, splajny, elipsy i
   bloki; luźne elementy są łączone w kontury, cale przeliczane na milimetry.
@@ -32,6 +32,15 @@ razie nie planujemy). Interfejs jest po polsku i po angielsku.
   - **Wiercenie:** pojedyncze, z wycofaniem albo frezowanie otworu po helisie.
   - **Grawer** po linii, z lewej albo z prawej strony linii, z rampą.
   - **V-carving:** frez V, głębokość wynika z szerokości kształtu.
+- **Obróbka 3D modeli STL:** model w półfabrykacie (jednostki, skala,
+  obroty o 90°, naddatek nad modelem), z własną zakładką „Model 3D”.
+  - **Zgrubna** warstwami Z wokół modelu, z dodatkowymi warstwami nad
+    płaskimi miejscami.
+  - **Wykańczająca** równoległa albo warstwicowa (stałe wysokości — strome
+    ściany) oraz **resztki** tylko tam, gdzie większy frez nie sięgnął.
+  - **Wycięcie** po sylwetce modelu z mostkami; sylwetka i obrys na dowolnej
+    wysokości także jako krzywe do operacji 2D.
+  - Ostrzeżenie o podcięciach; ścieżki 3D liczą się w tle.
 - **Napisy** zamieniane na krzywe (wbudowane czcionki albo dowolny plik
   .ttf / .otf).
 - **Automatyzacja:** operacje dla wszystkich wolnych krzywych według warstw,
@@ -46,24 +55,30 @@ razie nie planujemy). Interfejs jest po polsku i po angielsku.
   pokazuje, z czego składa się projekt.
 - **Biblioteka narzędzi** wspólna dla wszystkich projektów, z graficznym
   wyborem rodzaju freza (płaski, kulowy, z promieniem naroża, V, grawerski,
-  wiertło) i parametrami skrawania dla materiałów (drewno, MDF, aluminium,
-  plexi).
+  wiertło), parametrami skrawania dla materiałów (drewno, MDF, aluminium,
+  plexi) i zestawem podstawowym: frezy płaskie, kulowe i V oraz wiertła
+  3, 4 i 6 mm.
 - **Maszyny** z rysunkiem rodzaju maszyny: pole robocze, narożnik bazowania, sterownik, posuwy maksymalne
   i szybkie, wrzeciono, zmiana narzędzia (pauza M0, M6 albo osobne pliki),
   chłodzenie, własny początek i koniec programu. Operacje są sprawdzane
   względem maszyny.
-- **Symulacja 3D** usuwania materiału na prawdziwej bryle (operacje
-  boolowskie): odtwarzanie, przewijanie, postęp operacji, wykrywanie ruchów
-  szybkich w materiale.
+- **Symulacja 3D** usuwania materiału: odtwarzanie, przewijanie, postęp
+  operacji, wykrywanie ruchów szybkich w materiale — liczona przez kartę
+  graficzną (płynnie przy każdej wielkości programu) albo, przy słabej
+  grafice, przez procesor na dokładnej bryle. Widok „Ścieżki” pokazuje model
+  docelowy i aktualnie frezowaną warstwę.
 - **Projekty** (`.millwise`) zapisują rysunek, półfabrykat, operacje i kopie
   użytych narzędzi.
 
 ![Symulacja](docs/screenshot-simulation.png)
 
+![Model 3D i symulacja](docs/screenshot-3d.png)
+
 ## Plany
 
-Import STL i obróbka 3D (drop-cutter), kieszeń adaptacyjna, V-carve, paczki
-dla Linuksa. Co jest gotowe — w CHANGELOG.
+Warstwice tylko na stromych miejscach z równoległą na łagodnych, obróbka 3D
+na stronie B, ścieżki w widoku 2D rysowane przez kartę graficzną, paczki dla
+Linuksa. Szczegóły w [TODO.md](TODO.md) i w CHANGELOG.
 
 ## Pobieranie (Linux)
 
@@ -72,8 +87,8 @@ Na stronie [Releases](https://github.com/cyryllo/millwise/releases) jest
 22.04 lub nowszym i innych dystrybucjach z tego okresu.
 
 ```sh
-chmod +x Millwise-0.5.0-x86_64.AppImage
-./Millwise-0.5.0-x86_64.AppImage
+chmod +x Millwise-0.7.0-x86_64.AppImage
+./Millwise-0.7.0-x86_64.AppImage
 ```
 
 Na kartach NVIDIA i wtedy, gdy domyślna grafika nie otwiera okna, Millwise sam

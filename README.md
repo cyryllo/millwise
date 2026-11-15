@@ -3,19 +3,19 @@
 **Po polsku:** [README_pl.md](README_pl.md) · **Changes:** [CHANGELOG.md](CHANGELOG.md) · **For developers:** [DEVELOPMENT.md](DEVELOPMENT.md)
 
 > **Early development — not ready for use.** Millwise is at a very early stage
-> (version 0.5.0). It changes every day and the G-code it writes has not been
+> (version 0.7.0). It changes every day and the G-code it writes has not been
 > tested on real machines. **Please do not use it to run a CNC machine yet.**
 > A first test version for Linux can be downloaded (see below). Feedback and
 > ideas are welcome in the issues.
 
 Millwise is a free CAM program for 3-axis CNC routers and mills. It turns DXF
-drawings into toolpaths and writes G-code for **GRBL / FluidNC** and
-**LinuxCNC**. It is written in Rust and runs on Linux (a Windows version is
+drawings and STL models into toolpaths and writes G-code for **GRBL /
+FluidNC** and **LinuxCNC**. It is written in Rust and runs on Linux (a Windows version is
 not planned for now). The user interface is in Polish and English.
 
 ![Millwise main window](docs/screenshot.png)
 
-## What it does (0.5.0)
+## What it does (0.7.0)
 
 - **DXF import:** lines, arcs, circles, polylines with arcs, splines,
   ellipses and blocks; loose pieces are joined into contours, inches are
@@ -35,6 +35,16 @@ not planned for now). The user interface is in Polish and English.
     entry.
   - **V-carving:** a V cutter with the depth following the width of the
     shape.
+- **3D machining of STL models:** the model sits in the stock (units, scale,
+  90° rotations, stock left above it) and has its own „3D model” tab.
+  - **Roughing** in Z levels around the model, with extra levels above flat
+    areas.
+  - **Finishing** with parallel passes or waterlines (constant heights,
+    for steep walls), and **rest finishing** only where a bigger tool could
+    not reach.
+  - **Cut-out** along the model silhouette with tabs; silhouette and outline
+    at any height also as curves for 2D operations.
+  - Undercut warning; 3D toolpaths are computed in the background.
 - **Text** turned into curves (built-in fonts or any .ttf / .otf).
 - **Automation:** operations for all free curves by layer, corners, tabs by
   perimeter and order by tool in one step.
@@ -48,23 +58,29 @@ not planned for now). The user interface is in Polish and English.
   (with their operations) to the current one; the elements list shows what
   the project is made of.
 - **Tool library** shared by all projects, with a visual choice of the cutter
-  type (flat, ball, bull nose, V, engraving, drill) and cutting data per
-  material (wood, MDF, aluminium, acrylic).
+  type (flat, ball, bull nose, V, engraving, drill), cutting data per
+  material (wood, MDF, aluminium, acrylic) and a basic set of flat, ball and
+  V cutters and drills in 3, 4 and 6 mm.
 - **Machines** with a picture of the machine type: work area, homing corner, controller, feed and rapid limits,
   spindle, tool change (M0 pause, M6 or one file per tool), coolant, custom
   program start and end. Operations are checked against the machine.
-- **3D simulation** of material removal on a real solid (Boolean operations),
-  with playback, seeking, per-operation progress and detection of rapid moves
-  into the material.
+- **3D simulation** of material removal with playback, seeking,
+  per-operation progress and detection of rapid moves into the material —
+  computed by the graphics card (smooth for programs of any size) or, on
+  weak graphics, by the processor on an exact solid. A „Toolpaths” view
+  shows the target model with the layer being cut.
 - **Projects** (`.millwise`) keep the drawing, the stock, the operations and
   copies of the tools used.
 
 ![Simulation](docs/screenshot-simulation.png)
 
+![3D model and simulation](docs/screenshot-3d.png)
+
 ## Planned
 
-STL import and 3D machining (drop-cutter), adaptive pocketing, V-carving,
-Linux packages. See the changelog for what is done.
+Waterlines only on steep areas with parallel passes on the gentle ones, 3D
+on side B, toolpaths drawn by the graphics card in the 2D view, Linux
+packages. See [TODO.md](TODO.md) (in Polish) and the changelog.
 
 ## Download (Linux)
 
@@ -73,8 +89,8 @@ The [Releases](https://github.com/cyryllo/millwise/releases) page has an
 Ubuntu 22.04 or newer and other distributions of that age.
 
 ```sh
-chmod +x Millwise-0.5.0-x86_64.AppImage
-./Millwise-0.5.0-x86_64.AppImage
+chmod +x Millwise-0.7.0-x86_64.AppImage
+./Millwise-0.7.0-x86_64.AppImage
 ```
 
 Millwise chooses OpenGL by itself on NVIDIA cards and when the default
