@@ -28,4 +28,11 @@ fn main() {
     let t = Instant::now();
     let r = generate_with_model(&op, &tool, &[], Some(&ModelInput { heights: &h, stock }));
     println!("zgrubna: {} ruchów, {:?}, {:?}", r.toolpath.moves.len(), t.elapsed(), r.warnings);
+    for (name, kind) in [("płaski", ToolKind::FlatEnd), ("kulowy", ToolKind::BallEnd)] {
+        let tool = Tool { diameter: 6.0, kind, ..Default::default() };
+        let op = Operation { kind: OpKind::Finish3D(Finish3DParams::default()), ..op.clone() };
+        let t = Instant::now();
+        let r = generate_with_model(&op, &tool, &[], Some(&ModelInput { heights: &h, stock }));
+        println!("wykańczająca ({name}): {} ruchów, {:?}, {:?}", r.toolpath.moves.len(), t.elapsed(), r.warnings);
+    }
 }

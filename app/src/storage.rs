@@ -340,6 +340,49 @@ mod tests {
         assert!(!changed);
     }
 
+    /// Model 3D z operacjami zgrubną i wykańczającą: ścieżki, G-code, zapis i odczyt
+    /// projektu (model w środku) dają ten sam G-code; wynik 3D jest brany z pamięci.
+    #[test]
+    fn model_3d_project() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let lib = ToolLibrary::with_defaults();
+        let mesh = cam_io::load_stl(&root.join("samples/model.stl")).unwrap();
+        let mut doc = Document::default();
+        doc.finish_load();
+        doc.set_model(crate::model3d::Model3D::new("model.stl".into(), mesh, 1.0));
+        doc.place_at_origin();
+        let flat = lib.tools.iter().find(|t| t.number == 1).unwrap().clone();
+        let ball = lib.tools.iter().find(|t| matches!(t.kind, cam_ops::ToolKind::BallEnd)).unwrap().clone();
+        let low = -doc.stock.model.as_ref().unwrap().heights().unwrap().lowest_top().unwrap();
+        let mk = |name: &str, kind: OpKind, tool: &Tool| {
+            let mut cut = CutParams { depth: low, ..Default::default() };
+            cut.apply_tool(tool, cam_ops::DEFAULT_MATERIAL);
+            Operation { side: cam_ops::Side::A, name: name.into(), enabled: true, kind, tool_id: tool.id, cut, contours: vec![] }
+        };
+        doc.add_op(mk("Zgrubna", OpKind::Rough3D(Default::default()), &flat));
+        doc.add_op(mk("Wykańczająca", OpKind::Finish3D(cam_ops::Finish3DParams { stepover: 0.3, ..Default::default() }), &ball));
+        doc.regenerate(&lib, None);
+        for c in doc.op_cache.iter().flatten() {
+            assert!(c.result.warnings.is_empty(), "{:?}", c.result.warnings);
+            assert!(c.result.toolpath.moves.len() > 100);
+        }
+        let machine = cam_post::Machine::default();
+        let g1 = doc.gcode(&lib, &machine).unwrap();
+        assert!(g1[0].1.lines().count() > 1000);
+        // ponowne przeliczenie bez zmian: wynik z pamięci (ten sam G-code)
+        doc.regenerate(&lib, None);
+        assert_eq!(doc.gcode(&lib, &machine).unwrap(), g1);
+        let dir = std::env::temp_dir().join(format!("millwise-3d-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = dir.join("model.millwise");
+        save_project(&doc, &lib, &out).unwrap();
+        let mut lib2 = lib.clone();
+        let (mut doc2, _) = load_project(&out, &mut lib2).unwrap();
+        doc2.regenerate(&lib2, None);
+        assert_eq!(doc2.gcode(&lib2, &machine).unwrap(), g1);
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
     /// Dodanie pliku DXF i drugiego projektu do bieżącego: krzywe obok, operacje
     /// wskazują na swoje krzywe, cofnięcie usuwa wszystko, zapis zachowuje elementy.
     #[test]

@@ -525,13 +525,19 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
                     });
                     ui.end_row();
                 }
+                // wykańczanie 3D: jedno przejście po powierzchni, bez kroku w dół
+                OpKind::Finish3D(_) => {}
                 _ => {
                     changed |= big_num(ui, tr!("Krok w dół"), &mut c.step_down, 0.01..=100.0, 0.05, " mm");
                 }
             }
         });
+        if matches!(op.kind, OpKind::Finish3D(_)) {
+            ui.label(RichText::new(tr!("Głębokość = najniżej, gdzie zjedzie frez (poza modelem)")).small().color(ui_kit::LABEL));
+        }
         let passes = match &op.kind {
             OpKind::Drill(d) if !d.helix => d.peck.map(|q| (op.cut.depth / q.max(0.01)).ceil() as u32),
+            OpKind::Finish3D(_) => None,
             _ => Some((op.cut.depth / op.cut.step_down.max(0.01)).ceil() as u32),
         };
         if let Some(n) = passes.filter(|&n| n > 0) {
@@ -663,6 +669,40 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
             ui.label("");
             ui.label(
                 RichText::new(tr!("Warstwy co krok w Z i tuż nad płaskimi miejscami modelu. Bez krzywych: cały półfabrykat; z krzywymi: tylko wewnątrz nich."))
+                    .small()
+                    .color(ui_kit::LABEL),
+            );
+            ui.end_row();
+        }
+        OpKind::Finish3D(p) => {
+            let tool = lib.get(op.tool_id);
+            let d = tool.map_or(6.0, |t| t.diameter);
+            let mut pct = p.stepover * 100.0;
+            ui_kit::label(ui, tr!("Odstęp przejść"));
+            ui.horizontal(|ui| {
+                if ui.add(egui::DragValue::new(&mut pct).range(1.0..=100.0).speed(0.2).suffix(" % Ø")).changed() {
+                    p.stepover = pct / 100.0;
+                    changed = true;
+                }
+                ui.label(RichText::new(format!("= {:.2} mm", p.stepover * d)).small().color(ui_kit::LABEL));
+            });
+            ui.end_row();
+            // wysokość grzbietów między przejściami (frez kulowy, płaska powierzchnia)
+            if let Some(t) = tool.filter(|t| matches!(t.kind, cam_ops::ToolKind::BallEnd)) {
+                let (r, s) = (t.radius(), p.stepover * t.diameter * 0.5);
+                let scallop = r - (r * r - s * s).max(0.0).sqrt();
+                ui.label("");
+                ui.label(RichText::new(tr!("grzbiety ok. {:.3} mm", scallop)).small().color(ui_kit::LABEL));
+                ui.end_row();
+            }
+            changed |= num(ui, tr!("Kierunek przejść"), &mut p.angle, -180.0..=180.0, 1.0, "°");
+            ui_kit::label(ui, tr!("Drugi raz w poprzek"));
+            changed |= ui.checkbox(&mut p.cross, "").on_hover_text(tr!("Drugie przejście pod kątem 90° — gładziej na zboczach równoległych do pierwszego")).changed();
+            ui.end_row();
+            changed |= num(ui, tr!("Naddatek na modelu"), &mut p.allowance, -5.0..=20.0, 0.01, " mm");
+            ui.label("");
+            ui.label(
+                RichText::new(tr!("Frez opuszczany na model w gęstych punktach — dotyka powierzchni, nie wcinając się. Najlepiej frez kulowy, po obróbce zgrubnej."))
                     .small()
                     .color(ui_kit::LABEL),
             );

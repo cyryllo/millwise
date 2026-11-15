@@ -39,6 +39,14 @@ Version numbers:
   through. The result is kept and only recalculated when something it
   depends on changes.
 
+- **3D finishing.** „Finishing” in the 3D group runs parallel passes over the
+  model: the cutter is dropped onto the surface at close points (more of them
+  where the surface bends), so it touches the model without cutting into it.
+  Works with flat, ball, bull-nose and V cutters (a ball cutter is chosen when
+  there is one); pass spacing with the scallop height for a ball cutter, pass
+  direction, an optional second pass across, and stock left on the model.
+  Neighbouring passes are joined along the surface without lifting.
+
 - **English user interface.** Widok → Język / Language switches between
   Polski and English at once, without a restart; the choice is remembered.
   On the first start Millwise follows the system language (Polish for a

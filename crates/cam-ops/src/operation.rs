@@ -253,6 +253,26 @@ impl Default for Rough3DParams {
     }
 }
 
+/// Obróbka wykańczająca 3D: przejścia równoległe po powierzchni modelu.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Finish3DParams {
+    /// Odstęp przejść jako ułamek średnicy.
+    pub stepover: f64,
+    /// Kierunek przejść [°] (0 = wzdłuż X).
+    pub angle: f64,
+    /// Drugi raz w poprzek (kąt + 90°).
+    pub cross: bool,
+    /// Naddatek zostawiany na modelu [mm] (ujemny = głębiej).
+    pub allowance: f64,
+}
+
+impl Default for Finish3DParams {
+    fn default() -> Self {
+        Self { stepover: 0.1, angle: 0.0, cross: false, allowance: 0.0 }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum OpKind {
     Profile(ProfileParams),
@@ -264,6 +284,8 @@ pub enum OpKind {
     VCarve(VCarveParams),
     /// Obróbka zgrubna modelu 3D warstwami Z.
     Rough3D(Rough3DParams),
+    /// Obróbka wykańczająca modelu 3D (przejścia równoległe).
+    Finish3D(Finish3DParams),
 }
 
 impl OpKind {
@@ -275,6 +297,7 @@ impl OpKind {
             OpKind::Engrave(_) => tr!("Grawer"),
             OpKind::VCarve(_) => "V-carving",
             OpKind::Rough3D(_) => tr!("Zgrubna 3D"),
+            OpKind::Finish3D(_) => tr!("Wykańczająca 3D"),
         }
     }
 }
@@ -317,7 +340,7 @@ pub fn generate(op: &Operation, tool: &Tool, contours: &[Contour]) -> OpResult {
 
 /// Czy operacja obrabia model 3D (potrzebuje mapy wysokości).
 pub fn needs_model(kind: &OpKind) -> bool {
-    matches!(kind, OpKind::Rough3D(_))
+    matches!(kind, OpKind::Rough3D(_) | OpKind::Finish3D(_))
 }
 
 /// Jak `generate`, z modelem 3D dla operacji 3D.
@@ -344,6 +367,10 @@ pub fn generate_with_model(op: &Operation, tool: &Tool, contours: &[Contour], mo
         OpKind::VCarve(p) => crate::vcarve::generate(&op.cut, p, tool, contours, &mut res),
         OpKind::Rough3D(p) => match model {
             Some(m) => crate::rough3d::generate(&op.cut, p, tool, contours, m, &mut res),
+            None => res.warnings.push(tr!("Brak modelu 3D — wczytaj plik STL").into()),
+        },
+        OpKind::Finish3D(p) => match model {
+            Some(m) => crate::finish3d::generate(&op.cut, p, tool, contours, m, &mut res),
             None => res.warnings.push(tr!("Brak modelu 3D — wczytaj plik STL").into()),
         },
     }

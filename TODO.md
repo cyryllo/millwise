@@ -16,17 +16,15 @@ weszło do programu, jest w [CHANGELOG.md](CHANGELOG.md) i w historii gita.
   - [ ] klasyczny GRBL (ten sam G-code co FluidNC — wystarczy jedna próba),
   - [ ] potem złagodzić ostrzeżenie w README i w opisach wydań.
 
-## 2. Później: STL i obróbka 3D (wstrzymane)
+## 2. STL i obróbka 3D
 
-Plan ustalony, start dopiero po dopracowaniu 2D. Szczegóły w
-[ROADMAP.md](ROADMAP.md).
+Jest: model STL w półfabrykacie, krzywe z modelu, zgrubna warstwami Z,
+wykańczająca równoległa. Szczegóły w [ROADMAP.md](ROADMAP.md).
 
-- [ ] Kontur z góry (sylwetka) i przekrój na wysokości Z jako krzywe dla
-      operacji 2.5D.
-- [ ] Zgrubna 3D warstwami Z (z silnika kieszeni).
-- [ ] Wykańczająca 3D: równoległa (drop-cutter) i waterline; upraszczanie
-      ścieżek.
+- [ ] Wykańczająca 3D po warstwicach (waterline) — gładsze strome ściany.
 - [ ] Obróbka resztek i kontrola podcięć modelu.
+- [ ] Liczenie ścieżek 3D w tle (duże modele nie zatrzymują okna).
+- [ ] Obróbka 3D na stronie B (dwustronna).
 
 ## 3. Pomysły na dalej
 

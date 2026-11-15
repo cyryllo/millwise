@@ -42,7 +42,7 @@ impl Group {
             Group::Pocket => &[PocketOffset, PocketZigzag, PocketAdaptive],
             Group::Drill => &[DrillSimple, DrillPeck, DrillHelix],
             Group::Engrave => &[EngCenter, EngLeft, EngRight, EngVcarve, Text],
-            Group::Model3D => &[Rough3D],
+            Group::Model3D => &[Rough3D, Finish3D],
             Group::Zero => &[ZeroBL, ZeroCenter, ZeroTL, ZeroPick],
         }
     }
@@ -94,6 +94,8 @@ pub enum Sub {
     Text,
     /// Obróbka zgrubna 3D warstwami Z.
     Rough3D,
+    /// Obróbka wykańczająca 3D (przejścia równoległe).
+    Finish3D,
     ZeroBL,
     ZeroCenter,
     ZeroTL,
@@ -128,6 +130,7 @@ impl Sub {
             EngVcarve => "V-carve",
             Text => tr!("Tekst"),
             Rough3D => tr!("Zgrubna"),
+            Finish3D => tr!("Wykańczająca"),
             ZeroBL => tr!("Lewy dolny"),
             ZeroCenter => tr!("Środek"),
             ZeroTL => tr!("Lewy górny"),
@@ -162,6 +165,7 @@ impl Sub {
             EngVcarve => Icon::EngVcarve,
             Text => Icon::Text,
             Rough3D => Icon::Rough3D,
+            Finish3D => Icon::Finish3D,
             ZeroBL => Icon::ZeroBL,
             ZeroCenter => Icon::ZeroCenter,
             ZeroTL => Icon::ZeroTL,
@@ -216,6 +220,7 @@ impl Sub {
             EngRight => (engrave(EngraveSide::Right), 0.5_f64.min(thickness), tr!("Grawer z prawej")),
             EngVcarve => (OpKind::VCarve(Default::default()), 3.0_f64.min(thickness), "V-carving"),
             Rough3D => (OpKind::Rough3D(Default::default()), thickness, tr!("Zgrubna 3D")),
+            Finish3D => (OpKind::Finish3D(Default::default()), thickness, tr!("Wykańczająca 3D")),
             _ => return None,
         })
     }
@@ -238,6 +243,7 @@ impl Sub {
             },
             OpKind::VCarve(_) => Sub::EngVcarve,
             OpKind::Rough3D(_) => Sub::Rough3D,
+            OpKind::Finish3D(_) => Sub::Finish3D,
         }
     }
 }

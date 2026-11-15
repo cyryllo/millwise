@@ -222,6 +222,11 @@ impl CamApp {
                         app.toolbar.set(Sub::Rough3D);
                         app.ensure_target();
                     }
+                    "finish3d" => {
+                        app.toolbar.set(Sub::Finish3D);
+                        app.pick_target = None;
+                        app.ensure_target();
+                    }
                     "silhouette" => {
                         app.doc.model_outline(None);
                     }
@@ -719,6 +724,13 @@ impl CamApp {
         let is_v = |t: &cam_ops::Tool| matches!(t.kind, cam_ops::ToolKind::VBit { .. } | cam_ops::ToolKind::Engraver { .. });
         let tool = if matches!(kind, cam_ops::OpKind::VCarve(_)) && !is_v(tool) {
             self.tools.tools.iter().find(|t| is_v(t)).unwrap_or(tool)
+        } else {
+            tool
+        };
+        // wykańczanie 3D: najlepiej frez kulowy (albo z promieniem naroża)
+        let is_round = |t: &cam_ops::Tool| matches!(t.kind, cam_ops::ToolKind::BallEnd | cam_ops::ToolKind::BullNose { .. });
+        let tool = if matches!(kind, cam_ops::OpKind::Finish3D(_)) && !is_round(tool) {
+            self.tools.tools.iter().find(|t| matches!(t.kind, cam_ops::ToolKind::BallEnd)).unwrap_or(tool)
         } else {
             tool
         };

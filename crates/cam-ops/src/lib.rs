@@ -8,13 +8,14 @@ pub mod toolpath;
 
 mod drill;
 mod engrave;
+mod finish3d;
 mod pocket;
 mod profile;
 mod rough3d;
 mod vcarve;
 
 pub use operation::{
-    generate, generate_with_model, needs_model, CutParams, Direction, DrillParams, EngraveParams, EngraveSide, Entry, OpKind, OpResult, Operation,
+    generate, generate_with_model, needs_model, CutParams, Direction, DrillParams, EngraveParams, EngraveSide, Entry, Finish3DParams, OpKind, OpResult, Operation,
     PocketParams, PocketStrategy, ProfileParams, ProfileSide, Rough3DParams, Side, Tabs, VCarveParams,
 };
 pub use rough3d::ModelInput;

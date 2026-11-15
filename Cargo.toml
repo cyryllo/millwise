@@ -35,3 +35,7 @@ opt-level = 2
 # symulacja musi być szybka także w trybie debug
 [profile.dev.package.cam-sim]
 opt-level = 3
+
+# ścieżki 3D liczą dużo — szybkie także w trybie debug
+[profile.dev.package.cam-ops]
+opt-level = 2

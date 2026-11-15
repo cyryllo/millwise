@@ -88,7 +88,8 @@ fn levels(cut: &CutParams, bottom: f64, a: f64, grid: &ModelHeights, tool: &Tool
     let mut zs = z_levels(cut.top_z, bottom, cut.step_down);
     // płaskie: wysokość (co 0,01 mm) zajmująca co najmniej tyle, ile przekrój freza
     let min_cells = ((tool.diameter * tool.diameter) / (grid.cell * grid.cell)).max(4.0) as usize;
-    let mut hist: std::collections::HashMap<i64, usize> = std::collections::HashMap::new();
+    // BTreeMap: stała kolejność (od najniższych) — te same poziomy przy każdym liczeniu
+    let mut hist: std::collections::BTreeMap<i64, usize> = std::collections::BTreeMap::new();
     for &z in &grid.z {
         if z.is_finite() {
             *hist.entry((z as f64 * 100.0).round() as i64).or_default() += 1;

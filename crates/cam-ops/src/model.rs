@@ -185,8 +185,13 @@ impl ModelHeights {
         for (p, q) in &segs {
             next.insert(*p, *q);
         }
+        // początki łańcuchów w kolejności odcinków (nie w kolejności tablicy mieszającej) —
+        // ten sam model zawsze daje te same kontury i te same ścieżki
         let mut out = Vec::new();
-        while let Some((&start, _)) = next.iter().next() {
+        for &(start, _) in &segs {
+            if !next.contains_key(&start) {
+                continue;
+            }
             let mut pts = vec![pt(start.0, start.1)];
             let mut cur = start;
             let mut guard = 0;
@@ -345,6 +350,131 @@ impl ModelHeights {
     }
 }
 
+/// Szybkie opuszczanie narzędzia: piramida maksimów mapy wysokości (bloki 2×2,
+/// 4×4…). Blok, który nie może podnieść narzędzia wyżej niż dotychczasowy
+/// wynik, jest pomijany w całości. Wynik identyczny z `ModelHeights::drop_tool`.
+pub struct DropIndex<'a> {
+    h: &'a ModelHeights,
+    /// Poziomy piramidy: (nx, ny, maksima) dla bloków 2^(k+1) oczek.
+    pyr: Vec<(usize, usize, Vec<f32>)>,
+}
+
+impl<'a> DropIndex<'a> {
+    pub fn new(h: &'a ModelHeights) -> Self {
+        let mut pyr: Vec<(usize, usize, Vec<f32>)> = Vec::new();
+        let (mut nx, mut ny) = (h.nx, h.ny);
+        while nx > 1 || ny > 1 {
+            let (mx, my) = (nx.div_ceil(2), ny.div_ceil(2));
+            let src: &[f32] = pyr.last().map_or(&h.z, |l| &l.2);
+            let mut z = vec![f32::NEG_INFINITY; mx * my];
+            for j in 0..ny {
+                for i in 0..nx {
+                    let d = &mut z[(j / 2) * mx + i / 2];
+                    *d = d.max(src[j * nx + i]);
+                }
+            }
+            pyr.push((mx, my, z));
+            nx = mx;
+            ny = my;
+        }
+        DropIndex { h, pyr }
+    }
+
+    fn level(&self, s: usize) -> (usize, usize, &[f32]) {
+        if s == 0 {
+            (self.h.nx, self.h.ny, &self.h.z)
+        } else {
+            let l = &self.pyr[s - 1];
+            (l.0, l.1, &l.2)
+        }
+    }
+
+    /// Jak `ModelHeights::drop_tool`, tylko szybciej.
+    pub fn drop_tool(&self, p: Vec2, tool: &ToolProfile, allowance: f64) -> Option<f64> {
+        let h = self.h;
+        let r = tool.radius + allowance;
+        let mut s = 0;
+        while s < self.pyr.len() && ((1usize << s) as f64) * h.cell < r {
+            s += 1;
+        }
+        let (nx, ny, _) = self.level(s);
+        let bs = (1usize << s) as f64 * h.cell;
+        let lo = |v: f64, m: f64| ((v - r - m) / bs).floor().max(0.0) as usize;
+        let hi = |v: f64, m: f64, n: usize| (((v + r - m) / bs).floor() as isize).min(n as isize - 1);
+        let (i0, i1) = (lo(p.x, h.min.x), hi(p.x, h.min.x, nx));
+        let (j0, j1) = (lo(p.y, h.min.y), hi(p.y, h.min.y, ny));
+        // dobry start: oczka tuż pod osią narzędzia (zwykle blisko punktu styku)
+        let mut best = f64::NEG_INFINITY;
+        let ci = ((p.x - h.min.x) / h.cell).floor() as isize;
+        let cj = ((p.y - h.min.y) / h.cell).floor() as isize;
+        for j in cj - 1..=cj + 1 {
+            for i in ci - 1..=ci + 1 {
+                if i >= 0 && j >= 0 {
+                    self.visit(0, i as usize, j as usize, p, tool, allowance, &mut best);
+                }
+            }
+        }
+        for j in j0 as isize..=j1 {
+            for i in i0 as isize..=i1 {
+                self.visit(s, i as usize, j as usize, p, tool, allowance, &mut best);
+            }
+        }
+        best.is_finite().then_some(best)
+    }
+
+    /// Górne ograniczenie wysokości czubka od bloku (None = blok pusty albo poza zasięgiem).
+    fn bound(&self, s: usize, i: usize, j: usize, p: Vec2, tool: &ToolProfile, a: f64) -> Option<f64> {
+        let h = self.h;
+        let (nx, ny, z) = self.level(s);
+        if i >= nx || j >= ny {
+            return None;
+        }
+        let top = z[j * nx + i];
+        if !top.is_finite() {
+            return None;
+        }
+        let half_diag = h.cell * std::f64::consts::FRAC_1_SQRT_2;
+        let d = if s == 0 {
+            let c = Vec2::new(h.min.x + (i as f64 + 0.5) * h.cell, h.min.y + (j as f64 + 0.5) * h.cell);
+            (c.distance(p) - half_diag).max(0.0)
+        } else {
+            let bs = (1usize << s) as f64 * h.cell;
+            let (x0, y0) = (h.min.x + i as f64 * bs, h.min.y + j as f64 * bs);
+            let dx = (x0 - p.x).max(p.x - (x0 + bs)).max(0.0);
+            let dy = (y0 - p.y).max(p.y - (y0 + bs)).max(0.0);
+            ((dx * dx + dy * dy).sqrt() - half_diag).max(0.0)
+        };
+        if d > tool.radius + a {
+            return None;
+        }
+        Some(top as f64 + a - tool.height_at((d - a).max(0.0)))
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn visit(&self, s: usize, i: usize, j: usize, p: Vec2, tool: &ToolProfile, a: f64, best: &mut f64) {
+        let Some(bound) = self.bound(s, i, j, p, tool, a) else { return };
+        if bound <= *best {
+            return;
+        }
+        if s == 0 {
+            *best = bound;
+            return;
+        }
+        // najpierw dzieci o najwyższym ograniczeniu — szybciej rośnie `best`, więcej się pomija
+        let mut kids: [(f64, usize, usize); 4] = [(f64::NEG_INFINITY, 0, 0); 4];
+        for (k, (di, dj)) in [(0, 0), (1, 0), (0, 1), (1, 1)].into_iter().enumerate() {
+            let (ci, cj) = (2 * i + di, 2 * j + dj);
+            kids[k] = (self.bound(s - 1, ci, cj, p, tool, a).unwrap_or(f64::NEG_INFINITY), ci, cj);
+        }
+        kids.sort_by(|x, y| y.0.partial_cmp(&x.0).unwrap());
+        for (b, ci, cj) in kids {
+            if b > *best {
+                self.visit(s - 1, ci, cj, p, tool, a, best);
+            }
+        }
+    }
+}
+
 /// Profil narzędzia: wysokość powierzchni tnącej nad czubkiem w odległości `d` od osi.
 #[derive(Debug, Clone, Copy)]
 pub struct ToolProfile {
@@ -495,5 +625,43 @@ mod tests {
         assert!(zb < 0.0 && zb > -5.0, "{zb}");
         // profile
         assert!((ball.height_at(3.0) - 3.0).abs() < 1e-9 && ball.height_at(0.0) == 0.0);
+    }
+
+    #[test]
+    fn fast_drop_matches_the_plain_one() {
+        // pagórek: gładka powierzchnia z trójkątów
+        let f = |x: f32, y: f32| 4.0 * (-((x - 10.0).powi(2) + (y - 8.0).powi(2)) / 30.0).exp();
+        let mut t = Vec::new();
+        for j in 0..32 {
+            for i in 0..40 {
+                let (x0, y0, x1, y1) = (i as f32 * 0.5, j as f32 * 0.5, i as f32 * 0.5 + 0.5, j as f32 * 0.5 + 0.5);
+                let p = |x, y| [x, y, f(x, y)];
+                t.push([p(x0, y0), p(x1, y0), p(x1, y1)]);
+                t.push([p(x0, y0), p(x1, y1), p(x0, y1)]);
+            }
+        }
+        let h = ModelHeights::from_triangles(&t, 0.07).unwrap();
+        let idx = DropIndex::new(&h);
+        let tools = [
+            Tool { diameter: 6.0, ..Default::default() },
+            Tool { diameter: 3.0, kind: ToolKind::BallEnd, ..Default::default() },
+            Tool { diameter: 6.0, kind: ToolKind::BullNose { corner_radius: 1.0 }, ..Default::default() },
+            Tool { diameter: 6.0, kind: ToolKind::VBit { angle: 60.0, tip_diameter: 0.2 }, ..Default::default() },
+        ];
+        for tool in &tools {
+            let prof = ToolProfile::of(tool);
+            for k in 0..200 {
+                let p = Vec2::new(-3.0 + (k * 37 % 260) as f64 * 0.1, -3.0 + (k * 53 % 220) as f64 * 0.1);
+                for a in [0.0, 0.3] {
+                    let slow = h.drop_tool(p, &prof, a);
+                    let fast = idx.drop_tool(p, &prof, a);
+                    match (slow, fast) {
+                        (Some(x), Some(y)) => assert!((x - y).abs() < 1e-9, "{p:?} {x} {y}"),
+                        (None, None) => {}
+                        _ => panic!("{p:?}: {slow:?} {fast:?}"),
+                    }
+                }
+            }
+        }
     }
 }

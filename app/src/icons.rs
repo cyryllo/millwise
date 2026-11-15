@@ -36,6 +36,7 @@ pub enum Icon {
     ZeroPick,
     Preview3D,
     Rough3D,
+    Finish3D,
     // ikony kroków historii zmian
     Open,
     Delete,
@@ -281,6 +282,29 @@ pub fn draw(painter: &egui::Painter, r: Rect, icon: Icon) {
                 line(&[(34.0, y), (38.0, y)], st(1.3, GREEN));
             }
             tool_dot(4.0, 21.5, 2.4);
+        }
+        Icon::Finish3D => {
+            // przekrój: gładka kopuła i frez kulowy jadący po niej
+            painter.rect_filled(rect(3.0, 31.0, 34.0, 6.0), k, PLATE);
+            let dome: Vec<(f32, f32)> = (0..=24)
+                .map(|i| {
+                    let a = PI * i as f32 / 24.0;
+                    (20.0 - 14.0 * a.cos(), 31.0 - 20.0 * a.sin())
+                })
+                .collect();
+            poly(&dome, BLUE, st(1.0, OUTLINE));
+            let path: Vec<Pos2> = (0..=24)
+                .map(|i| {
+                    let a = PI * i as f32 / 24.0;
+                    p(20.0 - 17.0 * a.cos(), 31.0 - 23.0 * a.sin())
+                })
+                .collect();
+            painter.add(Shape::line(path, st(1.4, GREEN)));
+            // frez kulowy nad lewym zboczem
+            let (cx, cy) = (8.0, 14.0);
+            painter.rect_filled(rect(cx - 3.0, 2.0, 6.0, cy - 2.0), 0.0, STEEL_DARK);
+            painter.circle_filled(p(cx, cy), 3.0 * k, STEEL);
+            painter.circle_stroke(p(cx, cy), 3.0 * k, st(0.8, OUTLINE));
         }
         Icon::Text => {
             // litera „A” z zarysu i linia bazowa
