@@ -28,6 +28,8 @@ pub struct View3D {
     /// Zakładka modelu: pokazywać ścieżki i półfabrykat.
     show_paths: bool,
     show_stock: bool,
+    /// Klik lewym przyciskiem w widok (bez przeciągania) — odbiera wywołujący.
+    pub clicked: bool,
 }
 
 impl Default for View3D {
@@ -46,6 +48,7 @@ impl Default for View3D {
             last_size: egui::Vec2::ZERO,
             show_paths: true,
             show_stock: true,
+            clicked: false,
         }
     }
 }
@@ -158,6 +161,8 @@ impl View3D {
         }
         if resp.double_clicked() {
             self.fit_requested = true;
+        } else if resp.clicked() {
+            self.clicked = true;
         }
 
         // --- render ---

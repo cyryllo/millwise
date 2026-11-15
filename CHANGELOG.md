@@ -33,8 +33,14 @@ Version numbers:
   „2D project” and „Simulation”: the model as a shaded solid in the stock,
   with the toolpaths (the selected operation highlighted), turned and zoomed
   with the mouse. The operations and the panels on both sides stay as in the
-  2D tab. Choosing the „3D” group in the toolbar opens this tab; other groups
-  go back to the 2D drawing, where curves are clicked.
+  2D tab. Opening an STL file shows this tab at once. Its toolbar has only
+  what works there — the „3D” group and „Zero”; the 2D tools are in the 2D
+  tab. A 3D operation is added with one click on its variant (the whole
+  stock, or the selected closed curves as boundaries). Clicking an empty spot
+  in the view closes the operation settings, as in 2D. „Cut-out” in the same
+  group cuts the part free along the model silhouette: it makes the
+  silhouette curve and an outside profile with tabs through the stock, at the
+  end of the program.
 
 - **3D roughing.** A new „3D” group in the toolbar. „Roughing” clears the
   stock around the model in Z layers, leaving the chosen stock on the model

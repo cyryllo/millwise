@@ -245,6 +245,12 @@ impl CamApp {
                         app.toolbar.set(Sub::Rough3D);
                         app.ensure_target();
                     }
+                    "cutout" => {
+                        app.toolbar.set(Sub::Cutout3D);
+                        app.pick_target = None;
+                        let ctx = cc.egui_ctx.clone();
+                        app.create_cutout(&ctx);
+                    }
                     "waterline" => {
                         app.toolbar.set(Sub::Finish3D);
                         app.pick_target = None;
@@ -311,6 +317,9 @@ impl CamApp {
                 self.doc.set_model(crate::model3d::Model3D::new(name, mesh, 1.0));
                 self.view2d.fit_requested = true;
                 self.view3d.fit_requested = true;
+                self.view_model.fit_requested = true;
+                // model 3D: od razu widok przestrzenny
+                self.mode = ViewMode::Model;
                 true
             }
             Err(e) => {
@@ -567,6 +576,17 @@ impl CamApp {
 
     fn handle_toolbar(&mut self, action: ToolbarAction, ctx: &egui::Context) {
         match action {
+            ToolbarAction::Create => {
+                self.pick_target = None;
+                if self.doc.stock.model.is_some() {
+                    self.mode = ViewMode::Model;
+                    if self.toolbar.current() == Sub::Cutout3D {
+                        self.create_cutout(ctx);
+                    } else {
+                        self.create_3d_op(ctx);
+                    }
+                }
+            }
             ToolbarAction::Changed => {
                 self.pick_target = None;
                 // grupa 3D — zakładka modelu; inne grupy potrzebują rysunku 2D
@@ -764,6 +784,52 @@ impl CamApp {
         }
     }
 
+    /// Nowa operacja 3D od razu po wybraniu wariantu: bez krzywych obejmuje cały
+    /// półfabrykat, a zaznaczone krzywe zamknięte stają się jej granicami.
+    fn create_3d_op(&mut self, ctx: &egui::Context) {
+        let Some(i) = self.ensure_target() else { return };
+        let sel: Vec<usize> = self.doc.selected_indices().into_iter().filter(|&k| self.doc.contours[k].contour.closed).collect();
+        self.doc.add_op_contours(i, &sel);
+        self.doc.selected_op = Some(i);
+        let name = self.doc.ops[i].name.clone();
+        let msg = if sel.is_empty() {
+            tr!("Dodano: {} (cały półfabrykat)", name)
+        } else {
+            tr!("Dodano: {} (granice: {} krz.)", name, sel.len())
+        };
+        self.view2d.flash(msg, Self::now(ctx));
+    }
+
+    /// Wycięcie detalu po sylwetce modelu: krzywa sylwetki (istniejąca albo nowa,
+    /// warstwa MODEL) i profil zewnętrzny z mostkami na całą grubość, na końcu programu.
+    fn create_cutout(&mut self, ctx: &egui::Context) {
+        let now = Self::now(ctx);
+        let src = tr!("Model: sylwetka");
+        let outer = |doc: &Document, k: usize| {
+            let c = &doc.contours[k];
+            doc.layers.get(c.layer).is_some_and(|l| l.name == "MODEL")
+                && doc.sources.get(c.source).is_some_and(|s| s == src)
+                && c.contour.closed
+                && c.contour.signed_area() > 0.0
+        };
+        let mut idx: Vec<usize> = (0..self.doc.contours.len()).filter(|&k| outer(&self.doc, k)).collect();
+        if idx.is_empty() {
+            let n0 = self.doc.contours.len();
+            self.doc.model_outline(None);
+            idx = (n0..self.doc.contours.len()).filter(|&k| outer(&self.doc, k)).collect();
+        }
+        if idx.is_empty() {
+            self.view2d.flash(tr!("Nie udało się wyznaczyć sylwetki modelu"), now);
+            return;
+        }
+        let Some(i) = self.ensure_target() else { return };
+        self.doc.add_op_contours(i, &idx);
+        // zaznaczenie sylwetki nie może zostać granicą następnej operacji 3D
+        self.doc.clear_selection();
+        self.doc.selected_op = Some(i);
+        self.view2d.flash(tr!("Dodano: {} (po sylwetce modelu, z mostkami)", self.doc.ops[i].name), now);
+    }
+
     /// Operacja docelowa dla klikania; tworzy nową z szablonu wariantu, jeśli trzeba.
     fn ensure_target(&mut self) -> Option<usize> {
         if let Some(t) = self.pick_target.filter(|&t| t < self.doc.ops.len()) {
@@ -776,6 +842,12 @@ impl CamApp {
         let is_v = |t: &cam_ops::Tool| matches!(t.kind, cam_ops::ToolKind::VBit { .. } | cam_ops::ToolKind::Engraver { .. });
         let tool = if matches!(kind, cam_ops::OpKind::VCarve(_)) && !is_v(tool) {
             self.tools.tools.iter().find(|t| is_v(t)).unwrap_or(tool)
+        } else {
+            tool
+        };
+        // wycięcie: frez płaski
+        let tool = if self.toolbar.current() == Sub::Cutout3D && !matches!(tool.kind, cam_ops::ToolKind::FlatEnd) {
+            self.tools.tools.iter().find(|t| matches!(t.kind, cam_ops::ToolKind::FlatEnd)).unwrap_or(tool)
         } else {
             tool
         };
@@ -854,6 +926,11 @@ impl CamApp {
     fn tool_options(&mut self, ctx: &egui::Context, view: egui::Rect) {
         let sub = self.toolbar.current();
         if sub == Sub::Select {
+            return;
+        }
+        // zakładka modelu: wariant 3D po lewej od razu dodaje operację — bez paska
+        let no_target = self.pick_target.filter(|&t| t < self.doc.ops.len()).is_none();
+        if self.mode == ViewMode::Model && sub.group() == Group::Model3D && no_target && self.doc.stock.model.is_some() {
             return;
         }
         let color = if sub.op_template(1.0).is_some() {
@@ -1038,8 +1115,8 @@ impl CamApp {
                                 ui.horizontal(|ui| {
                                     ui.label(RichText::new(tr!("3D › {}", s.label())).strong().color(Color32::WHITE));
                                     if ui
-                                        .button(tr!("Utwórz dla całego półfabrykatu"))
-                                        .on_hover_text(tr!("Bez krzywych operacja obejmuje cały półfabrykat"))
+                                        .button(tr!("Dodaj operację"))
+                                        .on_hover_text(tr!("Bez krzywych operacja obejmuje cały półfabrykat; zaznaczone krzywe zamknięte stają się granicami"))
                                         .clicked()
                                     {
                                         create3d = true;
@@ -1058,10 +1135,12 @@ impl CamApp {
                             s if mode3d && s.group() == Group::Model3D => {
                                 let target = self.pick_target.filter(|&t| t < doc.ops.len());
                                 ui.horizontal(|ui| {
+                                    let is3d = target.is_some_and(|t| cam_ops::needs_model(&doc.ops[t].kind));
                                     if let Some(t) = target {
                                         ui.label(RichText::new(doc.ops[t].name.clone()).strong().color(Color32::WHITE));
                                     }
-                                    ui.label(RichText::new(tr!("granice: krzywe w zakładce Projekt 2D")).weak());
+                                    let hint = if is3d { tr!("granice: krzywe w zakładce Projekt 2D") } else { tr!("krzywe: w zakładce Projekt 2D") };
+                                    ui.label(RichText::new(hint).weak());
                                     if ui.button(tr!("Zakończ (Enter)")).clicked() {
                                         close = true;
                                     }
@@ -1089,10 +1168,7 @@ impl CamApp {
             self.view2d.flash(tr!("Najpierw zaznacz krzywe"), now);
         }
         if create3d {
-            if let Some(i) = self.ensure_target() {
-                self.doc.selected_op = Some(i);
-                self.view2d.flash(tr!("Utworzono: {}", self.doc.ops[i].name), now);
-            }
+            self.create_3d_op(ctx);
         }
         if close {
             self.stop_mode();
@@ -2434,9 +2510,14 @@ impl eframe::App for CamApp {
                 self.sim.playing = false;
             }
         } else {
+            // zakładka modelu: tylko grupy, których da się tam użyć (domyślnie „3D”)
+            if self.mode == ViewMode::Model && !self.toolbar.group.in_3d_view() {
+                self.toolbar.group = Group::Model3D;
+                self.pick_target = None;
+            }
             let mut tb_action = None;
             egui::Panel::left("tb_groups").resizable(false).exact_size(88.0).show(ui, |ui| {
-                tb_action = self.toolbar.groups_ui(ui);
+                tb_action = self.toolbar.groups_ui(ui, self.mode == ViewMode::Model);
             });
             egui::Panel::left("tb_subs").resizable(false).exact_size(96.0).show(ui, |ui| {
                 egui::ScrollArea::vertical().show(ui, |ui| {
@@ -2480,6 +2561,10 @@ impl eframe::App for CamApp {
                     }
                 }
                 OpsAction::EditCurves(i) => {
+                    // krzywe klika się na rysunku 2D
+                    if self.mode == ViewMode::Model {
+                        self.mode = ViewMode::Project;
+                    }
                     if let Some(op) = self.doc.ops.get(i) {
                         self.toolbar.set(Sub::for_op(&op.kind));
                         self.pick_target = Some(i);
@@ -2518,6 +2603,10 @@ impl eframe::App for CamApp {
                 };
                 if self.mode == ViewMode::Model {
                     self.view_model.ui(ui, rect, frame, &self.doc, None, ViewKind::Model);
+                    // klik w widok (bez przeciągania): jak klik obok w 2D — zamyka ustawienia operacji
+                    if std::mem::take(&mut self.view_model.clicked) {
+                        events.push(ViewEvent::Empty);
+                    }
                 } else {
                     events = self.view2d.ui(ui, rect, &mut self.doc, &tool_d, inter, Some((machine.travel_x, machine.travel_y)));
                 }

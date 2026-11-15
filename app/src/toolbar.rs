@@ -42,7 +42,7 @@ impl Group {
             Group::Pocket => &[PocketOffset, PocketZigzag, PocketAdaptive],
             Group::Drill => &[DrillSimple, DrillPeck, DrillHelix],
             Group::Engrave => &[EngCenter, EngLeft, EngRight, EngVcarve, Text],
-            Group::Model3D => &[Rough3D, Finish3D],
+            Group::Model3D => &[Rough3D, Finish3D, Cutout3D],
             Group::Zero => &[ZeroBL, ZeroCenter, ZeroTL, ZeroPick],
         }
     }
@@ -57,6 +57,11 @@ impl Group {
             Group::Model3D => Color32::from_rgb(240, 200, 90),
             Group::Zero => Color32::WHITE,
         }
+    }
+
+    /// Czy grupa jest w zakładce „Model 3D” (inne potrzebują rysunku 2D).
+    pub fn in_3d_view(&self) -> bool {
+        matches!(self, Group::Model3D | Group::Zero)
     }
 
     fn index(&self) -> usize {
@@ -96,6 +101,8 @@ pub enum Sub {
     Rough3D,
     /// Obróbka wykańczająca 3D (przejścia równoległe).
     Finish3D,
+    /// Wycięcie detalu po sylwetce modelu (profil zewnętrzny z mostkami).
+    Cutout3D,
     ZeroBL,
     ZeroCenter,
     ZeroTL,
@@ -131,6 +138,7 @@ impl Sub {
             Text => tr!("Tekst"),
             Rough3D => tr!("Zgrubna"),
             Finish3D => tr!("Wykańczająca"),
+            Cutout3D => tr!("Wycięcie"),
             ZeroBL => tr!("Lewy dolny"),
             ZeroCenter => tr!("Środek"),
             ZeroTL => tr!("Lewy górny"),
@@ -166,6 +174,7 @@ impl Sub {
             Text => Icon::Text,
             Rough3D => Icon::Rough3D,
             Finish3D => Icon::Finish3D,
+            Cutout3D => Icon::Cutout3D,
             ZeroBL => Icon::ZeroBL,
             ZeroCenter => Icon::ZeroCenter,
             ZeroTL => Icon::ZeroTL,
@@ -221,6 +230,7 @@ impl Sub {
             EngVcarve => (OpKind::VCarve(Default::default()), 3.0_f64.min(thickness), "V-carving"),
             Rough3D => (OpKind::Rough3D(Default::default()), thickness, tr!("Zgrubna 3D")),
             Finish3D => (OpKind::Finish3D(Default::default()), thickness, tr!("Wykańczająca 3D")),
+            Cutout3D => (profile(ProfileSide::Outside), thickness, tr!("Wycięcie modelu")),
             _ => return None,
         })
     }
@@ -267,6 +277,8 @@ pub enum ToolbarAction {
     Changed,
     /// Polecenie natychmiastowe (odbicie, ustawienie zera).
     Command(Sub),
+    /// Wybrany wariant tworzy operację od razu (obróbka 3D).
+    Create,
 }
 
 impl Toolbar {
@@ -283,12 +295,15 @@ impl Toolbar {
         self.set(Sub::Select);
     }
 
-    /// Kolumna 1 — grupy.
-    pub fn groups_ui(&mut self, ui: &mut egui::Ui) -> Option<ToolbarAction> {
+    /// Kolumna 1 — grupy (`only3d`: zakładka modelu — tylko to, co da się tam użyć).
+    pub fn groups_ui(&mut self, ui: &mut egui::Ui, only3d: bool) -> Option<ToolbarAction> {
         let mut action = None;
         ui.add_space(4.0);
         ui.spacing_mut().item_spacing.y = 6.0;
         for g in Group::ALL {
+            if only3d && !g.in_3d_view() {
+                continue;
+            }
             if g == Group::Zero {
                 ui.separator();
             }
@@ -330,7 +345,8 @@ impl Toolbar {
                     action = Some(ToolbarAction::Command(s));
                 } else {
                     self.chosen[self.group.index()] = s;
-                    action = Some(ToolbarAction::Changed);
+                    // operacje 3D powstają od razu (krzywe są tylko opcjonalną granicą)
+                    action = Some(if s.group() == Group::Model3D { ToolbarAction::Create } else { ToolbarAction::Changed });
                 }
             }
         }

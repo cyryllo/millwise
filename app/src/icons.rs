@@ -37,6 +37,7 @@ pub enum Icon {
     Preview3D,
     Rough3D,
     Finish3D,
+    Cutout3D,
     // ikony kroków historii zmian
     Open,
     Delete,
@@ -305,6 +306,26 @@ pub fn draw(painter: &egui::Painter, r: Rect, icon: Icon) {
             painter.rect_filled(rect(cx - 3.0, 2.0, 6.0, cy - 2.0), 0.0, STEEL_DARK);
             painter.circle_filled(p(cx, cy), 3.0 * k, STEEL);
             painter.circle_stroke(p(cx, cy), 3.0 * k, st(0.8, OUTLINE));
+        }
+        Icon::Cutout3D => {
+            // z góry: płyta, detal z kopułą i obrys cięcia z mostkami
+            painter.rect_filled(rect(2.0, 2.0, 36.0, 36.0), 2.0 * k, PLATE);
+            painter.rect_filled(rect(9.0, 9.0, 22.0, 22.0), 2.0 * k, BLUE);
+            painter.circle_filled(p(20.0, 20.0), 6.5 * k, BLUE_LIGHT);
+            painter.circle_stroke(p(20.0, 20.0), 6.5 * k, st(0.8, OUTLINE));
+            for seg in [
+                [(6.0, 6.0), (16.0, 6.0)],
+                [(24.0, 6.0), (34.0, 6.0)],
+                [(34.0, 6.0), (34.0, 16.0)],
+                [(34.0, 24.0), (34.0, 34.0)],
+                [(34.0, 34.0), (24.0, 34.0)],
+                [(16.0, 34.0), (6.0, 34.0)],
+                [(6.0, 34.0), (6.0, 24.0)],
+                [(6.0, 16.0), (6.0, 6.0)],
+            ] {
+                line(&seg, st(2.0, GREEN));
+            }
+            tool_dot(34.0, 11.0, 2.6);
         }
         Icon::Text => {
             // litera „A” z zarysu i linia bazowa
