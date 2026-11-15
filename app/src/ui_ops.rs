@@ -677,8 +677,21 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
         OpKind::Finish3D(p) => {
             let tool = lib.get(op.tool_id);
             let d = tool.map_or(6.0, |t| t.diameter);
+            ui_kit::label(ui, tr!("Strategia"));
+            ui.horizontal(|ui| {
+                changed |= ui
+                    .radio_value(&mut p.strategy, cam_ops::Finish3DStrategy::Raster, tr!("Równoległa"))
+                    .on_hover_text(tr!("Przejścia równoległe po powierzchni — łagodne zbocza i płaskie miejsca"))
+                    .changed();
+                changed |= ui
+                    .radio_value(&mut p.strategy, cam_ops::Finish3DStrategy::Waterline, tr!("Warstwicowa"))
+                    .on_hover_text(tr!("Wokół modelu na stałych wysokościach — strome ściany; płaskie miejsca zostają dla równoległej"))
+                    .changed();
+            });
+            ui.end_row();
+            let waterline = p.strategy == cam_ops::Finish3DStrategy::Waterline;
             let mut pct = p.stepover * 100.0;
-            ui_kit::label(ui, tr!("Odstęp przejść"));
+            ui_kit::label(ui, if waterline { tr!("Odstęp warstw") } else { tr!("Odstęp przejść") });
             ui.horizontal(|ui| {
                 if ui.add(egui::DragValue::new(&mut pct).range(1.0..=100.0).speed(0.2).suffix(" % Ø")).changed() {
                     p.stepover = pct / 100.0;
@@ -688,17 +701,19 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
             });
             ui.end_row();
             // wysokość grzbietów między przejściami (frez kulowy, płaska powierzchnia)
-            if let Some(t) = tool.filter(|t| matches!(t.kind, cam_ops::ToolKind::BallEnd)) {
+            if let Some(t) = tool.filter(|t| matches!(t.kind, cam_ops::ToolKind::BallEnd) && !waterline) {
                 let (r, s) = (t.radius(), p.stepover * t.diameter * 0.5);
                 let scallop = r - (r * r - s * s).max(0.0).sqrt();
                 ui.label("");
                 ui.label(RichText::new(tr!("grzbiety ok. {:.3} mm", scallop)).small().color(ui_kit::LABEL));
                 ui.end_row();
             }
-            changed |= num(ui, tr!("Kierunek przejść"), &mut p.angle, -180.0..=180.0, 1.0, "°");
-            ui_kit::label(ui, tr!("Drugi raz w poprzek"));
-            changed |= ui.checkbox(&mut p.cross, "").on_hover_text(tr!("Drugie przejście pod kątem 90° — gładziej na zboczach równoległych do pierwszego")).changed();
-            ui.end_row();
+            if !waterline {
+                changed |= num(ui, tr!("Kierunek przejść"), &mut p.angle, -180.0..=180.0, 1.0, "°");
+                ui_kit::label(ui, tr!("Drugi raz w poprzek"));
+                changed |= ui.checkbox(&mut p.cross, "").on_hover_text(tr!("Drugie przejście pod kątem 90° — gładziej na zboczach równoległych do pierwszego")).changed();
+                ui.end_row();
+            }
             changed |= num(ui, tr!("Naddatek na modelu"), &mut p.allowance, -5.0..=20.0, 0.01, " mm");
             ui.label("");
             ui.label(

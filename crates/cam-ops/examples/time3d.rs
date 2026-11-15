@@ -34,5 +34,12 @@ fn main() {
         let t = Instant::now();
         let r = generate_with_model(&op, &tool, &[], Some(&ModelInput { heights: &h, stock }));
         println!("wykańczająca ({name}): {} ruchów, {:?}, {:?}", r.toolpath.moves.len(), t.elapsed(), r.warnings);
+        let op = Operation {
+            kind: OpKind::Finish3D(Finish3DParams { strategy: Finish3DStrategy::Waterline, ..Default::default() }),
+            ..op.clone()
+        };
+        let t = Instant::now();
+        let r = generate_with_model(&op, &tool, &[], Some(&ModelInput { heights: &h, stock }));
+        println!("warstwice ({name}): {} ruchów, {:?}, {:?}", r.toolpath.moves.len(), t.elapsed(), r.warnings);
     }
 }

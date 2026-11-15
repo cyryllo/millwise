@@ -253,11 +253,22 @@ impl Default for Rough3DParams {
     }
 }
 
-/// Obróbka wykańczająca 3D: przejścia równoległe po powierzchni modelu.
+/// Sposób prowadzenia narzędzia przy wykańczaniu 3D.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Finish3DStrategy {
+    /// Przejścia równoległe (raster) — najlepiej na łagodnych powierzchniach.
+    #[default]
+    Raster,
+    /// Warstwice (waterline): wokół modelu na stałych wysokościach — strome ściany.
+    Waterline,
+}
+
+/// Obróbka wykańczająca 3D: przejścia równoległe po powierzchni modelu albo warstwice.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Finish3DParams {
-    /// Odstęp przejść jako ułamek średnicy.
+    pub strategy: Finish3DStrategy,
+    /// Odstęp przejść (raster) albo warstw (waterline, w pionie) jako ułamek średnicy.
     pub stepover: f64,
     /// Kierunek przejść [°] (0 = wzdłuż X).
     pub angle: f64,
@@ -269,7 +280,7 @@ pub struct Finish3DParams {
 
 impl Default for Finish3DParams {
     fn default() -> Self {
-        Self { stepover: 0.1, angle: 0.0, cross: false, allowance: 0.0 }
+        Self { strategy: Finish3DStrategy::Raster, stepover: 0.1, angle: 0.0, cross: false, allowance: 0.0 }
     }
 }
 

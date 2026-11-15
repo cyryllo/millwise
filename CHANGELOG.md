@@ -55,6 +55,9 @@ Version numbers:
   there is one); pass spacing with the scallop height for a ball cutter, pass
   direction, an optional second pass across, and stock left on the model.
   Neighbouring passes are joined along the surface without lifting.
+  A second strategy, „Waterline”, goes around the model at constant heights
+  (level spacing as a share of the cutter diameter, climb milling), for steep
+  walls that parallel passes leave rough; selected curves limit it too.
 
 - **English user interface.** Widok → Język / Language switches between
   Polski and English at once, without a restart; the choice is remembered.

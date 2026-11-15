@@ -247,13 +247,18 @@ impl View3D {
                     self.fit_requested = true;
                 }
                 ui.checkbox(&mut self.camera.orthographic, tr!("Ortho"));
-                if kind == ViewKind::Model {
-                    ui.add_space(10.0);
-                    ui.checkbox(&mut self.show_paths, tr!("Ścieżki"));
-                    ui.checkbox(&mut self.show_stock, tr!("Półfabrykat"));
-                }
             });
         });
+        // zakładka modelu: przełączniki w osobnym wierszu nad przyciskami widoków
+        if kind == ViewKind::Model {
+            let row = Rect::from_min_size(egui::pos2(rect.left() + 10.0, rect.bottom() - 62.0), egui::vec2(rect.width() - 20.0, 26.0));
+            ui.scope_builder(egui::UiBuilder::new().max_rect(row), |ui| {
+                ui.horizontal(|ui| {
+                    ui.checkbox(&mut self.show_paths, tr!("Ścieżki"));
+                    ui.checkbox(&mut self.show_stock, tr!("Półfabrykat"));
+                });
+            });
+        }
         close
     }
 }

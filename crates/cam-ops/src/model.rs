@@ -523,6 +523,101 @@ impl ToolProfile {
     }
 }
 
+/// Warstwice wartości w węzłach siatki (`vals[j·nx + i]` w punkcie `origin + (i, j)·step`):
+/// zamknięte kontury granic obszarów, w których wartość > `level` — obszar po lewej
+/// (zewnętrzne CCW, otwory CW). Położenie na krawędzi siatki z interpolacji liniowej;
+/// gdzie wartość skacze o więcej niż `jump` (pionowa ściana), granica idzie
+/// po stronie niższej wartości (bezpiecznej). Poza siatką = poniżej poziomu.
+pub fn iso_contours(vals: &[f32], nx: usize, ny: usize, origin: Vec2, step: f64, level: f64, jump: f64, tol: f64) -> Vec<Contour> {
+    let val = |i: isize, j: isize| -> f64 {
+        if i < 0 || j < 0 || i >= nx as isize || j >= ny as isize {
+            f64::NEG_INFINITY
+        } else {
+            vals[j as usize * nx + i as usize] as f64
+        }
+    };
+    let inside = |i: isize, j: isize| val(i, j) > level;
+    let node = |i: isize, j: isize| origin + Vec2::new(i as f64 * step, j as f64 * step);
+    // punkt na krawędzi między węzłami a (wewnątrz) i b (na zewnątrz)
+    let cross = |ai: isize, aj: isize, bi: isize, bj: isize| -> Vec2 {
+        let (va, vb) = (val(ai, aj), val(bi, bj));
+        let t = if !vb.is_finite() || va - vb > jump { 1.0 } else { ((va - level) / (va - vb)).clamp(0.0, 1.0) };
+        node(ai, aj).lerp(node(bi, bj), t)
+    };
+    // punkt krawędzi o identyfikatorze (2i+1, 2j) — pozioma, (2i, 2j+1) — pionowa
+    let edge_point = |e: (isize, isize)| -> Vec2 {
+        let (i, j) = (e.0.div_euclid(2), e.1.div_euclid(2));
+        let (a, b) = if e.0.rem_euclid(2) == 1 { ((i, j), (i + 1, j)) } else { ((i, j), (i, j + 1)) };
+        if inside(a.0, a.1) { cross(a.0, a.1, b.0, b.1) } else { cross(b.0, b.1, a.0, a.1) }
+    };
+    let mut segs: Vec<((isize, isize), (isize, isize))> = Vec::new();
+    for j in -1..ny as isize {
+        for i in -1..nx as isize {
+            let (a, b, c, d) = (inside(i, j), inside(i + 1, j), inside(i + 1, j + 1), inside(i, j + 1));
+            let code = (a as u8) | (b as u8) << 1 | (c as u8) << 2 | (d as u8) << 3;
+            let e_bottom = (2 * i + 1, 2 * j);
+            let e_right = (2 * i + 2, 2 * j + 1);
+            let e_top = (2 * i + 1, 2 * j + 2);
+            let e_left = (2 * i, 2 * j + 1);
+            // jak w `outline_where`: tablica z wnętrzem po prawej — odwracamy
+            let mut add = |p: (isize, isize), q: (isize, isize)| segs.push((q, p));
+            match code {
+                1 => add(e_left, e_bottom),
+                2 => add(e_bottom, e_right),
+                3 => add(e_left, e_right),
+                4 => add(e_right, e_top),
+                5 => {
+                    add(e_left, e_top);
+                    add(e_right, e_bottom);
+                }
+                6 => add(e_bottom, e_top),
+                7 => add(e_left, e_top),
+                8 => add(e_top, e_left),
+                9 => add(e_top, e_bottom),
+                10 => {
+                    add(e_bottom, e_left);
+                    add(e_top, e_right);
+                }
+                11 => add(e_top, e_right),
+                12 => add(e_right, e_left),
+                13 => add(e_right, e_bottom),
+                14 => add(e_bottom, e_left),
+                _ => {}
+            }
+        }
+    }
+    let mut next: std::collections::HashMap<(isize, isize), (isize, isize)> = std::collections::HashMap::with_capacity(segs.len());
+    for (p, q) in &segs {
+        next.insert(*p, *q);
+    }
+    let mut out = Vec::new();
+    for &(start, _) in &segs {
+        if !next.contains_key(&start) {
+            continue;
+        }
+        let mut pts = vec![edge_point(start)];
+        let mut cur = start;
+        while let Some(q) = next.remove(&cur) {
+            if q == start {
+                break;
+            }
+            pts.push(edge_point(q));
+            cur = q;
+        }
+        if pts.len() < 3 {
+            continue;
+        }
+        let pts = simplify_closed(&pts, tol);
+        if pts.len() < 3 {
+            continue;
+        }
+        let mut c = Contour::new(true);
+        c.verts = pts.into_iter().map(|p| Vertex::new(p.x, p.y, 0.0)).collect();
+        out.push(c);
+    }
+    out
+}
+
 /// Upraszczanie zamkniętej łamanej (Douglas–Peucker) z tolerancją `tol`.
 fn simplify_closed(pts: &[Vec2], tol: f64) -> Vec<Vec2> {
     if pts.len() < 4 {
