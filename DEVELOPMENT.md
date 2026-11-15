@@ -88,8 +88,7 @@ already built program.
 Version numbers (as in Kerfly):
 
 - **1.0.0** will be the first stable release; until then versions are `0.x.y`;
-- the **second number** goes up with every release that adds features (by 10
-  when a new module is added);
+- the **second number** goes up with every release that adds features;
 - the **third number** goes up for releases that only fix bugs.
 
 Every code release raises `version` in the workspace `Cargo.toml` and gets a
