@@ -35,7 +35,6 @@ Symulacja materiału na karcie jest (silnik „GPU”). Dalej:
       widok 2D zwalnia przy przesuwaniu i powiększaniu. Ścieżki wysyłane na
       kartę raz po zmianie (jak w widoku 3D), rysowane w każdej klatce bez
       przeliczania.
-- [ ] Silnik GPU: wykrywanie ruchów szybkich w materiale (jak w silnikach Bryła i Szybki).
 
 ## 4. Pomysły na dalej
 

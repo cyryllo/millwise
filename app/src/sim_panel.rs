@@ -60,8 +60,6 @@ type OpData = (ToolShape, Vec<(P3, bool, f64)>);
 pub enum Engine {
     /// Bryła (operacje boolowskie) — dokładna geometria, wolniejsze przeliczenie.
     Solid,
-    /// Mapa wysokości — bardzo szybka, dla dużych programów.
-    Fast,
     /// Bez materiału: model docelowy, ścieżki wykonane i ostatnia warstwa — natychmiast,
     /// przy dowolnej liczbie ruchów.
     Paths,
@@ -74,7 +72,6 @@ impl Engine {
     fn code(self) -> u8 {
         match self {
             Engine::Solid => 0,
-            Engine::Fast => 1,
             Engine::Paths => 2,
             Engine::Gpu => 3,
         }
@@ -232,8 +229,9 @@ pub struct SimState {
     empty_mesh: SimMesh,
     /// Suwak czasu jest przeciągany — wtedy szybki podgląd zamiast bryły.
     scrubbing: bool,
-    /// Silnik wybierany automatycznie (dopóki użytkownik nie wybierze sam).
-    engine_auto: bool,
+    /// Wybór użytkownika: None = automatycznie, Some(true) = „Bryła”, Some(false) = „Ścieżki”.
+    /// „Bryła” to silnik GPU albo bryła liczona na procesorze — zależnie od ustawienia GPU.
+    choice: Option<bool>,
     /// Automatycznie wybrano silnik „Szybki”, bo program jest bardzo gęsty (liczba ruchów).
     dense: Option<usize>,
     /// Bryła przerosła limit (liczba trójkątów) — przełączono na „Szybki”.
@@ -248,6 +246,8 @@ pub struct SimState {
     progress_serial: u64,
     /// Ustawienie: symulacja materiału na karcie graficznej (silnik „GPU” do wyboru i domyślny).
     pub gpu_enabled: bool,
+    /// Silniki GPU i „Ścieżki”: kolizje ruchów szybkich liczone w tle na procesorze.
+    coll_rx: Option<Receiver<Vec<Collision>>>,
     /// Silnik „GPU”: narzędzia operacji, półfabrykat (x0, y0, x1, y1), spód.
     gpu_tools: Vec<ToolShape>,
     gpu_area: [f64; 4],
@@ -299,7 +299,7 @@ impl Default for SimState {
             jump_to_fraction: None,
             empty_mesh: SimMesh::default(),
             scrubbing: false,
-            engine_auto: true,
+            choice: None,
             dense: None,
             too_big: None,
             timeline: Vec::new(),
@@ -308,6 +308,7 @@ impl Default for SimState {
             progress_time: f64::NAN,
             progress_serial: 0,
             gpu_enabled: true,
+            coll_rx: None,
             gpu_tools: Vec::new(),
             gpu_area: [0.0; 4],
             gpu_bottom: 0.0,
@@ -323,7 +324,6 @@ impl SimState {
     /// Włącza / wyłącza silnik „GPU” (ustawienie); silnik wybierany znów automatycznie.
     pub fn set_gpu_enabled(&mut self, on: bool) {
         self.gpu_enabled = on;
-        self.engine_auto = true;
         self.too_big = None;
     }
 
@@ -331,38 +331,24 @@ impl SimState {
     pub fn sync(&mut self, ctx: &egui::Context, doc: &Document, lib: &ToolLibrary, machine: &Machine) {
         self.sides = doc.stock.two_sided.is_some() && doc.ops.iter().any(|o| o.enabled && o.side == cam_ops::Side::B);
         let side_b = self.sides && self.side == cam_ops::Side::B;
-        let has3d = doc.ops.iter().any(|o| o.enabled && cam_ops::needs_model(&o.kind));
-        if !self.gpu_enabled && self.engine == Engine::Gpu {
-            self.engine_auto = true;
-        }
-        if self.engine_auto && has3d {
-            // obróbka 3D: materiał na karcie graficznej albo — bez GPU — model docelowy i ścieżki
-            self.engine = if self.gpu_enabled { Engine::Gpu } else { Engine::Paths };
-            self.dense = None;
-        } else if self.engine_auto {
-            if self.engine.instant() || self.engine == Engine::Fast {
-                self.engine = Engine::Solid;
-            }
-            let moves: usize = doc
-                .ops
-                .iter()
-                .zip(&doc.op_cache)
-                .filter(|(op, _)| op.enabled && (!self.sides || op.side == self.side))
-                .filter_map(|(_, c)| c.as_ref())
-                .map(|c| c.result.toolpath.moves.len())
-                .sum();
-            if moves > DENSE_MOVES {
-                if self.dense.is_none() {
-                    self.engine = if self.gpu_enabled { Engine::Gpu } else { Engine::Paths };
-                }
-                self.dense = Some(moves);
-            } else {
-                if self.dense.is_some() {
-                    self.engine = Engine::Solid;
-                }
-                self.dense = None;
-            }
-        }
+        // „Bryła”: karta graficzna, gdy włączona w ustawieniach, inaczej procesor
+        let material = if self.gpu_enabled { Engine::Gpu } else { Engine::Solid };
+        let moves: usize = doc
+            .ops
+            .iter()
+            .zip(&doc.op_cache)
+            .filter(|(op, _)| op.enabled && (!self.sides || op.side == self.side))
+            .filter_map(|(_, c)| c.as_ref())
+            .map(|c| c.result.toolpath.moves.len())
+            .sum();
+        // na procesorze bardzo gęsty program liczyłby się minutami — wtedy same ścieżki
+        self.dense = (!self.gpu_enabled && moves > DENSE_MOVES).then_some(moves);
+        self.engine = match self.choice {
+            Some(false) => Engine::Paths,
+            Some(true) => material,
+            None if self.dense.is_some() || (self.too_big.is_some() && !self.gpu_enabled) => Engine::Paths,
+            None => material,
+        };
         let key = (
             doc.paths_revision,
             doc.stock.thickness.to_bits(),
@@ -426,8 +412,25 @@ impl SimState {
             if let Some(f) = self.jump_to_fraction.take() {
                 self.time = self.duration * f.clamp(0.0, 1.0);
             }
+            // kolizje ruchów szybkich: mapa wysokości w tle (lekka — bez klatek)
+            let (tx, rx) = channel::<Vec<Collision>>();
+            let (thickness, rapid) = (doc.stock.thickness, machine.rapid_xy);
+            let c = ctx.clone();
+            std::thread::Builder::new()
+                .name("millwise-collisions".into())
+                .spawn(move || {
+                    let ops: Vec<SimOp> = data.iter().map(|(t, p)| SimOp { tool: t.clone(), points: p }).collect();
+                    let mut sim = Simulator::new(Heightmap::new(area, 0.0, -thickness, 400), &ops, rapid);
+                    sim.advance_to(sim.duration());
+                    if tx.send(sim.collisions.clone()).is_ok() {
+                        c.request_repaint();
+                    }
+                })
+                .expect("nie można uruchomić wątku kolizji");
+            self.coll_rx = Some(rx);
             return;
         }
+        self.coll_rx = None;
         self.worker =
             Some(spawn_worker(ctx.clone(), data, area, doc.stock.thickness, self.resolution, machine.rapid_xy, self.engine));
     }
@@ -435,6 +438,10 @@ impl SimState {
     /// Odbiór wyników z wątku i postęp odtwarzania; wywoływane co klatkę.
     pub fn tick(&mut self, ctx: &egui::Context) {
         if self.engine.instant() && !self.timeline.is_empty() {
+            if let Some(c) = self.coll_rx.as_ref().and_then(|rx| rx.try_recv().ok()) {
+                self.collisions = c;
+                self.coll_rx = None;
+            }
             if self.playing {
                 let dt = ctx.input(|i| i.stable_dt).min(0.1) as f64;
                 self.time = (self.time + dt * self.speed).min(self.duration);
@@ -472,10 +479,9 @@ impl SimState {
                     self.pending = false;
                 }
                 Msg::SolidTooBig(n) => {
-                    // bryła za szczegółowa — karta graficzna albo same ścieżki (przebudowa w `sync`)
-                    self.engine = if self.gpu_enabled { Engine::Gpu } else { Engine::Paths };
-                    self.engine_auto = false;
+                    // bryła na procesorze za szczegółowa — same ścieżki (przebudowa w `sync`)
                     self.too_big = Some(n);
+                    self.choice = None;
                 }
             }
         }
@@ -709,35 +715,42 @@ impl SimState {
         ui.checkbox(&mut self.show_tool, tr!("Narzędzie"));
         ui.checkbox(&mut self.show_model, tr!("Model 3D")).on_hover_text(tr!("Model STL — widoczny tam, gdzie materiał jest zdjęty, albo po wyłączeniu materiału"));
         ui.horizontal(|ui| {
-            ui.label(tr!("Silnik"));
-            let a = ui
-                .selectable_value(&mut self.engine, Engine::Solid, tr!("Bryła"))
-                .on_hover_text(tr!("Dokładna bryła (operacje boolowskie) — czyste ściany, fazy i zaokrąglenia; dłuższe przeliczenie"));
-            let c = ui
-                .selectable_value(&mut self.engine, Engine::Paths, tr!("Ścieżki"))
-                .on_hover_text(tr!("Bez materiału: model docelowy, wykonane ścieżki i ostatnia warstwa wyróżniona — płynnie przy każdej wielkości programu"));
-            let g = if self.gpu_enabled {
-                ui.selectable_value(&mut self.engine, Engine::Gpu, "GPU")
-                    .on_hover_text(tr!("Ubytek materiału liczy i rysuje karta graficzna — płynnie przy każdej wielkości programu (Widok › symulacja na GPU)"))
-                    .clicked()
+            ui.label(tr!("Widok"));
+            let material = matches!(self.engine, Engine::Gpu | Engine::Solid);
+            let label = if self.gpu_enabled { tr!("Bryła (GPU)") } else { tr!("Bryła (CPU)") };
+            let hover = if self.gpu_enabled {
+                tr!("Ubytek materiału liczy i rysuje karta graficzna — płynnie przy każdej wielkości programu")
             } else {
-                false
+                tr!("Dokładna bryła liczona na procesorze — czyste ściany, sprawdzanie kolizji; przy dużych programach wolno")
             };
-            if a.clicked() || c.clicked() || g {
-                self.engine_auto = false;
-                self.too_big = None;
+            if ui.selectable_label(material, label).on_hover_text(hover).clicked() {
+                self.choice = Some(true);
+            }
+            if ui
+                .selectable_label(self.engine == Engine::Paths, tr!("Ścieżki"))
+                .on_hover_text(tr!("Bez materiału: model docelowy, wykonane ścieżki i ostatnia warstwa wyróżniona — płynnie przy każdej wielkości programu"))
+                .clicked()
+            {
+                self.choice = Some(false);
             }
         });
-        if let (Some(n), true) = (self.too_big, self.engine.instant()) {
+        if self.engine == Engine::Solid {
             ui.label(
-                RichText::new(tr!("Bryła za szczegółowa ({:.1} mln trójkątów) — przełączono na lżejszy silnik.", n as f64 / 1e6))
+                RichText::new(tr!("Bryła liczona na procesorze — przy dużych programach wolno. Szybciej: Widok › Symulacja materiału na karcie graficznej (GPU)."))
                     .small()
                     .color(Color32::from_rgb(230, 180, 80)),
             );
         }
-        if let (Some(n), true, true) = (self.dense, self.engine_auto, self.engine.instant()) {
+        if let (Some(n), Engine::Paths, None) = (self.too_big, self.engine, self.choice) {
             ui.label(
-                RichText::new(tr!("Bardzo gęsta ścieżka ({} ruchów) — Bryła liczyłaby się bardzo długo, wybrano lżejszy silnik.", n))
+                RichText::new(tr!("Bryła za szczegółowa ({:.1} mln trójkątów) — pokazano same ścieżki. Płynna bryła: włącz GPU w menu Widok.", n as f64 / 1e6))
+                    .small()
+                    .color(Color32::from_rgb(230, 180, 80)),
+            );
+        }
+        if let (Some(n), Engine::Paths, None) = (self.dense, self.engine, self.choice) {
+            ui.label(
+                RichText::new(tr!("Bardzo gęsta ścieżka ({} ruchów) — na procesorze bryła liczyłaby się bardzo długo, pokazano same ścieżki. Płynna bryła: włącz GPU w menu Widok.", n))
                     .small()
                     .color(Color32::from_rgb(230, 180, 80)),
             );
@@ -804,8 +817,11 @@ impl SimState {
         }
 
         ui.separator();
-        if self.engine.instant() {
-            ui.label(RichText::new(tr!("Kolizje ruchów szybkich sprawdza silnik Bryła albo Szybki.")).small().weak());
+        if self.coll_rx.is_some() {
+            ui.horizontal(|ui| {
+                ui.spinner();
+                ui.label(RichText::new(tr!("Sprawdzanie kolizji ruchów szybkich…")).small().weak());
+            });
         } else if self.collisions.is_empty() {
             ui.label(RichText::new(tr!("Kolizje ruchów szybkich: brak")).color(Color32::from_rgb(120, 220, 140)));
         } else {

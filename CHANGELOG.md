@@ -95,10 +95,9 @@ Version numbers:
 - **Very dense toolpaths** (e.g. 3D finishing every 0.1 mm with a fine
   engraving cutter) no longer stall the simulation. Dragging the time slider
   shows a quick preview and the exact solid follows when the slider is
-  released. A program with more than 40 000 moves, or a solid that grows
-  beyond 2 million triangles, switches by itself to the GPU engine (or, with
-  the GPU turned off, to „Toolpaths”), with a note; choosing the engine by
-  hand still works. 3D parallel finishing is computed on all processor
+  released. Without the GPU, a program with more than 40 000 moves, or a
+  solid that grows beyond 2 million triangles, is shown as „Toolpaths” (with
+  a note; „Solid (CPU)” can still be chosen by hand). 3D parallel finishing is computed on all processor
   cores. The finishing pass spacing is entered in millimetres.
 
 - **„Toolpaths” simulation mode**: no material removal is computed — the
@@ -113,14 +112,16 @@ Version numbers:
   and the material surface is shown straight from that texture — no meshes
   are built by the processor. A frame only adds the new moves, so playback
   and seeking stay smooth for programs of any size, also through OpenGL.
-  Accuracy from 1024 to 8192 pixels along the stock. It is the default for
-  3D and very dense programs; View › „Material simulation on the graphics
-  card (GPU)” turns it off for weak graphics cards (3D programs are then
-  shown in the „Toolpaths” mode).
+  Accuracy from 1024 to 8192 pixels along the stock. On by default; View ›
+  „Material simulation on the graphics card (GPU)” turns it off for weak
+  graphics cards (the processor then computes the solid).
 
-- **Simulation engines: Solid, Toolpaths and GPU.** The „Fast” height-map
-  engine is no longer offered — its surface was too coarse for 3D work; the
-  GPU engine replaces it.
+- **Simulation view: „Solid” and „Toolpaths”.** „Solid” shows the material
+  being removed — by the graphics card when the GPU setting is on (the
+  default, „Solid (GPU)”), otherwise by the processor („Solid (CPU)”, with a
+  note that it is slow for large programs). Rapid moves into the material are
+  checked in the background for every view. The „Fast” height-map engine is
+  no longer offered — its surface was too coarse for 3D work.
 
 ### Fixed
 
