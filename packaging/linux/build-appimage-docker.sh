@@ -35,7 +35,9 @@ echo "Wymagana glibc: $(objdump -T "$BIN" | grep -o 'GLIBC_[0-9.]*' | sort -V | 
 APPIMAGETOOL="${APPIMAGETOOL:-$ROOT/target/tools/appimagetool-x86_64.AppImage}" \
     sh "$WORK/src/packaging/linux/build-appimage.sh" "$BIN"
 mkdir -p "$ROOT/dist"
-cp "$WORK/src/dist/"Millwise-*-x86_64.AppImage "$ROOT/dist/"
-OUT="$(ls "$ROOT"/dist/Millwise-*-x86_64.AppImage | tail -1)"
+BUILT="$(ls "$WORK/src/dist/"Millwise-*-x86_64.AppImage)"
+cp "$BUILT" "$ROOT/dist/"
+# sprawdzany jest właśnie zbudowany plik (nie inny z dist/)
+OUT="$ROOT/dist/$(basename "$BUILT")"
 APPIMAGE_EXTRACT_AND_RUN=1 "$OUT" --version
 echo "Gotowe: $OUT"
