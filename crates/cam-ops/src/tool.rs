@@ -251,11 +251,134 @@ impl ToolLibrary {
                 step_down: 3.0,
                 ..base.clone()
             },
+            // --- zestaw podstawowy 3 / 4 / 6 mm ---
+            Tool {
+                number: 8,
+                name: tr!("Frez płaski 4 mm").into(),
+                diameter: 4.0,
+                shank_diameter: 4.0,
+                flute_length: 15.0,
+                feed: 1000.0,
+                plunge_feed: 250.0,
+                step_down: 1.5,
+                ..base.clone()
+            },
+            Tool {
+                number: 9,
+                name: tr!("Frez kulowy 3 mm").into(),
+                kind: ToolKind::BallEnd,
+                diameter: 3.0,
+                shank_diameter: 3.175,
+                flute_length: 12.0,
+                feed: 1000.0,
+                plunge_feed: 200.0,
+                step_down: 0.5,
+                stepover: 0.1,
+                ..base.clone()
+            },
+            Tool {
+                number: 10,
+                name: tr!("Frez kulowy 4 mm").into(),
+                kind: ToolKind::BallEnd,
+                diameter: 4.0,
+                shank_diameter: 4.0,
+                flute_length: 15.0,
+                feed: 1200.0,
+                plunge_feed: 250.0,
+                step_down: 0.8,
+                stepover: 0.12,
+                ..base.clone()
+            },
+            Tool {
+                number: 11,
+                name: tr!("V-bit 60° 3 mm").into(),
+                kind: ToolKind::VBit { angle: 60.0, tip_diameter: 0.1 },
+                diameter: 3.0,
+                shank_diameter: 3.175,
+                flute_length: 6.0,
+                feed: 600.0,
+                plunge_feed: 150.0,
+                step_down: 0.3,
+                ..base.clone()
+            },
+            Tool {
+                number: 12,
+                name: tr!("V-bit 60° 4 mm").into(),
+                kind: ToolKind::VBit { angle: 60.0, tip_diameter: 0.1 },
+                diameter: 4.0,
+                shank_diameter: 4.0,
+                flute_length: 8.0,
+                feed: 700.0,
+                plunge_feed: 180.0,
+                step_down: 0.4,
+                ..base.clone()
+            },
+            Tool {
+                number: 13,
+                name: tr!("V-bit 60° 6 mm").into(),
+                kind: ToolKind::VBit { angle: 60.0, tip_diameter: 0.2 },
+                diameter: 6.0,
+                flute_length: 10.0,
+                feed: 800.0,
+                plunge_feed: 200.0,
+                step_down: 0.5,
+                ..base.clone()
+            },
+            Tool {
+                number: 14,
+                name: tr!("Wiertło 3 mm").into(),
+                kind: ToolKind::Drill { point_angle: 118.0 },
+                diameter: 3.0,
+                shank_diameter: 3.0,
+                flute_length: 30.0,
+                rpm: 10000.0,
+                feed: 200.0,
+                plunge_feed: 120.0,
+                step_down: 2.0,
+                ..base.clone()
+            },
+            Tool {
+                number: 15,
+                name: tr!("Wiertło 4 mm").into(),
+                kind: ToolKind::Drill { point_angle: 118.0 },
+                diameter: 4.0,
+                shank_diameter: 4.0,
+                flute_length: 40.0,
+                rpm: 9000.0,
+                feed: 250.0,
+                plunge_feed: 130.0,
+                step_down: 2.5,
+                ..base.clone()
+            },
         ] {
             let t = if matches!(t.kind, ToolKind::FlatEnd | ToolKind::BallEnd) { t.with_material_presets() } else { t };
             lib.add(t);
         }
         lib
+    }
+
+    /// Dodaje narzędzia z zestawu startowego, których w bibliotece nie ma (ten sam
+    /// rodzaj, kąt i średnica). Numer z zestawu, jeśli wolny. Zwraca liczbę dodanych.
+    pub fn add_missing_defaults(&mut self) -> usize {
+        let same = |a: &Tool, b: &Tool| {
+            let angle = |k: &ToolKind| match *k {
+                ToolKind::VBit { angle, .. } | ToolKind::Engraver { angle, .. } => angle,
+                _ => 0.0,
+            };
+            std::mem::discriminant(&a.kind) == std::mem::discriminant(&b.kind)
+                && (angle(&a.kind) - angle(&b.kind)).abs() < 1e-6
+                && (a.diameter - b.diameter).abs() < 1e-6
+        };
+        let mut n = 0;
+        for t in ToolLibrary::with_defaults().tools {
+            if self.tools.iter().any(|o| same(o, &t)) {
+                continue;
+            }
+            let number = if self.tools.iter().any(|o| o.number == t.number) { self.next_number() } else { t.number };
+            self.add(Tool { number, ..t });
+            n += 1;
+        }
+        n
     }
 
     pub fn next_id(&self) -> u32 {
@@ -283,5 +406,49 @@ impl ToolLibrary {
 
     pub fn remove(&mut self, id: u32) {
         self.tools.retain(|t| t.id != id);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn basic_set_and_adding_missing_tools() {
+        let lib = ToolLibrary::with_defaults();
+        let count = |f: &dyn Fn(&Tool) -> bool| lib.tools.iter().filter(|t| f(t)).count();
+        // płaskie, kulowe, V (ostre) i wiertła w 3, 4 i 6 mm
+        for d in [3.0, 4.0, 6.0] {
+            for kind in [ToolKind::FlatEnd, ToolKind::BallEnd, ToolKind::VBit { angle: 60.0, tip_diameter: 0.0 }, ToolKind::Drill { point_angle: 118.0 }] {
+                assert_eq!(
+                    count(&|t| std::mem::discriminant(&t.kind) == std::mem::discriminant(&kind) && t.diameter == d),
+                    if matches!(kind, ToolKind::VBit { .. }) && d == 6.0 { 2 } else { 1 },
+                    "{kind:?} Ø{d}"
+                );
+            }
+        }
+        // numery bez powtórzeń
+        let mut nums: Vec<u32> = lib.tools.iter().map(|t| t.number).collect();
+        nums.sort();
+        nums.dedup();
+        assert_eq!(nums.len(), lib.tools.len());
+
+        // pełna biblioteka: nic nie dochodzi
+        let mut full = lib.clone();
+        assert_eq!(full.add_missing_defaults(), 0);
+        // stara biblioteka (bez nowych narzędzi, z zajętym numerem 8): dochodzą brakujące
+        let mut old = ToolLibrary::default();
+        for t in lib.tools.iter().filter(|t| t.number <= 7) {
+            old.tools.push(t.clone());
+        }
+        old.add(Tool { number: 8, name: "mój frez".into(), diameter: 10.0, ..Default::default() });
+        let added = old.add_missing_defaults();
+        assert_eq!(added, lib.tools.len() - 7);
+        assert!(old.tools.iter().any(|t| t.name == "mój frez" && t.number == 8));
+        let mut nums: Vec<u32> = old.tools.iter().map(|t| t.number).collect();
+        nums.sort();
+        nums.dedup();
+        assert_eq!(nums.len(), old.tools.len(), "numery bez powtórzeń");
+        assert_eq!(old.add_missing_defaults(), 0);
     }
 }

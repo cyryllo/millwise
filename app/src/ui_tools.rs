@@ -16,6 +16,8 @@ pub struct ToolsWindow {
     selected: Option<u32>,
     /// Edytowany zestaw parametrów: None = domyślne, Some(i) = presets[i].
     preset: Option<usize>,
+    /// Komunikat po dodaniu zestawu podstawowego.
+    note: Option<String>,
 }
 
 fn kind_options() -> [ToolKind; 6] {
@@ -88,6 +90,18 @@ impl ToolsWindow {
                             self.preset = None;
                             changed = true;
                         }
+                    }
+                    if ui
+                        .button(tr!("Dodaj zestaw podstawowy"))
+                        .on_hover_text(tr!("Frezy płaskie, kulowe, V i wiertła 3 / 4 / 6 mm — tylko te, których brakuje w bibliotece"))
+                        .clicked()
+                    {
+                        let n = lib.add_missing_defaults();
+                        self.note = Some(if n == 0 { tr!("Zestaw podstawowy jest już w bibliotece").to_string() } else { tr!("Dodano narzędzi: {}", n) });
+                        changed |= n > 0;
+                    }
+                    if let Some(note) = &self.note {
+                        ui.label(RichText::new(note).color(Color32::from_rgb(120, 200, 140)));
                     }
                     if let Some(p) = crate::storage::tools_path() {
                         ui.label(RichText::new(tr!("{} · wspólna dla wszystkich projektów", p.display())).small().weak());

@@ -71,6 +71,11 @@ Version numbers:
   the G-code follow the chosen language too. Material names saved in tool
   and project files stay as they are and are only shown translated.
 
+- **Basic tool set.** The starting tool library now has flat, ball and V
+  (60°) cutters and drills in 3, 4 and 6 mm (15 tools). An existing library
+  gets them with „Add the basic set” in the tool library window — only the
+  ones that are missing, the user's own tools stay as they are.
+
 ### Changed
 
 - **Faster solid simulation, also late in long programs.** The stock is
