@@ -20,11 +20,62 @@ weszło do programu, jest w [CHANGELOG.md](CHANGELOG.md) i w historii gita.
 
 Jest: model STL w półfabrykacie (zakładka „Model 3D”), krzywe z modelu,
 zgrubna warstwami Z, wykańczająca równoległa i warstwicowa, resztki, wycięcie
-po sylwetce, symulacja „Ścieżki”. Szczegóły w [ROADMAP.md](ROADMAP.md).
+po sylwetce, frezy kulowe stożkowe, symulacja na GPU i „Ścieżki”. Szczegóły w
+[ROADMAP.md](ROADMAP.md).
 
-- [ ] Warstwice tylko na stromych miejscach + równoległa tylko na łagodnych (jedna operacja).
-- [ ] Resztki po obróbce zgrubnej (ponowna zgrubna mniejszym frezem).
-- [ ] Obróbka 3D na stronie B (dwustronna).
+Dalej w paczkach, w kolejności od największego pożytku przy frezowaniu w
+drewnie (jedna paczka = jedno wydanie):
+
+**Paczka 1 — Płaskorzeźba ze zdjęcia**
+
+- [ ] Import JPG / PNG jako mapy wysokości: jasne miejsca wyżej, ciemne
+      niżej (z odwróceniem). Ustawienia: rozmiar w mm, głębokość, wygładzanie,
+      podstawa pod spodem. Portrety, litofany, ozdobne panele — bez pliku STL.
+      Dalej jak model STL (zgrubna, wykańczająca, symulacja).
+
+**Paczka 2 — Wykańczanie łączone**
+
+- [ ] Strome i płaskie w jednej operacji: warstwice tylko na stromych
+      miejscach, równoległa tylko na łagodnych, kąt graniczny do ustawienia —
+      jedna, równa powierzchnia bez nakładania się dwóch operacji.
+- [ ] Ograniczenie stromizny dla każdej wykańczającej (obrabiaj tylko
+      nachylenie od–do).
+- [ ] Płaskie miejsca: frez płaski tylko po poziomych powierzchniach (np. dno
+      wokół płaskorzeźby).
+
+**Paczka 3 — Kształty okrągłe**
+
+- [ ] Wykańczająca spiralna: jedna ciągła spirala od środka na zewnątrz, bez
+      zawracania — kopuły, misy, rozety.
+- [ ] Wykańczająca promieniowa: przejścia od środka jak szprychy.
+
+**Paczka 4 — Grawer na powierzchni 3D**
+
+- [ ] Rzutowanie krzywych na model: napis albo wzór z widoku 2D frezowany po
+      powierzchni na stałej głębokości pod nią (napis na łukowatej desce, wzór
+      na kopule).
+
+**Paczka 5 — Bezpieczeństwo**
+
+- [ ] Kolizja chwytu i nakrętki z modelem: ostrzeżenie, gdy w głębokim
+      miejscu ostrza są za krótkie i o materiał ociera chwyt (ważne przy
+      długich, wąskich frezach, np. kulowych stożkowych).
+
+**Paczka 6 — Resztki i zgrubna**
+
+- [ ] Ołówkowa (pencil): jedno przejście małym frezem wzdłuż wklęsłych
+      narożników i dolin.
+- [ ] Ponowna zgrubna mniejszym frezem — tylko to, czego nie dosięgnął duży
+      (wąskie kieszenie między elementami).
+- [ ] Zgrubna HSM 3D: stałe obciążenie frezu w każdej warstwie (szybciej i
+      bezpieczniej w twardym drewnie).
+
+**Paczka 7 — Dwie strony i najwyższa jakość**
+
+- [ ] Obróbka 3D na stronie B (odwrócona płyta) — detale obrabiane z dwóch
+      stron.
+- [ ] Wykańczanie ze stałym odstępem na powierzchni (scallop): jednakowe
+      grzbiety na stromym i na płaskim.
 
 ## 3. Karta graficzna (GPU)
 
