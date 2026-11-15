@@ -554,81 +554,201 @@ pub fn tool_button(ui: &mut egui::Ui, icon: Icon, label: &str, active: bool, ena
     }
 }
 
-/// Rysunek freza (sylwetka) w prostokącie `r`; układ 40 × 100 jednostek.
+/// Gradient poziomy (od lewej krawędzi walca do prawej): punkty (pozycja 0..1, kolor).
+type Stops = [(f32, [u8; 3]); 6];
+/// Stal chwytu — połysk przesunięty w lewo, ciemne brzegi.
+const METAL: Stops = [(0.0, [69, 74, 81]), (0.18, [149, 155, 162]), (0.32, [228, 232, 236]), (0.5, [158, 164, 171]), (0.85, [90, 95, 102]), (1.0, [56, 60, 66])];
+/// Węglik spiekany części tnącej — jaśniejszy.
+const CARBIDE: Stops = [(0.0, [89, 96, 103]), (0.2, [181, 188, 195]), (0.33, [245, 247, 249]), (0.55, [176, 182, 189]), (0.85, [103, 109, 116]), (1.0, [69, 74, 80])];
+/// Wiertło HSS-TiN — złote.
+const GOLD: Stops = [(0.0, [107, 83, 32]), (0.2, [201, 162, 74]), (0.33, [246, 226, 164]), (0.55, [195, 154, 67]), (0.85, [122, 94, 34]), (1.0, [77, 59, 21])];
+
+fn grad(stops: &Stops, t: f32) -> Color32 {
+    let t = t.clamp(0.0, 1.0);
+    let k = stops.iter().position(|s| s.0 >= t).unwrap_or(stops.len() - 1).max(1);
+    let (a, b) = (stops[k - 1], stops[k]);
+    let f = if b.0 > a.0 { (t - a.0) / (b.0 - a.0) } else { 0.0 };
+    let c = |i: usize| (a.1[i] as f32 + (b.1[i] as f32 - a.1[i] as f32) * f).round() as u8;
+    Color32::from_rgb(c(0), c(1), c(2))
+}
+
+/// Kolor oznaczenia rodzaju (pierścień na chwycie) — jak u producentów frezów.
+pub fn tool_color(kind: &ToolKind) -> Option<Color32> {
+    Some(match kind {
+        ToolKind::FlatEnd => Color32::from_rgb(61, 127, 224),
+        ToolKind::BallEnd => Color32::from_rgb(63, 191, 127),
+        ToolKind::BullNose { .. } => Color32::from_rgb(43, 181, 181),
+        ToolKind::VBit { .. } => Color32::from_rgb(232, 137, 58),
+        ToolKind::Engraver { .. } => Color32::from_rgb(168, 116, 232),
+        ToolKind::TaperedBall { .. } => Color32::from_rgb(232, 92, 154),
+        ToolKind::Drill { .. } => return None,
+    })
+}
+
+/// Rysunek freza w prostokącie `r` (układ 40 × 100 jednostek): metaliczny chwyt na pełną
+/// szerokość z kolorowym pierścieniem rodzaju, część tnąca z węglika (wiertło złote) ze
+/// spiralnymi rowkami. Każda część to siatka pionowych pasków z kolorami w wierzchołkach
+/// (połysk walca), rowki to ukośne pasy przycięte do kształtu.
 /// Zwraca prostokąty: (część skrawająca, cała sylwetka) — do wymiarowania.
 pub fn draw_tool(painter: &egui::Painter, r: Rect, kind: &ToolKind) -> (Rect, Rect) {
     let k = (r.width() / 40.0).min(r.height() / 100.0);
     let o = Pos2::new(r.center().x - 20.0 * k, r.center().y - 50.0 * k);
     let p = |x: f32, y: f32| Pos2::new(o.x + x * k, o.y + y * k);
-    let outline = Stroke::new((0.8 * k).max(0.8), Color32::from_rgb(43, 47, 53));
-    let helix = Stroke::new((1.1 * k).max(0.8), Color32::from_rgb(107, 112, 120));
-    let body = Color32::from_rgb(212, 215, 219);
-    let shank = Color32::from_rgb(158, 163, 170);
     let rr = |x: f32, y: f32, w: f32, h: f32| Rect::from_min_max(p(x, y), p(x + w, y + h));
-    let helix_lines = |y0: f32, y1: f32, x0: f32, x1: f32| {
-        let mut y = y0 + 10.0;
-        while y <= y1 {
-            painter.line_segment([p(x0, y), p(x1, y - 7.0)], helix);
-            y += 10.0;
+    let edge = Stroke::new((0.5 * k).max(0.6), Color32::from_rgb(13, 15, 18));
+    const N: usize = 28;
+
+    // kształt: x0..x1, w każdym x od góry `top` do dołu `bot`
+    type Prof<'a> = &'a dyn Fn(f32) -> f32;
+    let fill = |x0: f32, x1: f32, top: Prof, bot: Prof, stops: &Stops| {
+        let mut m = egui::Mesh::default();
+        for i in 0..=N {
+            let t = i as f32 / N as f32;
+            let x = x0 + (x1 - x0) * t;
+            let c = grad(stops, t);
+            m.colored_vertex(p(x, top(x)), c);
+            m.colored_vertex(p(x, bot(x).max(top(x))), c);
         }
+        for i in 0..N as u32 {
+            let a = 2 * i;
+            m.add_triangle(a, a + 1, a + 2);
+            m.add_triangle(a + 1, a + 3, a + 2);
+        }
+        painter.add(Shape::mesh(m));
     };
-    let path = |pts: Vec<Pos2>| {
-        painter.add(Shape::convex_polygon(pts, body, outline));
+    // spiralne rowki: ukośne pasy (ciemny rowek + jasna krawędź) przycięte do kształtu
+    let flutes = |x0: f32, x1: f32, top: Prof, bot: Prof| {
+        let slope = 26f32.to_radians().tan();
+        let (period, band) = (10.0, 3.4);
+        let mut m = egui::Mesh::default();
+        let mut quad = |xa: f32, xb: f32, ya: (f32, f32), yb: (f32, f32), ca: Color32, cb: Color32| {
+            let n = m.vertices.len() as u32;
+            m.colored_vertex(p(xa, ya.0), ca);
+            m.colored_vertex(p(xa, ya.1), cb);
+            m.colored_vertex(p(xb, yb.0), ca);
+            m.colored_vertex(p(xb, yb.1), cb);
+            m.add_triangle(n, n + 1, n + 2);
+            m.add_triangle(n + 1, n + 3, n + 2);
+        };
+        let dark = Color32::from_rgb(28, 31, 35);
+        let mid = Color32::from_rgb(64, 69, 76);
+        let light = Color32::from_rgba_unmultiplied(255, 255, 255, 110);
+        for i in 0..N {
+            let (xa, xb) = (x0 + (x1 - x0) * i as f32 / N as f32, x0 + (x1 - x0) * (i + 1) as f32 / N as f32);
+            let clip = |x: f32, y0: f32, y1: f32| (y0.clamp(top(x), bot(x)), y1.clamp(top(x), bot(x)));
+            for kk in 2..14 {
+                let y = |x: f32| kk as f32 * period - slope * x;
+                let (a, b) = (clip(xa, y(xa), y(xa) + band), clip(xb, y(xb), y(xb) + band));
+                if a.1 - a.0 > 1e-3 || b.1 - b.0 > 1e-3 {
+                    quad(xa, xb, a, b, dark, mid);
+                }
+                let (a, b) = (clip(xa, y(xa) + band, y(xa) + band + 0.7), clip(xb, y(xb) + band, y(xb) + band + 0.7));
+                if a.1 - a.0 > 1e-3 || b.1 - b.0 > 1e-3 {
+                    quad(xa, xb, a, b, light, light);
+                }
+            }
+        }
+        painter.add(Shape::mesh(m));
     };
+    // kontur kształtu
+    let outline = |x0: f32, x1: f32, top: Prof, bot: Prof| {
+        let mut pts: Vec<Pos2> = (0..=N).map(|i| x0 + (x1 - x0) * i as f32 / N as f32).map(|x| p(x, top(x))).collect();
+        pts.extend((0..=N).rev().map(|i| x0 + (x1 - x0) * i as f32 / N as f32).map(|x| p(x, bot(x).max(top(x)))));
+        painter.add(Shape::closed_line(pts, edge));
+    };
+    // chwyt na pełną szerokość, pierścień rodzaju, pasek przejścia do części tnącej
+    let shank = |x0: f32, x1: f32, len: f32| {
+        let (t, b) = (|_: f32| 2.0, move |_: f32| len);
+        fill(x0, x1, &t, &b, &METAL);
+        if let Some(c) = tool_color(kind) {
+            // pierścień cieniowany jak walec
+            let ring_y = len - 15.0;
+            let mut m = egui::Mesh::default();
+            for i in 0..=N {
+                let tt = i as f32 / N as f32;
+                let g = grad(&METAL, tt);
+                let f = (g.r() as f32 / 200.0).clamp(0.35, 1.15);
+                let cc = Color32::from_rgb(
+                    (c.r() as f32 * f).min(255.0) as u8,
+                    (c.g() as f32 * f).min(255.0) as u8,
+                    (c.b() as f32 * f).min(255.0) as u8,
+                );
+                let x = x0 + (x1 - x0) * tt;
+                m.colored_vertex(p(x, ring_y), cc);
+                m.colored_vertex(p(x, ring_y + 4.0), cc);
+            }
+            for i in 0..N as u32 {
+                let a = 2 * i;
+                m.add_triangle(a, a + 1, a + 2);
+                m.add_triangle(a + 1, a + 3, a + 2);
+            }
+            painter.add(Shape::mesh(m));
+        }
+        outline(x0, x1, &t, &b);
+        let (nt, nb) = (move |_: f32| len, move |_: f32| len + 2.5);
+        fill(x0, x1, &nt, &nb, &METAL);
+        outline(x0, x1, &nt, &nb);
+    };
+    // rowek prosty (frezy stożkowe)
+    let groove = |pts: [(f32, f32); 3]| {
+        painter.add(Shape::convex_polygon(pts.iter().map(|&(x, y)| p(x, y)).collect(), Color32::from_rgb(36, 40, 45), Stroke::NONE));
+        painter.line_segment([p(pts[2].0, pts[2].1), p(pts[1].0 + 0.2, pts[1].1)], Stroke::new((0.5 * k).max(0.5), Color32::from_rgba_unmultiplied(255, 255, 255, 120)));
+    };
+
     let cutting;
-    match kind {
-        ToolKind::FlatEnd => {
-            painter.rect(rr(13.0, 1.0, 14.0, 43.0), k, shank, outline, StrokeKind::Middle);
-            painter.rect(rr(11.0, 44.0, 18.0, 52.0), 0.0, body, outline, StrokeKind::Middle);
-            helix_lines(44.0, 96.0, 11.0, 29.0);
-            cutting = rr(11.0, 44.0, 18.0, 52.0);
+    match *kind {
+        ToolKind::FlatEnd | ToolKind::BallEnd | ToolKind::BullNose { .. } => {
+            shank(11.0, 29.0, 45.0);
+            let top = |_: f32| 47.5;
+            let bot = move |x: f32| -> f32 {
+                let dx = (x - 20.0).abs();
+                match kind {
+                    ToolKind::BallEnd => 87.0 + (81.0 - dx * dx).max(0.0).sqrt(),
+                    ToolKind::BullNose { .. } if dx > 4.0 => 91.0 + (25.0 - (dx - 4.0).powi(2)).max(0.0).sqrt(),
+                    _ => 96.0,
+                }
+            };
+            fill(11.0, 29.0, &top, &bot, &CARBIDE);
+            flutes(11.0, 29.0, &top, &bot);
+            outline(11.0, 29.0, &top, &bot);
+            cutting = rr(11.0, 47.5, 18.0, 48.5);
         }
-        ToolKind::BallEnd => {
-            painter.rect(rr(13.0, 1.0, 14.0, 43.0), k, shank, outline, StrokeKind::Middle);
-            let mut pts = vec![p(11.0, 44.0), p(29.0, 44.0)];
-            for i in 0..=16 {
-                let a = PI * i as f32 / 16.0;
-                pts.push(p(20.0 + 9.0 * a.cos(), 87.0 + 9.0 * a.sin()));
+        ToolKind::VBit { .. } | ToolKind::Engraver { .. } | ToolKind::TaperedBall { .. } => {
+            shank(11.0, 29.0, 55.0);
+            let top = |_: f32| 57.5;
+            let bot = move |x: f32| -> f32 {
+                let dx = (x - 20.0).abs();
+                let cone = |tip_dx: f32, tip_y: f32| 57.5 + (tip_y - 57.5) * (9.0 - dx) / (9.0 - tip_dx);
+                match kind {
+                    ToolKind::Engraver { .. } if dx <= 1.5 => 95.0,
+                    ToolKind::Engraver { .. } => cone(1.5, 95.0),
+                    ToolKind::TaperedBall { .. } if dx <= 2.8 => 92.8 + (9.0 - dx * dx).max(0.0).sqrt(),
+                    ToolKind::TaperedBall { .. } => cone(2.8, 91.8),
+                    _ => cone(0.0, 97.0),
+                }
+            };
+            fill(11.0, 29.0, &top, &bot, &CARBIDE);
+            match kind {
+                ToolKind::Engraver { .. } => groove([(14.6, 58.5), (19.4, 94.2), (18.1, 58.5)]),
+                ToolKind::TaperedBall { .. } => {
+                    groove([(14.5, 58.5), (18.4, 90.8), (17.9, 58.5)]);
+                    painter.circle_filled(p(18.9, 93.6), k, Color32::from_rgba_unmultiplied(255, 255, 255, 200));
+                }
+                _ => groove([(14.4, 58.5), (20.0, 95.5), (18.0, 58.5)]),
             }
-            path(pts);
-            helix_lines(44.0, 86.0, 11.0, 29.0);
-            cutting = rr(11.0, 44.0, 18.0, 52.0);
-        }
-        ToolKind::BullNose { .. } => {
-            painter.rect(rr(13.0, 1.0, 14.0, 43.0), k, shank, outline, StrokeKind::Middle);
-            painter.rect(rr(11.0, 44.0, 18.0, 52.0), egui::CornerRadius { nw: 0, ne: 0, sw: (5.0 * k) as u8, se: (5.0 * k) as u8 }, body, outline, StrokeKind::Middle);
-            helix_lines(44.0, 90.0, 11.0, 29.0);
-            cutting = rr(11.0, 44.0, 18.0, 52.0);
-        }
-        ToolKind::VBit { .. } => {
-            painter.rect(rr(13.0, 1.0, 14.0, 55.0), k, shank, outline, StrokeKind::Middle);
-            path(vec![p(11.0, 56.0), p(29.0, 56.0), p(20.0, 97.0)]);
-            painter.line_segment([p(14.0, 58.0), p(20.0, 95.0)], helix);
-            cutting = rr(11.0, 56.0, 18.0, 41.0);
-        }
-        ToolKind::Engraver { .. } => {
-            painter.rect(rr(13.0, 1.0, 14.0, 55.0), k, shank, outline, StrokeKind::Middle);
-            path(vec![p(11.0, 56.0), p(29.0, 56.0), p(21.6, 95.0), p(18.4, 95.0)]);
-            painter.line_segment([p(15.0, 58.0), p(19.5, 94.0)], helix);
-            cutting = rr(11.0, 56.0, 18.0, 39.0);
-        }
-        ToolKind::TaperedBall { .. } => {
-            // stożek jak w V, zakończony kulką
-            painter.rect(rr(13.0, 1.0, 14.0, 55.0), k, shank, outline, StrokeKind::Middle);
-            let mut pts = vec![p(11.0, 56.0), p(29.0, 56.0)];
-            for i in 0..=12 {
-                let a = PI * 0.08 + PI * 0.84 * i as f32 / 12.0;
-                pts.push(p(20.0 + 4.0 * a.cos(), 92.0 + 4.0 * a.sin()));
-            }
-            path(pts);
-            painter.line_segment([p(14.5, 58.0), p(19.0, 92.0)], helix);
-            cutting = rr(11.0, 56.0, 18.0, 40.0);
+            outline(11.0, 29.0, &top, &bot);
+            cutting = rr(11.0, 57.5, 18.0, 39.5);
         }
         ToolKind::Drill { .. } => {
-            painter.rect(rr(14.0, 1.0, 12.0, 39.0), k, shank, outline, StrokeKind::Middle);
-            painter.rect(rr(12.0, 40.0, 16.0, 48.0), 0.0, body, outline, StrokeKind::Middle);
-            helix_lines(40.0, 88.0, 12.0, 28.0);
-            path(vec![p(12.0, 88.0), p(28.0, 88.0), p(20.0, 98.0)]);
+            let (t, b) = (|_: f32| 2.0, |_: f32| 39.0);
+            fill(12.0, 28.0, &t, &b, &METAL);
+            outline(12.0, 28.0, &t, &b);
+            let top = |_: f32| 40.0;
+            let bot = |x: f32| 87.0 + 11.0 * (1.0 - (x - 20.0).abs() / 8.0);
+            fill(12.0, 28.0, &top, &bot, &GOLD);
+            flutes(12.0, 28.0, &top, &bot);
+            painter.add(Shape::line(vec![p(12.0, 87.0), p(20.0, 91.5), p(28.0, 87.0)], Stroke::new((0.6 * k).max(0.5), Color32::from_rgb(58, 44, 14))));
+            outline(12.0, 28.0, &top, &bot);
             cutting = rr(12.0, 40.0, 16.0, 58.0);
         }
     }

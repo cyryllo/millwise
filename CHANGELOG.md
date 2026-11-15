@@ -23,6 +23,10 @@ Version numbers:
   operations, in the operation settings, for rest finishing) are grouped:
   flat, ball, bull-nose, V, engraving, drills — each group with a heading
   and sorted from the smallest diameter.
+- **New tool drawings**: metal shank as wide as the cutter, a carbide
+  cutting part with polished shading and spiral flutes (drills in gold), and
+  a coloured ring on the shank for each tool type — in the tool library, the
+  tool lists and the operations panel.
 - **The tool comes first in the operation settings**, above the depth: it is
   what is usually chosen or changed first. Feeds and speed stay below, under
   „Cutting”.
