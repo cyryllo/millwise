@@ -208,6 +208,7 @@
  "Model 3D": "3D model",
  "Model 3D: {}": "3D model: {}",
  "Model STL — widoczny tam, gdzie materiał jest zdjęty, albo po wyłączeniu materiału": "STL model — visible where material is removed, or with the material switched off",
+ "Model ma podcięcia (ok. {:.0} mm², {:.0}% rzutu) — od góry ich nie obrobisz. Obróć model albo obrabiaj z dwóch stron.": "The model has undercuts (about {:.0} mm², {:.0}% of its outline) — they cannot be machined from the top. Rotate the model or machine it from both sides.",
  "Model nie wystaje ponad tę wysokość": "The model does not reach above this height",
  "Model wystaje ponad górę półfabrykatu — narzędzie pojedzie nad Z0": "The model sticks out above the stock top — the tool will run above Z0",
  "Model, półfabrykat i ścieżki w widoku przestrzennym": "The model, the stock and the toolpaths in a 3D view",

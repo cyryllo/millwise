@@ -22,7 +22,6 @@ Jest: model STL w półfabrykacie, krzywe z modelu, zgrubna warstwami Z,
 wykańczająca równoległa. Szczegóły w [ROADMAP.md](ROADMAP.md).
 
 - [ ] Warstwice tylko na stromych miejscach + równoległa tylko na łagodnych (jedna operacja).
-- [ ] Kontrola podcięć modelu (ostrzeżenie, że z góry nie da się ich obrobić).
 - [ ] Resztki po obróbce zgrubnej (ponowna zgrubna mniejszym frezem).
 - [ ] Obróbka 3D na stronie B (dwustronna).
 

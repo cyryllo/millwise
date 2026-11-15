@@ -20,7 +20,9 @@ Version numbers:
   above it) and the program zero at the stock corner as usual. The 2D view
   shows it from the top, shaded by height; the simulation shows it as a
   see-through solid (with a switch). The project file keeps the model inside,
-  so it opens without the STL. Changes to the model can be undone.
+  so it opens without the STL. Changes to the model can be undone. A model
+  with undercuts (places with air under the model, which a cutter coming
+  from the top cannot reach) gets a warning with their area.
 
 - **Curves from a 3D model.** „Silhouette to curves” adds the outline of the
   model seen from the top, and „Outline above Z to curves” the area where the

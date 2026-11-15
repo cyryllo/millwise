@@ -1744,6 +1744,19 @@ impl CamApp {
                     .clicked();
             }
             ui.label(RichText::new(tr!("Góra modelu na Z = −naddatek; zero w lewym dolnym rogu półfabrykatu.")).small().color(ui_kit::LABEL));
+            // podcięcia: frez od góry ich nie obrobi
+            let under = m.undercut_area();
+            if under > 1.0 {
+                let fp = m.size()[0] * m.size()[1];
+                ui.label(
+                    RichText::new(tr!("Model ma podcięcia (ok. {:.0} mm², {:.0}% rzutu) — od góry ich nie obrobisz. Obróć model albo obrabiaj z dwóch stron.",
+                        under,
+                        100.0 * under / fp.max(1e-9)
+                    ))
+                    .small()
+                    .color(Color32::from_rgb(230, 180, 80)),
+                );
+            }
             ui.add_space(4.0);
             ui.label(RichText::new(tr!("KRZYWE Z MODELU")).small().strong().color(ui_kit::LABEL));
             if ui

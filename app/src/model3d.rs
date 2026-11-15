@@ -28,6 +28,8 @@ pub struct Model3D {
     placed: Arc<Vec<[[f32; 3]; 3]>>,
     /// Rozmiar po ustawieniu [mm]: X, Y, Z.
     size: [f64; 3],
+    /// Pole podcięć widzianych z dołu [mm²] (powierzchnie skierowane w dół ponad spodem modelu).
+    undercut: f64,
     /// Mapa wysokości ustawionego modelu (liczona przy pierwszym użyciu).
     heights: Arc<OnceLock<Option<Arc<ModelHeights>>>>,
 }
@@ -75,6 +77,7 @@ impl Model3D {
             pos: [0.0, 0.0],
             placed: Arc::new(Vec::new()),
             size: [0.0; 3],
+            undercut: 0.0,
             heights: Arc::default(),
         };
         m.refresh();
@@ -114,6 +117,7 @@ impl Model3D {
             za.partial_cmp(&zb).unwrap_or(std::cmp::Ordering::Equal)
         });
         self.size = [(hi[0] - lo[0]) as f64, (hi[1] - lo[1]) as f64, h as f64];
+        self.undercut = undercut_area(&tris);
         self.placed = Arc::new(tris);
         self.heights = Arc::default();
     }
@@ -151,10 +155,39 @@ impl Model3D {
         self.refresh();
     }
 
+    /// Pole podcięć [mm²]: miejsca, pod którymi jest powietrze, a nad nimi model —
+    /// frez od góry ich nie obrobi.
+    pub fn undercut_area(&self) -> f64 {
+        self.undercut
+    }
+
     /// Grubość półfabrykatu, w której mieści się model z naddatkiem.
     pub fn stock_thickness(&self) -> f64 {
         self.size[2] + self.top_allowance
     }
+}
+
+/// Pole rzutu z góry trójkątów skierowanych w dół (nie prawie pionowych), leżących
+/// wyżej niż spód modelu. W bryle zamkniętej pod takim trójkątem jest powietrze,
+/// a nad nim materiał — to podcięcie.
+fn undercut_area(tris: &[[[f32; 3]; 3]]) -> f64 {
+    let z_min = tris.iter().flatten().map(|p| p[2]).fold(f32::MAX, f32::min);
+    let mut area = 0.0;
+    for t in tris {
+        let (a, b, c) = (t[0], t[1], t[2]);
+        let u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+        let v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+        let n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+        let len = (n[0] * n[0] + n[1] * n[1] + n[2] * n[2]).sqrt();
+        if len <= 0.0 {
+            continue;
+        }
+        let low = a[2].min(b[2]).min(c[2]);
+        if n[2] / len < -0.05 && low > z_min + 0.05 {
+            area += (-n[2] as f64) * 0.5; // pole rzutu na XY
+        }
+    }
+    area
 }
 
 // ---------- zapis w projekcie: siatka jako binarny STL w base64 ----------
@@ -260,6 +293,26 @@ mod tests {
     fn block() -> Mesh {
         // prostopadłościan 30 × 20 × 10 (jako 2 trójkąty na każdym końcu wystarczą do wymiarów)
         Mesh { tris: vec![[[0.0, 0.0, 0.0], [30.0, 0.0, 0.0], [30.0, 20.0, 10.0]], [[0.0, 20.0, 10.0], [0.0, 0.0, 0.0], [30.0, 20.0, 0.0]]] }
+    }
+
+    /// Prostopadłościan od `lo` do `hi` z trójkątów skierowanych na zewnątrz.
+    fn cuboid(lo: [f32; 3], hi: [f32; 3]) -> Vec<[[f32; 3]; 3]> {
+        let p = |i: usize| [if i & 1 != 0 { hi[0] } else { lo[0] }, if i & 2 != 0 { hi[1] } else { lo[1] }, if i & 4 != 0 { hi[2] } else { lo[2] }];
+        let quads = [[0, 2, 3, 1], [4, 5, 7, 6], [0, 1, 5, 4], [2, 6, 7, 3], [0, 4, 6, 2], [1, 3, 7, 5]];
+        quads.iter().flat_map(|q| [[p(q[0]), p(q[1]), p(q[2])], [p(q[0]), p(q[2]), p(q[3])]]).collect()
+    }
+
+    #[test]
+    fn undercuts_are_found() {
+        // kostka: tylko spód skierowany w dół — bez podcięć
+        let cube = Mesh { tris: cuboid([0.0; 3], [10.0, 10.0, 10.0]) };
+        assert_eq!(Model3D::new("k".into(), cube, 1.0).undercut_area(), 0.0);
+        // „T”: półka 30 × 10 na słupku 10 × 10 — spód półki wystaje (2 × 10 × 10 = 200 mm²)
+        let mut t = cuboid([10.0, 0.0, 0.0], [20.0, 10.0, 10.0]);
+        t.extend(cuboid([0.0, 0.0, 10.0], [30.0, 10.0, 15.0]));
+        let m = Model3D::new("t".into(), Mesh { tris: t }, 1.0);
+        // spód półki liczony w całości (300 mm²; środek nad słupkiem to tylko styk brył w tym teście)
+        assert!(m.undercut_area() >= 200.0, "{}", m.undercut_area());
     }
 
     #[test]
