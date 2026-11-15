@@ -35,7 +35,6 @@ Plan ustalony, start dopiero po dopracowaniu 2D. Szczegóły w
 
 - [ ] Kieszeń o stałym kącie opasania (pełne HSM / trochoidalna) — teraz jest
       uproszczona odmiana: mały krok i zaokrąglone pętle.
-- [ ] Obróbka dwustronna: odwracanie detalu z bazowaniem.
 
 **Paczki i program**
 

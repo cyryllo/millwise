@@ -283,7 +283,7 @@ mod tests {
         let mk = |name: &str, kind: OpKind, tool: &Tool, depth: f64, contours: Vec<usize>| {
             let mut cut = CutParams { depth, ..Default::default() };
             cut.apply_tool(tool, cam_ops::DEFAULT_MATERIAL);
-            Operation { name: name.into(), enabled: true, kind, tool_id: tool.id, cut, contours }
+            Operation { side: cam_ops::Side::A, name: name.into(), enabled: true, kind, tool_id: tool.id, cut, contours }
         };
         let by_no = |n: u32| lib.tools.iter().find(|t| t.number == n).unwrap().clone();
         let (t6, t3, drill) = (by_no(1), by_no(2), by_no(6));
@@ -329,7 +329,7 @@ mod tests {
             let mut d = Document::load_dxf(&root.join("samples/test.dxf")).unwrap();
             let t = lib.tools[0].clone();
             let cut = CutParams { depth: 3.0, ..Default::default() };
-            d.add_op(Operation { name: "Profil".into(), enabled: true, kind: OpKind::Profile(ProfileParams::default()), tool_id: t.id, cut, contours: vec![0, 2] });
+            d.add_op(Operation { side: cam_ops::Side::A, name: "Profil".into(), enabled: true, kind: OpKind::Profile(ProfileParams::default()), tool_id: t.id, cut, contours: vec![0, 2] });
             save_project(&d, &lib, &proj_path).unwrap();
         }
         let (mut doc, _) = load_project(&proj_path, &mut lib).unwrap();

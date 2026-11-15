@@ -480,6 +480,7 @@ mod tests {
 
     fn test_op() -> Operation {
         Operation {
+            side: cam_ops::Side::A,
             name: "Profil 1".into(),
             enabled: true,
             kind: cam_ops::OpKind::Profile(Default::default()),

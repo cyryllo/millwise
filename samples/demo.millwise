@@ -1850,11 +1850,13 @@
   "stock": {
     "thickness": 18.0,
     "margin": 5.0,
-    "material": "Drewno"
+    "material": "Drewno",
+    "two_sided": null
   },
   "operations": [
     {
       "name": "Wiercenie",
+      "side": "A",
       "enabled": true,
       "kind": {
         "Drill": {
@@ -1882,6 +1884,7 @@
     },
     {
       "name": "Kieszeń",
+      "side": "A",
       "enabled": true,
       "kind": {
         "Pocket": {
@@ -1919,6 +1922,7 @@
     },
     {
       "name": "Profil",
+      "side": "A",
       "enabled": true,
       "kind": {
         "Profile": {

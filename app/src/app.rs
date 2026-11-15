@@ -668,7 +668,7 @@ impl CamApp {
         let mut cut = CutParams { depth, safe_z: machine.safe_z, ..Default::default() };
         cut.apply_tool(tool, &self.doc.stock.material);
         let n = self.doc.ops.iter().filter(|o| o.name.starts_with(label)).count() + 1;
-        let op = Operation { name: format!("{label} {n}"), enabled: true, kind, tool_id: tool.id, cut, contours: vec![] };
+        let op = Operation { side: cam_ops::Side::A, name: format!("{label} {n}"), enabled: true, kind, tool_id: tool.id, cut, contours: vec![] };
         let i = self.doc.add_op(op);
         self.pick_target = Some(i);
         Some(i)
@@ -1369,6 +1369,8 @@ impl CamApp {
         ui.add_space(6.0);
         self.stock_card(ui);
         ui.add_space(6.0);
+        self.two_sided_card(ui);
+        ui.add_space(6.0);
         self.elements_card(ui);
         ui.add_space(6.0);
         self.layers_and_curves(ui);
@@ -1501,6 +1503,136 @@ impl CamApp {
         if add {
             self.add_dialog();
         }
+    }
+
+    /// Obróbka dwustronna: włącznik, oś odwracania, kołki ustalające.
+    fn two_sided_card(&mut self, ui: &mut egui::Ui) {
+        use crate::doc::{FlipAxis, TwoSided};
+        let mut add_pins = false;
+        let sb = self.doc.stock_box();
+        ui_kit::card(ui, |ui| {
+            let mut on = self.doc.stock.two_sided.is_some();
+            if ui
+                .checkbox(&mut on, RichText::new("OBRÓBKA DWUSTRONNA").small().strong().color(ui_kit::LABEL))
+                .on_hover_text("Operacje strony B są odbijane względem osi odwracania; płytę ustawia się na kołkach")
+                .changed()
+            {
+                self.doc.stock.two_sided = on.then(|| {
+                    let pos = sb.map_or(0.0, |b| b.center().x);
+                    TwoSided { pos, ..Default::default() }
+                });
+                self.doc.ops_dirty = true;
+                self.doc.revision += 1;
+            }
+            let Some(t) = self.doc.stock.two_sided.as_mut() else { return };
+            let mut changed = false;
+            egui::Grid::new("two_sided").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                ui_kit::label(ui, "Odwracanie");
+                ui.horizontal(|ui| {
+                    if ui.radio_value(&mut t.axis, FlipAxis::Y, "lewo / prawo").on_hover_text("Wokół osi Y").changed()
+                        | ui.radio_value(&mut t.axis, FlipAxis::X, "przód / tył").on_hover_text("Wokół osi X").changed()
+                    {
+                        if let Some(b) = sb {
+                            t.pos = if t.axis == FlipAxis::Y { b.center().x } else { b.center().y };
+                        }
+                        changed = true;
+                    }
+                });
+                ui.end_row();
+                ui_kit::label(ui, if t.axis == FlipAxis::Y { "Oś na X" } else { "Oś na Y" });
+                ui.horizontal(|ui| {
+                    changed |= ui.add(egui::DragValue::new(&mut t.pos).speed(0.1).suffix(" mm")).changed();
+                    if ui.small_button("środek").on_hover_text("Oś przez środek półfabrykatu").clicked() {
+                        if let Some(b) = sb {
+                            t.pos = if t.axis == FlipAxis::Y { b.center().x } else { b.center().y };
+                            changed = true;
+                        }
+                    }
+                });
+                ui.end_row();
+                changed |= ui_kit::num(ui, "Kołki Ø", &mut t.pin_diameter, 1.0..=30.0, 0.1, " mm");
+                changed |= ui_kit::num(ui, "W stół ofiarny", &mut t.pin_extra, 0.0..=30.0, 0.1, " mm");
+                changed |= ui_kit::num(ui, "Odstęp od detalu", &mut t.pin_gap, 0.0..=100.0, 0.1, " mm");
+            });
+            add_pins = ui
+                .button("Dodaj otwory na kołki")
+                .on_hover_text("Dwa otwory na osi odwracania, poza detalem, przez materiał i w stół — operacja na początku strony A")
+                .clicked();
+            ui.label(
+                RichText::new("Strona B: w ustawieniach operacji. Po odwróceniu płyty na kołki ustaw Z0 na nowej górze.")
+                    .small()
+                    .color(ui_kit::LABEL),
+            );
+            if changed {
+                self.doc.ops_dirty = true;
+                self.doc.revision += 1;
+            }
+        });
+        if add_pins {
+            self.add_pins(ui.ctx());
+        }
+    }
+
+    /// Otwory na kołki ustalające: na osi odwracania, poza detalem, operacja na początku.
+    fn add_pins(&mut self, ctx: &egui::Context) {
+        let now = Self::now(ctx);
+        let Some(t) = self.doc.stock.two_sided.clone() else { return };
+        let pins_layer = "KOŁKI";
+        if self.doc.contours.iter().any(|c| self.doc.layers.get(c.layer).is_some_and(|l| l.name == pins_layer)) {
+            self.view2d.flash("Otwory na kołki już są (warstwa KOŁKI)", now);
+            return;
+        }
+        let Some([a, b]) = self.doc.pin_centers() else { return };
+        let r = t.pin_diameter * 0.5;
+        // narzędzie: wiertło tej średnicy, a gdy go nie ma — frezowanie otworu frezem głównym
+        let main = self.ops_ui.palette_tool.and_then(|id| self.tools.get(id)).or(self.tools.tools.first()).cloned();
+        let drill = self
+            .tools
+            .tools
+            .iter()
+            .find(|x| matches!(x.kind, cam_ops::ToolKind::Drill { .. }) && (x.diameter - t.pin_diameter).abs() <= 0.1)
+            .cloned();
+        let (tool, sub) = match (drill, main) {
+            (Some(d), _) => (d, Sub::DrillPeck),
+            (None, Some(m)) if t.pin_diameter > m.diameter * 1.05 => (m, Sub::DrillHelix),
+            _ => {
+                self.error = Some(format!(
+                    "Brak wiertła Ø{} w bibliotece, a frez jest za duży na taki otwór. Dodaj wiertło albo zmień średnicę kołków.",
+                    t.pin_diameter
+                ));
+                return;
+            }
+        };
+        let items: Vec<crate::doc::ClipItem> = [a, b]
+            .into_iter()
+            .map(|c| crate::doc::ClipItem {
+                contour: cam_geom::Contour::circle(c, r),
+                layer: pins_layer.into(),
+                source: "Kołki ustalające".into(),
+            })
+            .collect();
+        let first = self.doc.contours.len();
+        self.doc.add_contours(&items, Vec2::new(0.0, 0.0));
+        let Some((kind, _, _)) = sub.op_template(self.doc.stock.thickness) else { return };
+        let depth = self.doc.stock.thickness + t.pin_extra;
+        let mut cut = CutParams { depth, safe_z: self.machine().safe_z, ..Default::default() };
+        cut.apply_tool(&tool, &self.doc.stock.material);
+        let op = Operation {
+            side: cam_ops::Side::A,
+            name: "Kołki ustalające".into(),
+            enabled: true,
+            kind,
+            tool_id: tool.id,
+            cut,
+            contours: vec![first, first + 1],
+        };
+        let i = self.doc.add_op(op);
+        self.doc.move_op_to(i, 0);
+        self.doc.label(
+            crate::history::Mark::new(crate::icons::Icon::DrillPeck).badge(crate::history::Badge::Add),
+            format!("Otwory na kołki Ø{}", t.pin_diameter),
+        );
+        self.view2d.flash(format!("Dodano otwory na kołki Ø{} (głębokość {} mm)", t.pin_diameter, depth), now);
     }
 
     fn stock_card(&mut self, ui: &mut egui::Ui) {

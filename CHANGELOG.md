@@ -32,6 +32,15 @@ Version numbers:
   will happen; everything is one step in the history. Holes without a drill
   of their size are milled along a helix when they are larger than the
   cutter.
+- **Two-sided machining** (box on the right): switch it on and choose the
+  flip axis (left/right or front/back; the axis is drawn on the drawing).
+  „Dodaj otwory na kołki” adds two dowel holes on the axis, outside the part,
+  through the stock and into the spoilboard, as the first operation of side A
+  (with a drill of that size, or milled along a helix). Each operation can be
+  set to side A or B; side B is mirrored about the axis for the flipped board
+  — you draw everything as seen from the top, and the dowels land in the
+  same holes after flipping. The G-code is saved as two files, „strona_A”
+  and „strona_B”; the simulation has a side switch.
 - **HSM pocket** (Kieszeń → Adaptacyjna, or „HSM” in the pocket settings): a
   small, even step-over (15 % of the diameter to start with) and loops with
   corners rounded by at least the cutter radius, so the cutter never turns

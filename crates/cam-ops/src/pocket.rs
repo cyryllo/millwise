@@ -327,6 +327,7 @@ mod tests {
 
     fn pocket_op() -> Operation {
         Operation {
+            side: Side::A,
             name: "k".into(),
             enabled: true,
             kind: OpKind::Pocket(PocketParams::default()),
@@ -581,6 +582,7 @@ mod zigzag_tests {
         let island = Contour::circle(Vec2::new(30.0, 20.0), 6.0);
         for angle in [0.0, 30.0] {
             let op = Operation {
+                side: Side::A,
                 name: "z".into(),
                 enabled: true,
                 kind: OpKind::Pocket(PocketParams { strategy: PocketStrategy::Zigzag, zigzag_angle: angle, ..Default::default() }),

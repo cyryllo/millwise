@@ -398,7 +398,8 @@ fn op_row(ui: &mut egui::Ui, doc: &Document, lib: &ToolLibrary, i: usize) -> Opt
         name_color,
     );
     let tool = lib.get(op.tool_id).map(|t| format!("T{} Ø{}", t.number, t.diameter)).unwrap_or_else(|| "T?".into());
-    let detail = format!("{tool}  ·  gł. {} mm  ·  {} krz.", fmt_mm(op.cut.depth), op.contours.len());
+    let side = if doc.stock.two_sided.is_some() && op.side == cam_ops::Side::B { "strona B  ·  " } else { "" };
+    let detail = format!("{side}{tool}  ·  gł. {} mm  ·  {} krz.", fmt_mm(op.cut.depth), op.contours.len());
     painter.text(egui::pos2(x, rect.top() + 29.0), egui::Align2::LEFT_CENTER, detail, egui::FontId::proportional(11.0), Color32::from_gray(150));
     if let Some(c) = cache {
         painter.text(
@@ -484,6 +485,18 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
         }
     });
 
+    // --- obróbka dwustronna: strona operacji ---
+    if doc.stock.two_sided.is_some() {
+        let op = &mut doc.ops[i];
+        ui.horizontal(|ui| {
+            ui_kit::label(ui, "Strona płyty");
+            changed |= ui.radio_value(&mut op.side, cam_ops::Side::A, "A").changed();
+            changed |= ui
+                .radio_value(&mut op.side, cam_ops::Side::B, "B — po odwróceniu")
+                .on_hover_text("Geometria odbita względem osi odwracania; osobny plik G-code")
+                .changed();
+        });
+    }
     let op = &mut doc.ops[i];
 
     // --- najważniejsze: głębokość, krok w dół / wycofanie ---

@@ -256,9 +256,22 @@ impl OpKind {
     }
 }
 
+/// Strona płyty przy obróbce dwustronnej.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Side {
+    /// Pierwsza strona (jak narysowano).
+    #[default]
+    A,
+    /// Po odwróceniu płyty — geometria odbita względem osi odwracania.
+    B,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Operation {
     pub name: String,
+    /// Strona płyty (obróbka dwustronna); starsze projekty: A.
+    #[serde(default)]
+    pub side: Side,
     pub enabled: bool,
     pub kind: OpKind,
     /// Identyfikator narzędzia w bibliotece.

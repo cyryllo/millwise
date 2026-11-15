@@ -344,6 +344,16 @@ impl View2D {
 
         self.draw_toolpaths(&painter, rect, doc, tool_diameters);
         self.draw_zero(&painter, rect);
+        // obróbka dwustronna: oś odwracania (przerywana)
+        if let Some(t) = &doc.stock.two_sided {
+            let col = Color32::from_rgb(200, 120, 230);
+            let (a, b) = match t.axis {
+                crate::doc::FlipAxis::Y => (Pos2::new(self.to_screen(rect, Vec2::new(t.pos, 0.0)).x, rect.top()), Pos2::new(self.to_screen(rect, Vec2::new(t.pos, 0.0)).x, rect.bottom())),
+                crate::doc::FlipAxis::X => (Pos2::new(rect.left(), self.to_screen(rect, Vec2::new(0.0, t.pos)).y), Pos2::new(rect.right(), self.to_screen(rect, Vec2::new(0.0, t.pos)).y)),
+            };
+            painter.extend(egui::Shape::dashed_line(&[a, b], Stroke::new(1.2, col), 10.0, 6.0));
+            painter.text(a + egui::vec2(6.0, 18.0), egui::Align2::LEFT_TOP, "oś odwracania", egui::FontId::proportional(11.0), col);
+        }
 
         if let Some((a, b)) = box_rect {
             let r = Rect::from_two_pos(a, b);

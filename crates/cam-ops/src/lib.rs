@@ -13,7 +13,7 @@ mod vcarve;
 
 pub use operation::{
     generate, CutParams, Direction, DrillParams, EngraveParams, EngraveSide, Entry, OpKind, OpResult, Operation,
-    PocketParams, PocketStrategy, ProfileParams, ProfileSide, Tabs, VCarveParams,
+    PocketParams, PocketStrategy, ProfileParams, ProfileSide, Side, Tabs, VCarveParams,
 };
 pub use tool::{CutPreset, FluteDir, Tool, ToolKind, ToolLibrary, DEFAULT_MATERIAL};
 pub use toolpath::{Move, Toolpath, P3};

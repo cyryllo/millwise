@@ -160,7 +160,7 @@ fn spawn_worker(
 pub struct SimState {
     worker: Option<Worker>,
     /// Klucz danych, z których zbudowano symulację.
-    built_for: Option<(u64, u64, u64, usize, bool)>,
+    built_for: Option<(u64, u64, u64, usize, (bool, bool))>,
     /// Numer symulacji (zmienia się przy przebudowie).
     sim_serial: u64,
     ops: Vec<(usize, String)>,
@@ -183,6 +183,9 @@ pub struct SimState {
     show_paths: bool,
     show_rapids: bool,
     show_tool: bool,
+    /// Obróbka dwustronna: która strona jest symulowana, i czy w ogóle są dwie.
+    pub side: cam_ops::Side,
+    sides: bool,
     /// Po przeliczeniu od razu przewiń do końca (dla programisty / zrzutów ekranu).
     pub jump_to_end: bool,
     /// Po przeliczeniu przewiń do ułamka programu (dla programisty).
@@ -215,6 +218,8 @@ impl Default for SimState {
             show_paths: true,
             show_rapids: false,
             show_tool: true,
+            side: cam_ops::Side::A,
+            sides: false,
             jump_to_end: false,
             jump_to_fraction: None,
             empty_mesh: SimMesh::default(),
@@ -225,12 +230,14 @@ impl Default for SimState {
 impl SimState {
     /// Uruchamia przeliczenie od nowa, gdy zmieniły się ścieżki, półfabrykat lub dokładność.
     pub fn sync(&mut self, ctx: &egui::Context, doc: &Document, lib: &ToolLibrary, machine: &Machine) {
+        self.sides = doc.stock.two_sided.is_some() && doc.ops.iter().any(|o| o.enabled && o.side == cam_ops::Side::B);
+        let side_b = self.sides && self.side == cam_ops::Side::B;
         let key = (
             doc.paths_revision,
             doc.stock.thickness.to_bits(),
             doc.stock.margin.to_bits(),
             self.resolution,
-            self.engine == Engine::Solid,
+            (self.engine == Engine::Solid, side_b),
         );
         if self.built_for == Some(key) {
             return;
@@ -250,6 +257,10 @@ impl SimState {
         let mut data: Vec<OpData> = Vec::new();
         for (i, (op, cache)) in doc.ops.iter().zip(&doc.op_cache).enumerate() {
             let (Some(cache), Some(tool)) = (cache, lib.get(op.tool_id)) else { continue };
+            // dwie strony: tylko operacje wybranej strony (strona B w układzie odwróconej płyty)
+            if self.sides && op.side != self.side {
+                continue;
+            }
             if !op.enabled || cache.result.toolpath.moves.is_empty() {
                 continue;
             }
@@ -332,6 +343,7 @@ impl SimState {
             show_material: self.show_material,
             show_paths: self.show_paths,
             show_rapids: self.show_rapids,
+            side: self.sides.then_some(self.side),
         })
     }
 
@@ -339,6 +351,14 @@ impl SimState {
     pub fn panel(&mut self, ui: &mut egui::Ui, bottom: impl FnOnce(&mut egui::Ui)) {
         ui.add_space(6.0);
         ui.heading("Symulacja");
+        if self.sides {
+            ui.horizontal(|ui| {
+                ui.label("Strona");
+                ui.selectable_value(&mut self.side, cam_ops::Side::A, RichText::new(" A ").strong());
+                ui.selectable_value(&mut self.side, cam_ops::Side::B, RichText::new(" B ").strong())
+                    .on_hover_text("Płyta odwrócona; strona B liczona na pełnym materiale, bez obróbki strony A");
+            });
+        }
         if self.worker.is_none() {
             ui.label(RichText::new("Brak ścieżek do symulacji — dodaj operacje w Projekcie 2D.").weak());
             return;

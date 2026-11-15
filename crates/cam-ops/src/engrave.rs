@@ -45,6 +45,7 @@ mod tests {
 
     fn line_op(side: EngraveSide) -> Operation {
         Operation {
+            side: Side::A,
             name: "g".into(),
             enabled: true,
             kind: OpKind::Engrave(EngraveParams { side, ..Default::default() }),

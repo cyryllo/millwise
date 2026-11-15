@@ -73,6 +73,7 @@ impl View3D {
             paths: sim.is_none_or(|s| s.show_paths),
             rapids: sim.is_none_or(|s| s.show_rapids),
             contours: sim.is_none(),
+            side: sim.and_then(|s| s.side),
         };
         let scene_key = (doc.revision, opts.key());
         if self.built_key != Some(scene_key) {
@@ -260,6 +261,8 @@ pub struct SimDisplay<'a> {
     pub show_material: bool,
     pub show_paths: bool,
     pub show_rapids: bool,
+    /// Obróbka dwustronna: pokazywana strona (B w układzie odwróconej płyty).
+    pub side: Option<cam_ops::Side>,
 }
 
 struct SceneOpts {
@@ -267,11 +270,17 @@ struct SceneOpts {
     paths: bool,
     rapids: bool,
     contours: bool,
+    side: Option<cam_ops::Side>,
 }
 
 impl SceneOpts {
     fn key(&self) -> u8 {
-        self.stock_box as u8 | (self.paths as u8) << 1 | (self.rapids as u8) << 2 | (self.contours as u8) << 3
+        let side = match self.side {
+            None => 0,
+            Some(cam_ops::Side::A) => 1,
+            Some(cam_ops::Side::B) => 2,
+        };
+        self.stock_box as u8 | (self.paths as u8) << 1 | (self.rapids as u8) << 2 | (self.contours as u8) << 3 | side << 4
     }
 }
 
@@ -357,15 +366,23 @@ fn build_scene(doc: &Document, opts: &SceneOpts) -> (SceneData, Vec3, f32) {
     // ścieżki narzędzia
     for (i, (op, cache)) in doc.ops.iter().zip(&doc.op_cache).enumerate() {
         let Some(cache) = cache else { continue };
-        if !op.enabled || (!opts.paths && !opts.rapids) {
+        if !op.enabled || (!opts.paths && !opts.rapids) || opts.side.is_some_and(|s| s != op.side) {
             continue;
         }
+        // strona B w symulacji: ścieżka w układzie odwróconej płyty (tak jak w G-code)
+        let raw;
+        let pts: &[(cam_ops::P3, bool)] = if opts.side == Some(cam_ops::Side::B) {
+            raw = cache.result.toolpath.polyline(0.01);
+            &raw
+        } else {
+            &cache.display
+        };
         let selected = doc.selected_op == Some(i);
         let base = crate::view2d::op_color(i);
         let col = lin(if selected || doc.selected_op.is_none() { base } else { base.gamma_multiply(0.3) });
         let rapid = lin(Color32::from_rgb(220, 60, 60).gamma_multiply(if selected { 0.8 } else { 0.3 }));
         let mut prev: Option<Vec3> = None;
-        for &(p, is_rapid) in &cache.display {
+        for &(p, is_rapid) in pts {
             let v = Vec3::new(p.x as f32, p.y as f32, p.z as f32);
             if let Some(a) = prev {
                 if (is_rapid && opts.rapids) || (!is_rapid && opts.paths) {

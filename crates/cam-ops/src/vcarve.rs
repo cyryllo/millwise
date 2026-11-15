@@ -212,6 +212,7 @@ mod tests {
 
     fn op(depth: f64) -> Operation {
         Operation {
+            side: Side::A,
             name: "v".into(),
             enabled: true,
             kind: OpKind::VCarve(VCarveParams::default()),

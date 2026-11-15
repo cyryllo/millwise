@@ -311,6 +311,7 @@ mod tests {
 
     fn op(side: ProfileSide) -> Operation {
         Operation {
+            side: Side::A,
             name: "p".into(),
             enabled: true,
             kind: OpKind::Profile(ProfileParams { side, entry: Entry::Plunge, ..Default::default() }),

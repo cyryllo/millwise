@@ -137,6 +137,7 @@ mod tests {
     fn helix_hole_stays_on_radius() {
         let tool = Tool { diameter: 6.0, ..Default::default() };
         let op = Operation {
+            side: Side::A,
             name: "h".into(),
             enabled: true,
             kind: OpKind::Drill(DrillParams { peck: None, helix: true }),

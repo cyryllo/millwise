@@ -81,7 +81,7 @@ fn full_program_both_dialects() {
     let mk = |name: &str, kind: OpKind, tool: &Tool, depth: f64| {
         let mut cut = CutParams { depth, ..Default::default() };
         cut.apply_tool(tool, DEFAULT_MATERIAL);
-        Operation { name: name.into(), enabled: true, kind, tool_id: tool.id, cut, contours: vec![] }
+        Operation { side: cam_ops::Side::A, name: name.into(), enabled: true, kind, tool_id: tool.id, cut, contours: vec![] }
     };
 
     let ops = [

@@ -109,11 +109,60 @@ pub struct Stock {
     pub margin: f64,
     /// Materiał — wybiera zestaw parametrów skrawania narzędzi.
     pub material: String,
+    /// Obróbka dwustronna (None = jednostronna).
+    pub two_sided: Option<TwoSided>,
 }
 
 impl Default for Stock {
     fn default() -> Self {
-        Self { thickness: 18.0, margin: 5.0, material: "Drewno".into() }
+        Self { thickness: 18.0, margin: 5.0, material: "Drewno".into(), two_sided: None }
+    }
+}
+
+/// Oś, wokół której odwraca się płytę.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FlipAxis {
+    /// Wokół osi X: przód przechodzi na tył (odbicie Y).
+    X,
+    /// Wokół osi Y: lewa krawędź przechodzi na prawą (odbicie X).
+    Y,
+}
+
+/// Obróbka dwustronna: oś odwracania i otwory na kołki ustalające.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TwoSided {
+    pub axis: FlipAxis,
+    /// Położenie osi: X linii pionowej (oś Y) albo Y linii poziomej (oś X) [mm].
+    pub pos: f64,
+    /// Średnica kołków [mm].
+    pub pin_diameter: f64,
+    /// Ile otwory wchodzą w stół ofiarny [mm].
+    pub pin_extra: f64,
+    /// Odstęp otworu od detalu [mm].
+    pub pin_gap: f64,
+}
+
+impl Default for TwoSided {
+    fn default() -> Self {
+        TwoSided { axis: FlipAxis::Y, pos: 0.0, pin_diameter: 6.0, pin_extra: 5.0, pin_gap: 8.0 }
+    }
+}
+
+impl TwoSided {
+    /// Odbicie względem osi odwracania (geometria strony B).
+    pub fn mirror(&self, c: &mut Contour) {
+        match self.axis {
+            FlipAxis::Y => c.mirror_x(self.pos),
+            FlipAxis::X => c.mirror_y(self.pos),
+        }
+    }
+
+    pub fn mirror_point(&self, p: P3) -> P3 {
+        match self.axis {
+            FlipAxis::Y => P3 { x: 2.0 * self.pos - p.x, ..p },
+            FlipAxis::X => P3 { y: 2.0 * self.pos - p.y, ..p },
+        }
     }
 }
 
@@ -352,6 +401,21 @@ impl Document {
         }
     }
 
+    /// Środki otworów na kołki: na osi odwracania, po obu stronach detalu
+    /// (poza warstwą KOŁKI), w odstępie `pin_gap` od niego.
+    pub fn pin_centers(&self) -> Option<[Vec2; 2]> {
+        let t = self.stock.two_sided.as_ref()?;
+        let part = (0..self.contours.len())
+            .filter(|&i| self.layers.get(self.contours[i].layer).is_none_or(|l| l.name != "KOŁKI"))
+            .map(|i| self.contours[i].bbox)
+            .reduce(|a, b| a.union(&b))?;
+        let r = t.pin_diameter * 0.5;
+        Some(match t.axis {
+            FlipAxis::Y => [Vec2::new(t.pos, part.min.y - t.pin_gap - r), Vec2::new(t.pos, part.max.y + t.pin_gap + r)],
+            FlipAxis::X => [Vec2::new(part.min.x - t.pin_gap - r, t.pos), Vec2::new(part.max.x + t.pin_gap + r, t.pos)],
+        })
+    }
+
     /// Liczba zmian narzędzia między kolejnymi włączonymi operacjami.
     pub fn tool_changes(&self) -> usize {
         Self::count_changes(self.ops.iter())
@@ -412,16 +476,28 @@ impl Document {
             .iter()
             .map(|op| {
                 let tool = lib.get(op.tool_id)?;
-                let geom: Vec<Contour> =
+                let mut geom: Vec<Contour> =
                     op.contours.iter().filter_map(|&i| self.contours.get(i)).map(|c| c.contour.clone()).collect();
+                // strona B: geometria odbita względem osi odwracania (G-code dla odwróconej płyty)
+                let flip = self.stock.two_sided.as_ref().filter(|_| op.side == cam_ops::Side::B);
+                if let Some(t) = flip {
+                    geom.iter_mut().for_each(|c| t.mirror(c));
+                }
                 let mut result = cam_ops::generate(op, tool, &geom);
+                if op.side == cam_ops::Side::B && self.stock.two_sided.is_none() {
+                    result.warnings.push("Strona B bez włączonej obróbki dwustronnej — liczona jak strona A".into());
+                }
                 if geom.len() < op.contours.len() {
                     result.warnings.push("Część konturów operacji nie istnieje".into());
                 }
                 if let Some(m) = machine {
                     check_machine(op, &result.toolpath, m, &mut result.warnings);
                 }
-                let display = result.toolpath.polyline(0.01);
+                // na rysunku (widok strony A) ścieżka strony B odbita z powrotem
+                let display = match flip {
+                    Some(t) => result.toolpath.polyline(0.01).into_iter().map(|(p, r)| (t.mirror_point(p), r)).collect(),
+                    None => result.toolpath.polyline(0.01),
+                };
                 let rapid = machine.map_or(3000.0, |m| m.rapid_xy);
                 let minutes = result.toolpath.estimate_minutes(rapid);
                 Some(OpCache { result, display, minutes })
@@ -858,9 +934,34 @@ impl Document {
     /// Program G-code ze wszystkich włączonych operacji.
     /// Program G-code: jeden plik albo (tryb „osobne pliki”) kilka — (przyrostek, treść).
     pub fn gcode(&self, lib: &ToolLibrary, machine: &Machine) -> Result<Vec<(String, String)>, String> {
+        // obróbka dwustronna: osobne pliki dla strony A i B
+        let two = self.stock.two_sided.is_some() && self.ops.iter().any(|o| o.enabled && o.side == cam_ops::Side::B);
+        if !two {
+            return self.gcode_side(lib, machine, None);
+        }
+        let mut out = Vec::new();
+        for (side, name) in [(cam_ops::Side::A, "strona_A"), (cam_ops::Side::B, "strona_B")] {
+            match self.gcode_side(lib, machine, Some(side)) {
+                Ok(files) => {
+                    for (suffix, text) in files {
+                        let s = if suffix.is_empty() { name.to_string() } else { format!("{name}_{suffix}") };
+                        out.push((s, text));
+                    }
+                }
+                Err(e) if e.starts_with("Brak włączonych") => {}
+                Err(e) => return Err(e),
+            }
+        }
+        if out.is_empty() {
+            return Err("Brak włączonych operacji ze ścieżkami".into());
+        }
+        Ok(out)
+    }
+
+    fn gcode_side(&self, lib: &ToolLibrary, machine: &Machine, side: Option<cam_ops::Side>) -> Result<Vec<(String, String)>, String> {
         let mut prog = Vec::new();
         for (i, op) in self.ops.iter().enumerate() {
-            if !op.enabled {
+            if !op.enabled || side.is_some_and(|s| s != op.side) {
                 continue;
             }
             let tool = lib.get(op.tool_id).ok_or_else(|| format!("Operacja „{}”: brak narzędzia w bibliotece", op.name))?;
@@ -881,12 +982,15 @@ impl Document {
         if prog.is_empty() {
             return Err("Brak włączonych operacji ze ścieżkami".into());
         }
-        let title = self
+        let mut title = self
             .path
             .as_ref()
             .and_then(|p| p.file_stem())
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_else(|| "program".into());
+        if let Some(s) = side {
+            title.push_str(if s == cam_ops::Side::A { " - strona A" } else { " - strona B (po odwróceniu, Z0 na nowej górze)" });
+        }
         let post = machine.post_settings();
         if post.tool_change == cam_post::ToolChange::SeparateFiles {
             Ok(cam_post::emit_split(&title, &prog, &post))
@@ -963,5 +1067,75 @@ mod placement_tests {
         assert_eq!(at(1), Vec2::new(110.0, 0.0), "drugi obok pierwszego");
         assert_eq!(at(2), Vec2::new(0.0, 60.0), "trzeci się nie mieści — rząd wyżej");
         assert_eq!(at(3), Vec2::new(110.0, 60.0), "czwarty obok trzeciego");
+    }
+}
+
+#[cfg(test)]
+mod two_sided_tests {
+    use super::*;
+    use cam_geom::Vertex;
+
+    fn doc_with_rect() -> (Document, ToolLibrary) {
+        let mut c = Contour::new(true);
+        for (x, y) in [(10.0, 10.0), (60.0, 10.0), (60.0, 40.0), (10.0, 40.0)] {
+            c.verts.push(Vertex::new(x, y, 0.0));
+        }
+        let mut d = Document { path: Some(PathBuf::from("a.dxf")), contours: vec![DocContour::new(c, 0)], ..Default::default() };
+        d.finish_load();
+        let lib = ToolLibrary::with_defaults();
+        let tool = lib.tools.iter().find(|t| t.kind == cam_ops::ToolKind::FlatEnd).unwrap();
+        let mut cut = cam_ops::CutParams { depth: 3.0, ..Default::default() };
+        cut.apply_tool(tool, cam_ops::DEFAULT_MATERIAL);
+        d.add_op(Operation {
+            side: cam_ops::Side::A,
+            name: "Profil".into(),
+            enabled: true,
+            kind: cam_ops::OpKind::Profile(Default::default()),
+            tool_id: tool.id,
+            cut,
+            contours: vec![0],
+        });
+        (d, lib)
+    }
+
+    #[test]
+    fn side_b_is_mirrored_for_the_machine_and_drawn_in_place() {
+        let (mut d, lib) = doc_with_rect();
+        d.stock.two_sided = Some(TwoSided { axis: FlipAxis::Y, pos: 50.0, ..Default::default() });
+        d.regenerate(&lib, None);
+        let a_disp = d.op_cache[0].as_ref().unwrap().display.clone();
+        let a_tp = d.op_cache[0].as_ref().unwrap().result.toolpath.clone();
+        d.ops[0].side = cam_ops::Side::B;
+        d.regenerate(&lib, None);
+        let b = d.op_cache[0].as_ref().unwrap();
+        // ścieżka maszyny odbita: x → 100 − x (prostokąt 10..60 → 40..90 plus promień)
+        let xs = |tp: &cam_ops::Toolpath| {
+            let v: Vec<f64> = tp.moves.iter().map(|m| m.end().x).collect();
+            (v.iter().cloned().fold(f64::MAX, f64::min), v.iter().cloned().fold(f64::MIN, f64::max))
+        };
+        let (a_min, a_max) = xs(&a_tp);
+        let (b_min, b_max) = xs(&b.result.toolpath);
+        assert!((b_min - (100.0 - a_max)).abs() < 1e-6 && (b_max - (100.0 - a_min)).abs() < 1e-6);
+        // na rysunku strona B leży tam, gdzie krzywa (zakres X jak strony A)
+        let dx = |pts: &[(P3, bool)]| pts.iter().filter(|(p, r)| !r && p.z < 0.0).map(|(p, _)| p.x).fold(f64::MAX, f64::min);
+        assert!((dx(&b.display) - dx(&a_disp)).abs() < 1e-6);
+
+        // G-code: osobne pliki dla stron
+        let mut d2 = d;
+        let op_a = Operation { side: cam_ops::Side::A, ..d2.ops[0].clone() };
+        d2.add_op(op_a);
+        d2.regenerate(&lib, None);
+        let files = d2.gcode(&lib, &Machine::default()).unwrap();
+        let names: Vec<&str> = files.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(names, ["strona_A", "strona_B"]);
+    }
+
+    #[test]
+    fn pins_sit_on_the_axis_outside_the_part() {
+        let (mut d, _) = doc_with_rect();
+        d.stock.two_sided = Some(TwoSided { axis: FlipAxis::X, pos: 25.0, pin_diameter: 6.0, pin_gap: 8.0, ..Default::default() });
+        let [a, b] = d.pin_centers().unwrap();
+        assert_eq!(a, Vec2::new(10.0 - 8.0 - 3.0, 25.0));
+        assert_eq!(b, Vec2::new(60.0 + 8.0 + 3.0, 25.0));
     }
 }

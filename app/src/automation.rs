@@ -267,7 +267,7 @@ pub fn plan(doc: &Document, lib: &ToolLibrary, main_tool: Option<u32>, safe_z: f
                 let mut cut = CutParams { depth, safe_z, ..Default::default() };
                 cut.apply_tool(tool, &doc.stock.material);
                 let n = doc.ops.iter().chain(&new_ops).filter(|o| o.name.starts_with(label)).count() + 1;
-                new_ops.push(Operation { name: format!("{label} {n}"), enabled: true, kind, tool_id, cut, contours });
+                new_ops.push(Operation { side: cam_ops::Side::A, name: format!("{label} {n}"), enabled: true, kind, tool_id, cut, contours });
             }
         }
     }
