@@ -209,6 +209,10 @@ impl CamApp {
                         app.mode = ViewMode::Visual;
                         app.sim.jump_to_fraction = w[6..].parse().ok();
                     }
+                    "nopaths" => {
+                        app.sim.show_paths = false;
+                        app.sim.show_model = false;
+                    }
                     "simend" => {
                         app.mode = ViewMode::Visual;
                         app.sim.jump_to_end = true;

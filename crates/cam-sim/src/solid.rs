@@ -68,6 +68,7 @@ pub fn stock(min: P3, max: P3) -> Manifold {
 }
 
 use crate::{SimMesh, SimVertex, Simulator};
+use std::sync::Arc;
 
 /// Odcinek ścieżki do wycięcia w bryle.
 #[derive(Clone, Copy)]
@@ -77,19 +78,48 @@ struct CutSeg {
     op: usize,
     t0: f64,
     t1: f64,
+    /// Zasięg bryły przejścia z góry: x0, y0, x1, y1.
+    bb: [f64; 4],
 }
+
+/// Podział półfabrykatu na kolumny (kafelki). Każdy ruch narzędzia zmienia tylko
+/// kafelki, których dotyka — różnice liczone są na małych bryłach, a siatki
+/// pozostałych kafelków biorą się z pamięci. Bez tego każda klatka przeliczała
+/// całą bryłę, która po obróbce wykańczającej ma setki tysięcy trójkątów.
+struct Tiles {
+    x0: f64,
+    y0: f64,
+    size: f64,
+    nx: usize,
+    ny: usize,
+}
+
+impl Tiles {
+    /// Kafelki dotykane przez prostokąt (x0, y0, x1, y1).
+    fn touched(&self, bb: [f64; 4]) -> impl Iterator<Item = usize> + '_ {
+        let cl = |v: f64, n: usize| (v.floor().max(0.0) as usize).min(n - 1);
+        let (i0, i1) = (cl((bb[0] - self.x0) / self.size, self.nx), cl((bb[2] - self.x0) / self.size, self.nx));
+        let (j0, j1) = (cl((bb[1] - self.y0) / self.size, self.ny), cl((bb[3] - self.y0) / self.size, self.ny));
+        (j0..=j1).flat_map(move |j| (i0..=i1).map(move |i| j * self.nx + i))
+    }
+}
+
+type State = Vec<Arc<Manifold>>;
 
 /// Symulacja bryłowa sterowana czasem programu, z klatkami kluczowymi.
 pub struct SolidSim {
     tools: Vec<Vec<Vec3>>,
     segs: Vec<CutSeg>,
-    /// (liczba w pełni wyciętych odcinków, bryła).
-    keys: Vec<(usize, Manifold)>,
-    /// Stan bieżący: liczba wyciętych odcinków i bryła.
-    cur: (usize, Manifold),
+    tiles: Tiles,
+    /// (liczba w pełni wyciętych odcinków, kafelki) — niezmienione kafelki są współdzielone.
+    keys: Vec<(usize, State)>,
+    /// Stan bieżący: liczba wyciętych odcinków i kafelki.
+    cur: (usize, State),
+    /// Siatki kafelków (bryła, z której powstała siatka).
+    meshes: Vec<Option<(Arc<Manifold>, Arc<SimMesh>)>>,
     top: f64,
     bottom: f64,
-    /// Czas: budowa brył przejść, sumowanie, odejmowanie [s].
+    /// Czas: budowa brył przejść i sumowanie, odejmowanie [s].
     pub t_hull: f64,
     pub t_union: f64,
     pub t_diff: f64,
@@ -114,117 +144,202 @@ impl SolidSim {
             if a.p.z.min(b.p.z) >= max.z || a.p.distance(b.p) < 1e-9 {
                 continue;
             }
-            segs.push(CutSeg { a: a.p, b: b.p, op: b.op, t0: a.t, t1: b.t });
+            let r = sim.tools[b.op].radius + 1e-3;
+            let bb = [a.p.x.min(b.p.x) - r, a.p.y.min(b.p.y) - r, a.p.x.max(b.p.x) + r, a.p.y.max(b.p.y) + r];
+            segs.push(CutSeg { a: a.p, b: b.p, op: b.op, t0: a.t, t1: b.t, bb });
         }
-        let s = stock(min, max);
-        SolidSim { tools, segs, keys: vec![(0, s.clone())], cur: (0, s), top: max.z, bottom: min.z, t_hull: 0.0, t_union: 0.0, t_diff: 0.0 }
+        // kafelki ok. 1/10 większego wymiaru, nie mniejsze niż 8 mm
+        let (w, h) = (max.x - min.x, max.y - min.y);
+        let size = (w.max(h) / 10.0).max(8.0);
+        let (nx, ny) = (((w / size).ceil() as usize).max(1), ((h / size).ceil() as usize).max(1));
+        let tiles = Tiles { x0: min.x, y0: min.y, size, nx, ny };
+        let state: State = (0..nx * ny)
+            .map(|k| {
+                let (i, j) = (k % nx, k / nx);
+                let lo = P3::new(min.x + i as f64 * size, min.y + j as f64 * size, min.z);
+                let hi = P3::new((lo.x + size).min(max.x), (lo.y + size).min(max.y), max.z);
+                Arc::new(stock(lo, hi))
+            })
+            .collect();
+        SolidSim {
+            tools,
+            segs,
+            tiles,
+            keys: vec![(0, state.clone())],
+            cur: (0, state),
+            meshes: vec![None; nx * ny],
+            top: max.z,
+            bottom: min.z,
+            t_hull: 0.0,
+            t_union: 0.0,
+            t_diff: 0.0,
+        }
     }
 
     pub fn segment_count(&self) -> usize {
         self.segs.len()
     }
 
-    fn cut_range(&mut self, solid: &Manifold, from: usize, to: usize) -> Manifold {
-        let mut s = solid.clone();
-        let mut k = from;
-        while k < to {
-            let end = (k + 48).min(to);
-            let t0 = std::time::Instant::now();
-            let batch: Vec<Manifold> = self.segs[k..end].iter().map(|c| sweep(&self.tools[c.op], c.a, c.b)).collect();
-            let t1 = std::time::Instant::now();
-            let cut = if batch.len() == 1 { batch.into_iter().next().unwrap() } else { union_tree(batch) };
-            let t2 = std::time::Instant::now();
-            s = s.difference(&cut).as_original().simplify(SIMPLIFY_TOL);
-            let t3 = std::time::Instant::now();
-            self.t_hull += (t1 - t0).as_secs_f64();
-            self.t_union += (t2 - t1).as_secs_f64();
-            self.t_diff += (t3 - t2).as_secs_f64();
-            k = end;
+    /// Wspólna bryła wszystkich przejść z `segs` i kafelki, których dotyka.
+    fn cutter(tools: &[Vec<Vec3>], tiles: &Tiles, segs: &[CutSeg]) -> (Manifold, Vec<usize>) {
+        use rayon::prelude::*;
+        let hulls: Vec<Manifold> = segs.par_iter().map(|c| sweep(&tools[c.op], c.a, c.b)).collect();
+        let mut touched: Vec<usize> = segs.iter().flat_map(|c| tiles.touched(c.bb)).collect();
+        touched.sort_unstable();
+        touched.dedup();
+        (union_tree(hulls), touched)
+    }
+
+    /// Odejmuje bryłę od wskazanych kafelków (kafelki niezależne — równolegle).
+    fn subtract(&mut self, state: &mut State, cutter: &Manifold, touched: &[usize]) {
+        use rayon::prelude::*;
+        let t0 = std::time::Instant::now();
+        let cur: &State = state;
+        let out: Vec<(usize, Arc<Manifold>)> =
+            touched.par_iter().map(|&t| (t, Arc::new(cur[t].difference(cutter).as_original().simplify(SIMPLIFY_TOL)))).collect();
+        for (t, s) in out {
+            state[t] = s;
         }
-        s
+        self.t_diff += t0.elapsed().as_secs_f64();
+    }
+
+    /// Wycina odcinki `segs` z kafelków.
+    fn cut(&mut self, state: &mut State, segs: &[CutSeg]) {
+        let t0 = std::time::Instant::now();
+        let (cutter, touched) = Self::cutter(&self.tools, &self.tiles, segs);
+        self.t_union += t0.elapsed().as_secs_f64();
+        self.subtract(state, &cutter, &touched);
     }
 
     /// Przeliczenie całości z klatkami kluczowymi co `every` odcinków; `progress(0..1)`, false = przerwij.
-    ///
-    /// Najpierw (równolegle) dla każdego fragmentu między klatkami powstaje suma
-    /// brył przejść, potem fragmenty są kolejno odejmowane od półfabrykatu.
+    /// Dla każdego fragmentu między klatkami powstaje suma brył przejść (równolegle,
+    /// porcjami), potem fragmenty są kolejno odejmowane od dotkniętych kafelków.
+    /// Klatki dzielą niezmienione kafelki; razem mieszczą się w `KEY_TRIANGLES`.
     pub fn precompute(&mut self, every: usize, mut progress: impl FnMut(f32) -> bool) -> bool {
         use rayon::prelude::*;
-        use std::sync::atomic::{AtomicUsize, Ordering};
         let n = self.segs.len();
         let every = every.max(1);
         let ranges: Vec<(usize, usize)> = (0..n).step_by(every).map(|k| (k, (k + every).min(n))).collect();
-        let done = AtomicUsize::new(0);
-        let t0 = std::time::Instant::now();
-        let cutters: Vec<Manifold> = {
-            let (tools, segs) = (&self.tools, &self.segs);
-            ranges
-                .par_iter()
-                .map(|&(a, b)| {
-                    let hulls: Vec<Manifold> = segs[a..b].iter().map(|c| sweep(&tools[c.op], c.a, c.b)).collect();
-                    let u = union_tree(hulls);
-                    done.fetch_add(1, Ordering::Relaxed);
-                    u
-                })
-                .collect()
-        };
-        self.t_union += t0.elapsed().as_secs_f64();
-        // postęp: sumy ≈ połowa pracy
-        if !progress(0.5) {
-            return false;
-        }
-        let mut s = self.keys[0].1.clone();
-        for (idx, (cut, &(_, end))) in cutters.iter().zip(&ranges).enumerate() {
-            let t = std::time::Instant::now();
-            s = s.difference(cut).as_original().simplify(SIMPLIFY_TOL);
-            self.t_diff += t.elapsed().as_secs_f64();
-            self.keys.push((end, s.clone()));
-            if !progress(0.5 + 0.5 * (idx + 1) as f32 / ranges.len() as f32) {
-                return false;
+        let mut state = self.keys[0].1.clone();
+        let mut stride = 1;
+        // porcjami: bryły przejść dla kilkudziesięciu fragmentów naraz (równolegle),
+        // potem odejmowane po kolei i od razu zwalniane — w pamięci tylko jedna porcja
+        let chunk = rayon::current_num_threads().max(4) * 4;
+        for (ci, part) in ranges.chunks(chunk).enumerate() {
+            let t0 = std::time::Instant::now();
+            let cutters: Vec<(Manifold, Vec<usize>)> = {
+                let (tools, tiles, segs) = (&self.tools, &self.tiles, &self.segs);
+                part.par_iter().map(|&(a, b)| Self::cutter(tools, tiles, &segs[a..b])).collect()
+            };
+            self.t_union += t0.elapsed().as_secs_f64();
+            for (k, ((cutter, touched), &(_, end))) in cutters.into_iter().zip(part).enumerate() {
+                self.subtract(&mut state, &cutter, &touched);
+                if end == n || (end / every) % stride == 0 {
+                    self.keys.push((end, state.clone()));
+                }
+                let idx = ci * chunk + k;
+                if !progress((idx + 1) as f32 / ranges.len() as f32) {
+                    return false;
+                }
             }
+            self.thin_keys(KEY_TRIANGLES, every, &mut stride);
         }
-        let _ = done.load(Ordering::Relaxed);
         self.cur = (0, self.keys[0].1.clone());
         true
     }
 
-    /// Bryła w chwili `t` (z częściowo wykonanym bieżącym ruchem).
-    pub fn at(&mut self, t: f64) -> Manifold {
-        // odcinki w pełni wykonane do czasu t
-        let done = self.segs.partition_point(|c| c.t1 <= t);
-        if done < self.cur.0 || done - self.cur.0 > 64 {
-            // start od najbliższej wcześniejszej klatki
-            let ki = self.keys.partition_point(|k| k.0 <= done).saturating_sub(1);
-            let (kk, ref solid) = self.keys[ki];
-            if kk > self.cur.0 || done < self.cur.0 {
-                self.cur = (kk, solid.clone());
-            }
+    /// Przerzedza klatki kluczowe równomiernie (zostaje co `stride`-ty fragment, pierwsza
+    /// i ostatnia klatka), aż razem mają najwyżej `budget` trójkątów. Odtwarzanie ich nie
+    /// potrzebuje (każda klatka wycina tylko swój kawałek ścieżki) — przyspieszają przewijanie.
+    fn thin_keys(&mut self, budget: usize, every: usize, stride: &mut usize) {
+        let n = self.segs.len();
+        while self.keys.len() > 2 && self.keyframe_triangles() > budget {
+            *stride *= 2;
+            let s = *stride;
+            self.keys.retain(|k| k.0 == 0 || k.0 == n || (k.0 / every) % s == 0);
+        }
+    }
+
+    /// Przesuwa stan bieżący do `done` w pełni wyciętych odcinków.
+    fn advance(&mut self, done: usize) {
+        // start od najbliższej wcześniejszej klatki, jeśli jest bliżej niż stan bieżący
+        let ki = self.keys.partition_point(|k| k.0 <= done).saturating_sub(1);
+        let kk = self.keys[ki].0;
+        if done < self.cur.0 || kk > self.cur.0 {
+            self.cur = (kk, self.keys[ki].1.clone());
         }
         if done > self.cur.0 {
-            let base = self.cur.1.clone();
-            let s = self.cut_range(&base, self.cur.0, done);
-            self.cur = (done, s);
+            let mut state = std::mem::take(&mut self.cur.1);
+            let segs = self.segs[self.cur.0..done].to_vec();
+            self.cut(&mut state, &segs);
+            self.cur = (done, state);
         }
-        // część bieżącego odcinka
-        if let Some(c) = self.segs.get(done) {
+    }
+
+    /// Kafelki w chwili `t` (z częściowo wykonanym bieżącym ruchem).
+    fn state_at(&mut self, t: f64) -> State {
+        let done = self.segs.partition_point(|c| c.t1 <= t);
+        self.advance(done);
+        let mut state = self.cur.1.clone();
+        if let Some(c) = self.segs.get(done).copied() {
             if t > c.t0 && c.t1 > c.t0 {
                 let f = ((t - c.t0) / (c.t1 - c.t0)).clamp(0.0, 1.0);
                 let q = P3::new(c.a.x + (c.b.x - c.a.x) * f, c.a.y + (c.b.y - c.a.y) * f, c.a.z + (c.b.z - c.a.z) * f);
-                return self.cur.1.difference(&sweep(&self.tools[c.op], c.a, q));
+                let part = CutSeg { b: q, ..c };
+                self.cut(&mut state, &[part]);
             }
         }
-        self.cur.1.clone()
+        state
     }
 
-    /// Siatka do wyświetlenia: gładkie normalne z zachowaniem ostrych krawędzi.
-    pub fn mesh(&self, solid: &Manifold) -> SimMesh {
-        mesh_of(solid, self.top as f32, self.bottom as f32)
+    /// Siatka materiału w chwili `t` do wyświetlenia (siatki niezmienionych kafelków z pamięci).
+    pub fn mesh_at(&mut self, t: f64) -> SimMesh {
+        let state = self.state_at(t);
+        let (top, bottom) = (self.top as f32, self.bottom as f32);
+        let mut out = SimMesh::default();
+        for (k, solid) in state.iter().enumerate() {
+            let cached = self.meshes[k].as_ref().filter(|(m, _)| Arc::ptr_eq(m, solid)).map(|(_, mesh)| mesh.clone());
+            let mesh = match cached {
+                Some(m) => m,
+                None => {
+                    let m = Arc::new(mesh_of(solid, top, bottom));
+                    // pamiętamy tylko siatki stanu bieżącego (nie chwilowego, z częścią ruchu)
+                    if self.cur.1.get(k).is_some_and(|c| Arc::ptr_eq(c, solid)) {
+                        self.meshes[k] = Some((solid.clone(), m.clone()));
+                    }
+                    m
+                }
+            };
+            let base = out.verts.len() as u32;
+            out.verts.extend_from_slice(&mesh.verts);
+            out.indices.extend(mesh.indices.iter().map(|i| i + base));
+        }
+        out
+    }
+
+    /// Liczba trójkątów we wszystkich klatkach kluczowych (wspólne kafelki liczone raz).
+    pub fn keyframe_triangles(&self) -> usize {
+        let mut seen = std::collections::HashSet::new();
+        self.keys.iter().flat_map(|k| k.1.iter()).filter(|s| seen.insert(Arc::as_ptr(s))).map(|s| s.num_tri()).sum()
+    }
+
+    /// Objętość materiału w chwili `t` [mm³].
+    pub fn volume_at(&mut self, t: f64) -> f64 {
+        self.state_at(t).iter().map(|s| s.volume()).sum()
+    }
+
+    /// Liczba trójkątów bryły w chwili `t`.
+    pub fn triangles_at(&mut self, t: f64) -> usize {
+        self.state_at(t).iter().map(|s| s.num_tri()).sum()
     }
 }
 
 /// Tolerancja upraszczania siatki po operacjach boolowskich [mm] — scala
 /// rozdrobnione trójkąty leżące w jednej płaszczyźnie (bez zmiany kształtu).
 const SIMPLIFY_TOL: f64 = 1e-4;
+
+/// Najwięcej trójkątów we wszystkich klatkach kluczowych razem (ok. 200 MB pamięci).
+const KEY_TRIANGLES: usize = 600_000;
 
 /// Suma brył parami (drzewo), poziomy liczone równolegle, z upraszczaniem siatki.
 fn union_tree(mut v: Vec<Manifold>) -> Manifold {
@@ -325,12 +440,12 @@ mod tests {
         let mut s = SolidSim::new(&sim, P3::new(0.0, 0.0, -10.0), P3::new(50.0, 20.0, 0.0));
         assert!(s.precompute(1, |_| true));
         let full = 50.0 * 20.0 * 10.0;
-        let removed = full - s.at(sim.duration()).volume();
+        let removed = full - s.volume_at(sim.duration());
         let expect = 2.0 * (30.0 * 6.0 + std::f64::consts::PI * 9.0);
         // wielokąt 30-boczny zamiast okręgu — błąd < 1%
         assert!((removed - expect).abs() < 0.01 * expect, "{removed} vs {expect}");
         // w połowie przejazdu wycięta mniej więcej połowa rowka
-        let mid = full - s.at(sim.path[2].t * 0.5 + sim.path[1].t * 0.5).volume();
+        let mid = full - s.volume_at(sim.path[2].t * 0.5 + sim.path[1].t * 0.5);
         assert!(mid > 0.3 * expect && mid < 0.7 * expect, "{mid}");
     }
 }

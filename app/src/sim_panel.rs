@@ -96,7 +96,8 @@ fn spawn_worker(
                 SolidSim::new(&sim, P3::new(area.min.x, area.min.y, -thickness), P3::new(area.max.x, area.max.y, 0.0))
             });
             if let Some(s) = &mut solid {
-                let every = (s.segment_count() / 40).max(16);
+                // klatki kluczowe są tanie (kafelki współdzielone) — gęsto, żeby przewijanie było szybkie
+                let every = (s.segment_count() / 400).max(16);
                 let tx = tx_msg.clone();
                 let c = ctx.clone();
                 let ok = s.precompute(every, |p| {
@@ -128,10 +129,7 @@ fn spawn_worker(
                     sim.seek_with(t, &keys);
                     serial += 1;
                     let mesh = match &mut solid {
-                        Some(s) => {
-                            let body = s.at(t);
-                            s.mesh(&body)
-                        }
+                        Some(s) => s.mesh_at(t),
                         None => sim.mesh(),
                     };
                     let frame = Frame { time: t, mesh, pos: sim.position(), serial, millis: t0.elapsed().as_millis() };
@@ -181,10 +179,10 @@ pub struct SimState {
     resolution: usize,
     engine: Engine,
     show_material: bool,
-    show_paths: bool,
+    pub show_paths: bool,
     show_rapids: bool,
     show_tool: bool,
-    show_model: bool,
+    pub show_model: bool,
     /// Obróbka dwustronna: która strona jest symulowana, i czy w ogóle są dwie.
     pub side: cam_ops::Side,
     sides: bool,
@@ -566,7 +564,76 @@ mod perf {
         let every = (ss.segment_count() / 40).max(16);
         ss.precompute(every, |_| true);
         eprintln!("bryła: przeliczenie {:?} ({} odcinków), {}", t.elapsed(), ss.segment_count(), ss.stats());
-        let body = ss.at(sim2.duration());
-        eprintln!("bryła końcowa: trójkątów {}, objętość {:.1}", body.num_tri(), body.volume());
+        let d = sim2.duration();
+        eprintln!("bryła końcowa: trójkątów {}, objętość {:.1}", ss.triangles_at(d), ss.volume_at(d));
+    }
+
+    /// Pomiar dla modelu 3D (zgrubna + wykańczająca):
+    /// cargo test --release -p millwise sim_perf_3d -- --ignored --nocapture
+    #[test]
+    #[ignore]
+    fn sim_perf_3d() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+        let lib = ToolLibrary::with_defaults();
+        let mesh = cam_io::load_stl(&root.join("samples/model.stl")).unwrap();
+        let mut doc = crate::doc::Document::default();
+        doc.finish_load();
+        doc.set_model(crate::model3d::Model3D::new("model.stl".into(), mesh, 1.0));
+        doc.place_at_origin();
+        let low = -doc.stock.model.as_ref().unwrap().heights().unwrap().lowest_top().unwrap();
+        let flat = lib.tools.iter().find(|t| t.number == 1).unwrap().clone();
+        let ball = lib.tools.iter().find(|t| matches!(t.kind, cam_ops::ToolKind::BallEnd)).unwrap().clone();
+        let mk = |kind: cam_ops::OpKind, tool: &cam_ops::Tool| {
+            let mut cut = cam_ops::CutParams { depth: low, ..Default::default() };
+            cut.apply_tool(tool, cam_ops::DEFAULT_MATERIAL);
+            cam_ops::Operation { side: cam_ops::Side::A, name: "x".into(), enabled: true, kind, tool_id: tool.id, cut, contours: vec![] }
+        };
+        doc.add_op(mk(cam_ops::OpKind::Rough3D(Default::default()), &flat));
+        doc.add_op(mk(cam_ops::OpKind::Finish3D(Default::default()), &ball));
+        doc.regenerate(&lib, None);
+        let data: Vec<OpData> = doc
+            .ops
+            .iter()
+            .zip(&doc.op_cache)
+            .filter_map(|(op, c)| {
+                let t = lib.get(op.tool_id)?;
+                Some((ToolShape::new(&t.kind, t.diameter), c.as_ref()?.result.toolpath.polyline_with_feed(0.01)))
+            })
+            .collect();
+        let ops: Vec<SimOp> = data.iter().map(|(t, p)| SimOp { tool: t.clone(), points: p }).collect();
+        let area = doc.stock_box().unwrap();
+        let th = doc.stock.thickness;
+        let mut sim = Simulator::new(Heightmap::new(area, 0.0, -th, 400), &ops, 6000.0);
+        sim.advance_to(0.0);
+        use cam_sim::solid;
+        let mut ss = solid::SolidSim::new(&sim, P3::new(area.min.x, area.min.y, -th), P3::new(area.max.x, area.max.y, 0.0));
+        let every = (ss.segment_count() / 400).max(16);
+        let t = Instant::now();
+        let mut last = (0.0f32, Instant::now());
+        ss.precompute(every, |p| {
+            if p - last.0 >= 0.1 {
+                eprintln!("  postęp {:.0}%: {:?} od poprzedniego", p * 100.0, last.1.elapsed());
+                last = (p, Instant::now());
+            }
+            true
+        });
+        eprintln!("bryła: {} odcinków, co {every}, przeliczenie {:?}, {}", ss.segment_count(), t.elapsed(), ss.stats());
+        eprintln!("klatki kluczowe: {} trójkątów razem", ss.keyframe_triangles());
+        // odtwarzanie: klatki co 1/30 s przy 20× (czas programu)
+        let dur = sim.duration();
+        for frac in [0.1, 0.5, 0.9] {
+            let mut tt = dur * frac;
+            let t = Instant::now();
+            let m = ss.mesh_at(tt);
+            let first = t.elapsed();
+            let mut times = Vec::new();
+            for _ in 0..10 {
+                tt += 20.0 / 30.0;
+                let t = Instant::now();
+                let m = ss.mesh_at(tt);
+                times.push((t.elapsed().as_millis(), m.indices.len() / 3));
+            }
+            eprintln!("t={frac}: skok {:?} ({} trójkątów), kolejne klatki (ms, trójkąty): {times:?}", first, m.indices.len() / 3);
+        }
     }
 }

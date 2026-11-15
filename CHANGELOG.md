@@ -54,6 +54,16 @@ Version numbers:
   the G-code follow the chosen language too. Material names saved in tool
   and project files stay as they are and are only shown translated.
 
+### Changed
+
+- **Faster solid simulation, also late in long programs.** The stock is
+  split into tiles and each tool move only changes the tiles it touches;
+  the others are taken from memory. Before, every frame recalculated the
+  whole solid, so playback slowed down more and more as the material got
+  more detailed (e.g. after 3D finishing: about 5 frames per second at the
+  end, now 15–30+). Keyframes for seeking share unchanged tiles and are kept
+  within a memory budget.
+
 ## 0.5.0 (2026-11-15)
 
 ### Added
