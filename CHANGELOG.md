@@ -6,6 +6,18 @@ Version numbers:
 - the **second number** goes up with every release that adds features;
 - the **third number** goes up for releases that only fix bugs.
 
+## Unreleased
+
+### Changed
+
+- **Tool lists grouped by type.** The drop-down lists of tools (for new
+  operations, in the operation settings, for rest finishing) are grouped:
+  flat, ball, bull-nose, V, engraving, drills — each group with a heading
+  and sorted from the smallest diameter.
+- **The tool comes first in the operation settings**, above the depth: it is
+  what is usually chosen or changed first. Feeds and speed stay below, under
+  „Cutting”.
+
 ## 0.7.0 (2026-11-15)
 
 ### Added

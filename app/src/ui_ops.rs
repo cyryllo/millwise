@@ -32,6 +32,53 @@ pub struct OpsUi {
     pub palette_tool: Option<u32>,
 }
 
+/// Kolejność grup frezów na listach: płaskie, kulowe, z promieniem, V, grawerskie, wiertła.
+fn kind_rank(k: &cam_ops::ToolKind) -> u8 {
+    use cam_ops::ToolKind::*;
+    match k {
+        FlatEnd => 0,
+        BallEnd => 1,
+        BullNose { .. } => 2,
+        VBit { .. } => 3,
+        Engraver { .. } => 4,
+        Drill { .. } => 5,
+    }
+}
+
+/// Frezy w kolejności list: według rodzaju, w rodzaju od najmniejszej średnicy, potem numer.
+fn sorted_tools(lib: &ToolLibrary, show: impl Fn(&cam_ops::Tool) -> bool) -> Vec<&cam_ops::Tool> {
+    let mut tools: Vec<&cam_ops::Tool> = lib.tools.iter().filter(|t| show(t)).collect();
+    tools.sort_by(|a, b| {
+        kind_rank(&a.kind)
+            .cmp(&kind_rank(&b.kind))
+            .then(a.diameter.partial_cmp(&b.diameter).unwrap_or(std::cmp::Ordering::Equal))
+            .then(a.number.cmp(&b.number))
+    });
+    tools
+}
+
+/// Lista frezów do rozwijanego wyboru: pogrupowana według rodzaju (z nagłówkiem grupy),
+/// w grupie od najmniejszej średnicy. Zwraca kliknięte narzędzie.
+pub fn tool_menu(ui: &mut egui::Ui, lib: &ToolLibrary, selected: Option<u32>, show: impl Fn(&cam_ops::Tool) -> bool) -> Option<u32> {
+    let tools = sorted_tools(lib, show);
+    let mut clicked = None;
+    let mut group = None;
+    for t in tools {
+        let g = kind_rank(&t.kind);
+        if group != Some(g) {
+            if group.is_some() {
+                ui.separator();
+            }
+            ui.label(RichText::new(t.kind.label().to_uppercase()).small().strong().color(ui_kit::LABEL));
+            group = Some(g);
+        }
+        if ui.selectable_label(selected == Some(t.id), t.display_name()).clicked() {
+            clicked = Some(t.id);
+        }
+    }
+    clicked
+}
+
 pub fn fmt_time(minutes: f64) -> String {
     let s = (minutes * 60.0).round() as u64;
     if s >= 3600 {
@@ -88,8 +135,8 @@ pub fn ops_panel(
                         .width(ui.available_width() - 4.0)
                         .selected_text(current)
                         .show_ui(ui, |ui| {
-                            for t in &lib.tools {
-                                ui.selectable_value(&mut state.palette_tool, Some(t.id), t.display_name());
+                            if let Some(id) = tool_menu(ui, lib, state.palette_tool, |_| true) {
+                                state.palette_tool = Some(id);
                             }
                         });
                     if let Some(t) = state.palette_tool.and_then(|id| lib.get(id)) {
@@ -498,6 +545,38 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
         });
     }
     let op = &mut doc.ops[i];
+    // --- narzędzie: najpierw, nad głębokością — od niego zależy reszta ---
+    ui.add_space(6.0);
+    ui_kit::subtitle(ui, tr!("Narzędzie"));
+    let current = lib.get(op.tool_id).map(|t| t.display_name()).unwrap_or_else(|| tr!("— brak —").into());
+    egui::ComboBox::from_id_salt("op_tool").width(ui.available_width() - 8.0).selected_text(current).show_ui(ui, |ui| {
+        if let Some(id) = tool_menu(ui, lib, Some(op.tool_id), |_| true) {
+            if id != op.tool_id {
+                if let Some(t) = lib.get(id) {
+                    op.tool_id = id;
+                    op.cut.apply_tool(t, &material);
+                    changed = true;
+                }
+            }
+        }
+    });
+    if let Some(t) = lib.get(op.tool_id) {
+        ui.horizontal_wrapped(|ui| {
+            ui.label(
+                RichText::new(tr!("{} · Ø{} · ostrza {} mm · korekcja r = {} mm", t.kind.label(), t.diameter, t.flute_length, t.radius()))
+                    .small()
+                    .color(ui_kit::LABEL),
+            );
+            if ui
+                .small_button(tr!("Parametry: {}", cam_i18n::tr_dyn(&material)))
+                .on_hover_text(tr!("Wczytaj obroty i posuwy z narzędzia dla materiału półfabrykatu"))
+                .clicked()
+            {
+                op.cut.apply_tool(t, &material);
+                changed = true;
+            }
+        });
+    }
 
     // --- najważniejsze: głębokość, krok w dół / wycofanie ---
     ui.add_space(6.0);
@@ -740,12 +819,11 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
                 }
                 if let Some(id) = p.rest_tool {
                     let name = lib.get(id).map_or_else(|| tr!("— brak —").to_string(), |t| format!("T{} Ø{}", t.number, t.diameter));
+                    let own = op.tool_id;
                     egui::ComboBox::from_id_salt("rest_tool").selected_text(tr!("po {}", name)).show_ui(ui, |ui| {
-                        for t in lib.tools.iter().filter(|t| t.id != op.tool_id) {
-                            if ui.selectable_label(t.id == id, format!("T{} · {}", t.number, t.name)).clicked() {
-                                p.rest_tool = Some(t.id);
-                                changed = true;
-                            }
+                        if let Some(t) = tool_menu(ui, lib, Some(id), |t| t.id != own) {
+                            p.rest_tool = Some(t);
+                            changed = true;
                         }
                     });
                 }
@@ -794,35 +872,8 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
         }
     });
 
-    // --- narzędzie i skrawanie ---
-    ui_kit::subtitle(ui, tr!("Narzędzie i skrawanie"));
-    let current = lib.get(op.tool_id).map(|t| t.display_name()).unwrap_or_else(|| tr!("— brak —").into());
-    egui::ComboBox::from_id_salt("op_tool").width(ui.available_width() - 8.0).selected_text(current).show_ui(ui, |ui| {
-        for t in &lib.tools {
-            if ui.selectable_label(t.id == op.tool_id, t.display_name()).clicked() && t.id != op.tool_id {
-                op.tool_id = t.id;
-                op.cut.apply_tool(t, &material);
-                changed = true;
-            }
-        }
-    });
-    if let Some(t) = lib.get(op.tool_id) {
-        ui.horizontal_wrapped(|ui| {
-            ui.label(
-                RichText::new(tr!("{} · Ø{} · ostrza {} mm · korekcja r = {} mm", t.kind.label(), t.diameter, t.flute_length, t.radius()))
-                    .small()
-                    .color(ui_kit::LABEL),
-            );
-            if ui
-                .small_button(tr!("Parametry: {}", cam_i18n::tr_dyn(&material)))
-                .on_hover_text(tr!("Wczytaj obroty i posuwy z narzędzia dla materiału półfabrykatu"))
-                .clicked()
-            {
-                op.cut.apply_tool(t, &material);
-                changed = true;
-            }
-        });
-    }
+    // --- skrawanie (narzędzie wybierane wyżej, nad głębokością) ---
+    ui_kit::subtitle(ui, tr!("Skrawanie"));
     let is_drill = matches!(op.kind, OpKind::Drill(ref d) if !d.helix);
     egui::Grid::new("op_cut").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
         let c = &mut op.cut;
@@ -867,4 +918,27 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
         ui.label(RichText::new(tr!("Uwaga: narzędzie nie istnieje w bibliotece")).color(Color32::LIGHT_RED));
     }
     changed
+}
+
+#[cfg(test)]
+mod tool_list_tests {
+    use super::*;
+
+    #[test]
+    fn tools_are_grouped_by_kind_and_sorted_by_diameter() {
+        let lib = ToolLibrary::with_defaults();
+        let list = sorted_tools(&lib, |_| true);
+        assert_eq!(list.len(), lib.tools.len());
+        for w in list.windows(2) {
+            let (a, b) = (w[0], w[1]);
+            let (ra, rb) = (kind_rank(&a.kind), kind_rank(&b.kind));
+            assert!(ra < rb || (ra == rb && a.diameter <= b.diameter), "{} przed {}", a.display_name(), b.display_name());
+        }
+        // płaskie na początku, od 3 mm; wiertła na końcu
+        assert!(matches!(list[0].kind, cam_ops::ToolKind::FlatEnd) && list[0].diameter == 3.0);
+        assert!(matches!(list.last().unwrap().kind, cam_ops::ToolKind::Drill { .. }));
+        // filtr (np. bez narzędzia operacji)
+        let first = list[0].id;
+        assert!(sorted_tools(&lib, |t| t.id != first).iter().all(|t| t.id != first));
+    }
 }
