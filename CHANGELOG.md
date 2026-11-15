@@ -19,8 +19,9 @@ Version numbers:
 
 ### Changed
 
-- **Tool lists grouped by type.** The drop-down lists of tools (for new
-  operations, in the operation settings, for rest finishing) are grouped:
+- **Tool lists grouped by type.** The tool library window and the drop-down
+  lists of tools (for new operations, in the operation settings, for rest
+  finishing) are grouped:
   flat, ball, bull-nose, V, engraving, drills — each group with a heading
   and sorted from the smallest diameter.
 - **New tool drawings**: metal shank as wide as the cutter, a carbide

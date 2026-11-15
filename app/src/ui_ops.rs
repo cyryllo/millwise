@@ -33,7 +33,7 @@ pub struct OpsUi {
 }
 
 /// Kolejność grup frezów na listach: płaskie, kulowe, kulowe stożkowe, z promieniem, V, grawerskie, wiertła.
-fn kind_rank(k: &cam_ops::ToolKind) -> u8 {
+pub(crate) fn kind_rank(k: &cam_ops::ToolKind) -> u8 {
     use cam_ops::ToolKind::*;
     match k {
         FlatEnd => 0,
@@ -47,7 +47,7 @@ fn kind_rank(k: &cam_ops::ToolKind) -> u8 {
 }
 
 /// Frezy w kolejności list: według rodzaju, w rodzaju od najmniejszej średnicy, potem numer.
-fn sorted_tools(lib: &ToolLibrary, show: impl Fn(&cam_ops::Tool) -> bool) -> Vec<&cam_ops::Tool> {
+pub(crate) fn sorted_tools(lib: &ToolLibrary, show: impl Fn(&cam_ops::Tool) -> bool) -> Vec<&cam_ops::Tool> {
     let mut tools: Vec<&cam_ops::Tool> = lib.tools.iter().filter(|t| show(t)).collect();
     tools.sort_by(|a, b| {
         kind_rank(&a.kind)

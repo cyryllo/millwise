@@ -123,9 +123,15 @@ impl ToolsWindow {
                     ui.vertical(|ui| {
                         ui.set_width(250.0);
                         egui::ScrollArea::vertical().id_salt("tool_list").max_height(ui.available_height()).show(ui, |ui| {
-                            let mut sorted: Vec<&Tool> = lib.tools.iter().collect();
-                            sorted.sort_by_key(|t| t.number);
-                            for t in sorted {
+                            // pogrupowane według rodzaju, w grupie od najmniejszej średnicy (jak listy wyboru)
+                            let mut group = None;
+                            for t in crate::ui_ops::sorted_tools(lib, |_| true) {
+                                let g = crate::ui_ops::kind_rank(&t.kind);
+                                if group != Some(g) {
+                                    ui.add_space(if group.is_some() { 8.0 } else { 2.0 });
+                                    ui.label(RichText::new(t.kind.label().to_uppercase()).small().strong().color(Color32::from_gray(160)));
+                                    group = Some(g);
+                                }
                                 if tool_row(ui, t, self.selected == Some(t.id)).clicked() {
                                     self.selected = Some(t.id);
                                     self.preset = None;
