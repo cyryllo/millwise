@@ -234,6 +234,25 @@ impl Default for VCarveParams {
     }
 }
 
+/// Obróbka zgrubna 3D warstwami Z.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Rough3DParams {
+    pub strategy: PocketStrategy,
+    /// Stepover jako ułamek średnicy.
+    pub stepover: f64,
+    pub direction: Direction,
+    pub entry: Entry,
+    /// Naddatek zostawiany na modelu (w bok i w dół) [mm].
+    pub allowance: f64,
+}
+
+impl Default for Rough3DParams {
+    fn default() -> Self {
+        Self { strategy: PocketStrategy::Offset, stepover: 0.4, direction: Direction::Climb, entry: Entry::Ramp { angle: 3.0 }, allowance: 0.5 }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum OpKind {
     Profile(ProfileParams),
@@ -243,6 +262,8 @@ pub enum OpKind {
     Engrave(EngraveParams),
     /// V-carving: frez V po osi kształtu ze zmienną głębokością.
     VCarve(VCarveParams),
+    /// Obróbka zgrubna modelu 3D warstwami Z.
+    Rough3D(Rough3DParams),
 }
 
 impl OpKind {
@@ -253,6 +274,7 @@ impl OpKind {
             OpKind::Drill(_) => tr!("Wiercenie"),
             OpKind::Engrave(_) => tr!("Grawer"),
             OpKind::VCarve(_) => "V-carving",
+            OpKind::Rough3D(_) => tr!("Zgrubna 3D"),
         }
     }
 }
@@ -290,6 +312,16 @@ pub struct OpResult {
 
 /// Generuje ścieżkę dla operacji. `contours` to geometria w kolejności `op.contours`.
 pub fn generate(op: &Operation, tool: &Tool, contours: &[Contour]) -> OpResult {
+    generate_with_model(op, tool, contours, None)
+}
+
+/// Czy operacja obrabia model 3D (potrzebuje mapy wysokości).
+pub fn needs_model(kind: &OpKind) -> bool {
+    matches!(kind, OpKind::Rough3D(_))
+}
+
+/// Jak `generate`, z modelem 3D dla operacji 3D.
+pub fn generate_with_model(op: &Operation, tool: &Tool, contours: &[Contour], model: Option<&crate::rough3d::ModelInput>) -> OpResult {
     let mut res = OpResult::default();
     if tool.diameter <= 0.0 {
         res.warnings.push(tr!("Średnica narzędzia musi być > 0").into());
@@ -310,6 +342,10 @@ pub fn generate(op: &Operation, tool: &Tool, contours: &[Contour]) -> OpResult {
         OpKind::Drill(p) => crate::drill::generate(&op.cut, p, tool, contours, &mut res),
         OpKind::Engrave(p) => crate::engrave::generate(&op.cut, p, tool, contours, &mut res),
         OpKind::VCarve(p) => crate::vcarve::generate(&op.cut, p, tool, contours, &mut res),
+        OpKind::Rough3D(p) => match model {
+            Some(m) => crate::rough3d::generate(&op.cut, p, tool, contours, m, &mut res),
+            None => res.warnings.push(tr!("Brak modelu 3D — wczytaj plik STL").into()),
+        },
     }
     res.toolpath.retract(op.cut.safe_z);
     res

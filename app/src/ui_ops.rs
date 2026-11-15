@@ -639,6 +639,35 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
                 .changed();
             ui.end_row();
         }
+        OpKind::Rough3D(p) => {
+            ui_kit::label(ui, tr!("Strategia"));
+            ui.horizontal(|ui| {
+                changed |= ui.radio_value(&mut p.strategy, PocketStrategy::Offset, tr!("Offsetowa")).changed();
+                changed |= ui.radio_value(&mut p.strategy, PocketStrategy::Zigzag, tr!("Zygzak")).changed();
+                changed |= ui
+                    .radio_value(&mut p.strategy, PocketStrategy::Adaptive, "HSM")
+                    .on_hover_text(tr!("Mały, równy krok i zaokrąglone pętle bez ostrych zakrętów; ściany i narożniki na każdej głębokości"))
+                    .changed();
+            });
+            ui.end_row();
+            let mut pct = p.stepover * 100.0;
+            ui_kit::label(ui, tr!("Stepover"));
+            if ui.add(egui::DragValue::new(&mut pct).range(5.0..=100.0).speed(0.5).suffix(" % Ø")).changed() {
+                p.stepover = pct / 100.0;
+                changed = true;
+            }
+            ui.end_row();
+            changed |= direction_ui(ui, &mut p.direction);
+            changed |= entry_ui(ui, &mut p.entry);
+            changed |= num(ui, tr!("Naddatek na modelu"), &mut p.allowance, 0.0..=20.0, 0.05, " mm");
+            ui.label("");
+            ui.label(
+                RichText::new(tr!("Warstwy co krok w Z i tuż nad płaskimi miejscami modelu. Bez krzywych: cały półfabrykat; z krzywymi: tylko wewnątrz nich."))
+                    .small()
+                    .color(ui_kit::LABEL),
+            );
+            ui.end_row();
+        }
         OpKind::Drill(p) => {
             ui_kit::label(ui, tr!("Frezowanie po helisie"));
             changed |= ui.checkbox(&mut p.helix, "").on_hover_text(tr!("Dla otworów większych niż narzędzie")).changed();

@@ -180,6 +180,18 @@ pub enum AlignMode {
     Bottom,
 }
 
+/// Zapamiętany wynik operacji 3D (liczy się długo) — ponownie liczony dopiero,
+/// gdy zmieni się operacja, narzędzie, krzywe, model albo półfabrykat.
+pub(crate) struct Cache3D {
+    kind: cam_ops::OpKind,
+    cut: cam_ops::CutParams,
+    tool: cam_ops::Tool,
+    geom: Vec<Contour>,
+    heights: std::sync::Arc<cam_ops::model::ModelHeights>,
+    stock: Aabb2,
+    result: OpResult,
+}
+
 /// Wynik generowania operacji + dane do wyświetlania.
 pub struct OpCache {
     pub result: OpResult,
@@ -219,6 +231,8 @@ pub struct Document {
     pub edit_label: Option<(Mark, String)>,
     /// Parametry zmiany zrobionej teraz (szyk, skala, obrót) — trafiają do historii.
     pub step_param: Option<ParamEdit>,
+    /// Wyniki operacji 3D (ostatnie kilka).
+    pub(crate) cache3d: Vec<Cache3D>,
 }
 
 impl Document {
@@ -386,7 +400,7 @@ impl Document {
     pub fn contour_fits(&self, kind: &cam_ops::OpKind, i: usize) -> bool {
         let c = &self.contours[i].contour;
         match kind {
-            cam_ops::OpKind::Pocket(_) | cam_ops::OpKind::VCarve(_) => c.closed,
+            cam_ops::OpKind::Pocket(_) | cam_ops::OpKind::VCarve(_) | cam_ops::OpKind::Rough3D(_) => c.closed,
             cam_ops::OpKind::Drill(_) => c.as_circle().is_some(),
             _ => true,
         }
@@ -398,6 +412,7 @@ impl Document {
             return Err(match self.ops[op].kind {
                 cam_ops::OpKind::Pocket(_) => tr!("Kieszeń wymaga krzywej zamkniętej"),
                 cam_ops::OpKind::VCarve(_) => tr!("V-carving wymaga krzywej zamkniętej"),
+                cam_ops::OpKind::Rough3D(_) => tr!("Granica obróbki 3D musi być krzywą zamkniętą"),
                 cam_ops::OpKind::Drill(_) => tr!("Wiercenie wymaga okręgu"),
                 _ => tr!("Krzywa nie pasuje do operacji"),
             });
@@ -520,6 +535,10 @@ impl Document {
 
     /// Przelicza ścieżki wszystkich operacji.
     pub fn regenerate(&mut self, lib: &ToolLibrary, machine: Option<&Machine>) {
+        let mut cache3d = std::mem::take(&mut self.cache3d);
+        let mut used3d = Vec::new();
+        let heights = self.stock.model.as_ref().and_then(|m| m.heights());
+        let stock_box = self.stock_box();
         self.op_cache = self
             .ops
             .iter()
@@ -527,12 +546,46 @@ impl Document {
                 let tool = lib.get(op.tool_id)?;
                 let mut geom: Vec<Contour> =
                     op.contours.iter().filter_map(|&i| self.contours.get(i)).map(|c| c.contour.clone()).collect();
+                let is3d = cam_ops::needs_model(&op.kind);
                 // strona B: geometria odbita względem osi odwracania (G-code dla odwróconej płyty)
-                let flip = self.stock.two_sided.as_ref().filter(|_| op.side == cam_ops::Side::B);
+                let flip = self.stock.two_sided.as_ref().filter(|_| op.side == cam_ops::Side::B && !is3d);
                 if let Some(t) = flip {
                     geom.iter_mut().for_each(|c| t.mirror(c));
                 }
-                let mut result = cam_ops::generate(op, tool, &geom);
+                let mut result = match (is3d, &heights, stock_box) {
+                    (false, _, _) => cam_ops::generate(op, tool, &geom),
+                    (true, Some(h), Some(sb)) => {
+                        let hit = cache3d.iter().position(|c| {
+                            c.kind == op.kind
+                                && c.cut == op.cut
+                                && c.tool == *tool
+                                && c.geom == geom
+                                && std::sync::Arc::ptr_eq(&c.heights, h)
+                                && c.stock == sb
+                        });
+                        let result = match hit {
+                            Some(k) => cache3d[k].result.clone(),
+                            None => {
+                                let m = cam_ops::ModelInput { heights: h, stock: sb };
+                                cam_ops::generate_with_model(op, tool, &geom, Some(&m))
+                            }
+                        };
+                        used3d.push(Cache3D {
+                            kind: op.kind.clone(),
+                            cut: op.cut.clone(),
+                            tool: tool.clone(),
+                            geom: geom.clone(),
+                            heights: h.clone(),
+                            stock: sb,
+                            result: result.clone(),
+                        });
+                        result
+                    }
+                    (true, _, _) => cam_ops::generate_with_model(op, tool, &geom, None),
+                };
+                if is3d && op.side == cam_ops::Side::B {
+                    result.warnings.push(tr!("Operacje 3D są tylko na stronie A").into());
+                }
                 if op.side == cam_ops::Side::B && self.stock.two_sided.is_none() {
                     result.warnings.push(tr!("Strona B bez włączonej obróbki dwustronnej — liczona jak strona A").into());
                 }
@@ -552,6 +605,9 @@ impl Document {
                 Some(OpCache { result, display, minutes })
             })
             .collect();
+        // zostają wyniki obecnych operacji 3D
+        cache3d.clear();
+        self.cache3d = used3d;
         self.ops_dirty = false;
         self.revision += 1;
         self.paths_revision += 1;

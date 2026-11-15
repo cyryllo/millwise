@@ -3,7 +3,7 @@ use crate::doc::{AlignMode, Document};
 use crate::history::History;
 use crate::sim_panel::SimState;
 use crate::storage;
-use crate::toolbar::{Sub, Toolbar, ToolbarAction};
+use crate::toolbar::{Group, Sub, Toolbar, ToolbarAction};
 use crate::ui_kit;
 use crate::ui_machines::MachinesWindow;
 use crate::ui_ops::{self, OpsAction, OpsUi};
@@ -218,6 +218,10 @@ impl CamApp {
                     "about" => app.about_open = true,
                     "keys" => app.shortcuts_open = true,
                     "auto" => app.open_automation(),
+                    "rough3d" => {
+                        app.toolbar.set(Sub::Rough3D);
+                        app.ensure_target();
+                    }
                     "silhouette" => {
                         app.doc.model_outline(None);
                     }
@@ -720,6 +724,12 @@ impl CamApp {
         };
         let mut cut = CutParams { depth, safe_z: machine.safe_z, ..Default::default() };
         cut.apply_tool(tool, &self.doc.stock.material);
+        // obróbka 3D: domyślnie do najniższej powierzchni widocznej z góry — bez przecinania półfabrykatu
+        if cam_ops::needs_model(&kind) {
+            if let Some(low) = self.doc.stock.model.as_ref().and_then(|m| m.heights()).and_then(|h| h.lowest_top()) {
+                cut.depth = (-low).clamp(0.1, self.doc.stock.thickness.max(0.1));
+            }
+        }
         let n = self.doc.ops.iter().filter(|o| o.name.starts_with(label)).count() + 1;
         let op = Operation { side: cam_ops::Side::A, name: format!("{label} {n}"), enabled: true, kind, tool_id: tool.id, cut, contours: vec![] };
         let i = self.doc.add_op(op);
@@ -790,6 +800,7 @@ impl CamApp {
         let mut close = false;
         let now = Self::now(ctx);
         let mut nothing_selected = false;
+        let mut create3d = false;
         egui::Area::new(egui::Id::unique("tool_options"))
             .fixed_pos(view.min + egui::vec2(10.0, 10.0))
             .order(egui::Order::Middle)
@@ -950,6 +961,30 @@ impl CamApp {
                                     }
                                 });
                             }
+                            s if s.group() == Group::Model3D && doc.stock.model.is_none() => {
+                                ui.horizontal(|ui| {
+                                    ui.label(RichText::new(tr!("Obróbka 3D potrzebuje modelu — wczytaj plik STL (Plik › Otwórz albo Dodaj)")).strong().color(Color32::WHITE));
+                                    if ui.button(tr!("Anuluj")).clicked() {
+                                        close = true;
+                                    }
+                                });
+                            }
+                            s if s.group() == Group::Model3D && self.pick_target.filter(|&t| t < doc.ops.len()).is_none() => {
+                                ui.horizontal(|ui| {
+                                    ui.label(RichText::new(tr!("3D › {}", s.label())).strong().color(Color32::WHITE));
+                                    if ui
+                                        .button(tr!("Utwórz dla całego półfabrykatu"))
+                                        .on_hover_text(tr!("Bez krzywych operacja obejmuje cały półfabrykat"))
+                                        .clicked()
+                                    {
+                                        create3d = true;
+                                    }
+                                    ui.label(RichText::new(tr!("albo kliknij krzywe — granice obróbki")).weak());
+                                    if ui.button(tr!("Anuluj")).clicked() {
+                                        close = true;
+                                    }
+                                });
+                            }
                             s if s.op_template(1.0).is_some() => {
                                 let target = self.pick_target.filter(|&t| t < doc.ops.len());
                                 ui.horizontal(|ui| {
@@ -970,6 +1005,12 @@ impl CamApp {
             });
         if nothing_selected {
             self.view2d.flash(tr!("Najpierw zaznacz krzywe"), now);
+        }
+        if create3d {
+            if let Some(i) = self.ensure_target() {
+                self.doc.selected_op = Some(i);
+                self.view2d.flash(tr!("Utworzono: {}", self.doc.ops[i].name), now);
+            }
         }
         if close {
             self.stop_mode();

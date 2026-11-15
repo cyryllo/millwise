@@ -87,6 +87,11 @@ impl ModelHeights {
         Some(ModelHeights { min, cell, nx, ny, z, z_min, z_max })
     }
 
+    /// Najniższy punkt powierzchni widocznej z góry (np. wierzch płyty pod płaskorzeźbą).
+    pub fn lowest_top(&self) -> Option<f64> {
+        self.z.iter().filter(|z| z.is_finite()).map(|&z| z as f64).reduce(f64::min)
+    }
+
     pub fn bounds(&self) -> Aabb2 {
         Aabb2 { min: self.min, max: self.min + Vec2::new(self.nx as f64 * self.cell, self.ny as f64 * self.cell) }
     }
@@ -110,7 +115,24 @@ impl ModelHeights {
     /// Obrysy obszarów, w których model jest wyżej niż `level` (z góry):
     /// zamknięte kontury, zewnętrzne CCW, otwory CW. `level` poniżej modelu = sylwetka.
     pub fn outline_above(&self, level: f64) -> Vec<Contour> {
-        let inside = |i: isize, j: isize| self.at(i, j) as f64 > level;
+        self.outline_where(|_, z| z as f64 > level)
+    }
+
+    /// Obrysy obszarów oczek spełniających `f(indeks oczka, wysokość)`
+    /// (zewnętrzne CCW, otwory CW).
+    pub fn outline_where(&self, f: impl Fn(usize, f32) -> bool) -> Vec<Contour> {
+        self.outline_where_tol(f, self.cell * 0.5)
+    }
+
+    /// Jak `outline_where`, z tolerancją upraszczania `tol`.
+    pub fn outline_where_tol(&self, f: impl Fn(usize, f32) -> bool, tol: f64) -> Vec<Contour> {
+        let inside = |i: isize, j: isize| {
+            if i < 0 || j < 0 || i >= self.nx as isize || j >= self.ny as isize {
+                return false;
+            }
+            let k = j as usize * self.nx + i as usize;
+            f(k, self.z[k])
+        };
         // marching squares na środkach oczek, z ramką „na zewnątrz”
         // krawędzie między sąsiednimi środkami (punkty na połowie odległości)
         let cell = self.cell;
@@ -179,7 +201,7 @@ impl ModelHeights {
             if pts.len() < 3 {
                 continue;
             }
-            let pts = simplify_closed(&pts, cell * 0.5);
+            let pts = simplify_closed(&pts, tol);
             if pts.len() < 3 {
                 continue;
             }
@@ -188,6 +210,107 @@ impl ModelHeights {
             out.push(c);
         }
         out
+    }
+
+    /// Oczka, których środki leżą wewnątrz zamkniętych konturów (parzysto-nieparzyście,
+    /// więc otwory w konturach są poza).
+    pub fn inside_mask(&self, contours: &[Contour]) -> Vec<bool> {
+        let polys: Vec<Vec<Vec2>> = contours.iter().filter(|c| c.closed).map(|c| c.flatten(self.cell * 0.25)).collect();
+        let mut m = vec![false; self.nx * self.ny];
+        let mut xs = Vec::new();
+        for j in 0..self.ny {
+            let y = self.min.y + (j as f64 + 0.5) * self.cell;
+            xs.clear();
+            for poly in &polys {
+                let n = poly.len();
+                for k in 0..n {
+                    let (a, b) = (poly[k], poly[(k + 1) % n]);
+                    if (a.y > y) != (b.y > y) {
+                        xs.push(a.x + (y - a.y) / (b.y - a.y) * (b.x - a.x));
+                    }
+                }
+            }
+            xs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            for pair in xs.chunks_exact(2) {
+                let i0 = ((pair[0] - self.min.x) / self.cell - 0.5).ceil().max(0.0) as usize;
+                let i1 = ((pair[1] - self.min.x) / self.cell - 0.5).floor();
+                if i1 < 0.0 {
+                    continue;
+                }
+                for i in i0..=(i1 as usize).min(self.nx - 1) {
+                    m[j * self.nx + i] = true;
+                }
+            }
+        }
+        m
+    }
+
+    /// Ta sama mapa na większej siatce (w tym samym rastrze), obejmującej też `b`.
+    pub fn padded(&self, b: Aabb2) -> ModelHeights {
+        let c = self.cell;
+        let lo_i = ((b.min.x - self.min.x) / c).floor().min(0.0) as isize;
+        let lo_j = ((b.min.y - self.min.y) / c).floor().min(0.0) as isize;
+        let hi_i = ((b.max.x - self.min.x) / c).ceil().max(self.nx as f64) as isize;
+        let hi_j = ((b.max.y - self.min.y) / c).ceil().max(self.ny as f64) as isize;
+        let (nx, ny) = ((hi_i - lo_i) as usize, (hi_j - lo_j) as usize);
+        let mut z = vec![f32::NEG_INFINITY; nx * ny];
+        for j in 0..self.ny {
+            let dst = (j as isize - lo_j) as usize * nx + (-lo_i) as usize;
+            z[dst..dst + self.nx].copy_from_slice(&self.z[j * self.nx..(j + 1) * self.nx]);
+        }
+        ModelHeights {
+            min: self.min + Vec2::new(lo_i as f64 * c, lo_j as f64 * c),
+            cell: c,
+            nx,
+            ny,
+            z,
+            z_min: self.z_min,
+            z_max: self.z_max,
+        }
+    }
+
+    /// Mapa „pogrubiona” o `radius`: w każdym oczku najwyższy punkt modelu w kole
+    /// o tym promieniu (filtr maksimum: wiersze koła × przesuwne maksimum w wierszu).
+    pub fn dilated(&self, radius: f64) -> ModelHeights {
+        let k = (radius / self.cell).ceil() as isize;
+        if k <= 0 {
+            return self.clone();
+        }
+        let (nx, ny) = (self.nx as isize, self.ny as isize);
+        let mut out = vec![f32::NEG_INFINITY; self.z.len()];
+        let mut row = vec![f32::NEG_INFINITY; self.nx];
+        let mut dq: std::collections::VecDeque<isize> = std::collections::VecDeque::new();
+        for dy in -k..=k {
+            let w = ((radius / self.cell).powi(2) - (dy as f64).powi(2)).max(0.0).sqrt().floor() as isize;
+            for j in 0..ny {
+                let src = j + dy;
+                if src < 0 || src >= ny {
+                    continue;
+                }
+                let s = &self.z[(src * nx) as usize..((src + 1) * nx) as usize];
+                // przesuwne maksimum okna [i − w, i + w]
+                dq.clear();
+                let mut next = 0isize;
+                for i in 0..nx {
+                    while next <= (i + w).min(nx - 1) {
+                        while dq.back().is_some_and(|&b| s[b as usize] <= s[next as usize]) {
+                            dq.pop_back();
+                        }
+                        dq.push_back(next);
+                        next += 1;
+                    }
+                    while dq.front().is_some_and(|&f| f < i - w) {
+                        dq.pop_front();
+                    }
+                    row[i as usize] = dq.front().map_or(f32::NEG_INFINITY, |&f| s[f as usize]);
+                }
+                let o = &mut out[(j * nx) as usize..((j + 1) * nx) as usize];
+                for (a, b) in o.iter_mut().zip(&row) {
+                    *a = a.max(*b);
+                }
+            }
+        }
+        ModelHeights { min: self.min, cell: self.cell, nx: self.nx, ny: self.ny, z: out, z_min: self.z_min, z_max: self.z_max }
     }
 
     /// Najniższe Z czubka narzędzia nad punktem `p`, przy którym narzędzie nie

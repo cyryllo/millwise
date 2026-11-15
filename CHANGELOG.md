@@ -28,6 +28,17 @@ Version numbers:
   with all 2D operations — for example a profile that cuts the part out, or a
   pocket around an island down to that depth.
 
+- **3D roughing.** A new „3D” group in the toolbar. „Roughing” clears the
+  stock around the model in Z layers, leaving the chosen stock on the model
+  (sideways and downwards). Each layer is cleared like a pocket, with the
+  same strategies (offset, zigzag, HSM), ramp entries and linking. Extra
+  layers are added just above the model's flat areas, so a full step of
+  material is not left on them. Without curves the operation covers the whole
+  stock; clicked closed curves limit it to their inside. By default it goes
+  down to the lowest surface seen from the top, so the stock is not cut
+  through. The result is kept and only recalculated when something it
+  depends on changes.
+
 - **English user interface.** Widok → Język / Language switches between
   Polski and English at once, without a restart; the choice is remembered.
   On the first start Millwise follows the system language (Polish for a

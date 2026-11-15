@@ -10,11 +10,13 @@ mod drill;
 mod engrave;
 mod pocket;
 mod profile;
+mod rough3d;
 mod vcarve;
 
 pub use operation::{
-    generate, CutParams, Direction, DrillParams, EngraveParams, EngraveSide, Entry, OpKind, OpResult, Operation,
-    PocketParams, PocketStrategy, ProfileParams, ProfileSide, Side, Tabs, VCarveParams,
+    generate, generate_with_model, needs_model, CutParams, Direction, DrillParams, EngraveParams, EngraveSide, Entry, OpKind, OpResult, Operation,
+    PocketParams, PocketStrategy, ProfileParams, ProfileSide, Rough3DParams, Side, Tabs, VCarveParams,
 };
+pub use rough3d::ModelInput;
 pub use tool::{CutPreset, FluteDir, Tool, ToolKind, ToolLibrary, DEFAULT_MATERIAL};
 pub use toolpath::{Move, Toolpath, P3};

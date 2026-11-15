@@ -14,11 +14,13 @@ pub enum Group {
     Pocket,
     Drill,
     Engrave,
+    /// Obróbka modelu 3D (STL).
+    Model3D,
     Zero,
 }
 
 impl Group {
-    pub const ALL: [Group; 6] = [Group::Select, Group::Profile, Group::Pocket, Group::Drill, Group::Engrave, Group::Zero];
+    pub const ALL: [Group; 7] = [Group::Select, Group::Profile, Group::Pocket, Group::Drill, Group::Engrave, Group::Model3D, Group::Zero];
 
     pub fn label(&self) -> &'static str {
         match self {
@@ -27,6 +29,7 @@ impl Group {
             Group::Pocket => tr!("Kieszeń"),
             Group::Drill => tr!("Wiercenie"),
             Group::Engrave => tr!("Grawer"),
+            Group::Model3D => "3D",
             Group::Zero => tr!("Zero"),
         }
     }
@@ -39,6 +42,7 @@ impl Group {
             Group::Pocket => &[PocketOffset, PocketZigzag, PocketAdaptive],
             Group::Drill => &[DrillSimple, DrillPeck, DrillHelix],
             Group::Engrave => &[EngCenter, EngLeft, EngRight, EngVcarve, Text],
+            Group::Model3D => &[Rough3D],
             Group::Zero => &[ZeroBL, ZeroCenter, ZeroTL, ZeroPick],
         }
     }
@@ -50,6 +54,7 @@ impl Group {
             Group::Pocket => Color32::from_rgb(220, 110, 230),
             Group::Drill => Color32::from_rgb(90, 220, 120),
             Group::Engrave => Color32::from_rgb(230, 150, 70),
+            Group::Model3D => Color32::from_rgb(240, 200, 90),
             Group::Zero => Color32::WHITE,
         }
     }
@@ -87,6 +92,8 @@ pub enum Sub {
     EngVcarve,
     /// Napis: tekst zamieniany na krzywe.
     Text,
+    /// Obróbka zgrubna 3D warstwami Z.
+    Rough3D,
     ZeroBL,
     ZeroCenter,
     ZeroTL,
@@ -120,6 +127,7 @@ impl Sub {
             EngRight => tr!("Z prawej"),
             EngVcarve => "V-carve",
             Text => tr!("Tekst"),
+            Rough3D => tr!("Zgrubna"),
             ZeroBL => tr!("Lewy dolny"),
             ZeroCenter => tr!("Środek"),
             ZeroTL => tr!("Lewy górny"),
@@ -153,6 +161,7 @@ impl Sub {
             EngRight => Icon::EngRight,
             EngVcarve => Icon::EngVcarve,
             Text => Icon::Text,
+            Rough3D => Icon::Rough3D,
             ZeroBL => Icon::ZeroBL,
             ZeroCenter => Icon::ZeroCenter,
             ZeroTL => Icon::ZeroTL,
@@ -206,6 +215,7 @@ impl Sub {
             EngLeft => (engrave(EngraveSide::Left), 0.5_f64.min(thickness), tr!("Grawer z lewej")),
             EngRight => (engrave(EngraveSide::Right), 0.5_f64.min(thickness), tr!("Grawer z prawej")),
             EngVcarve => (OpKind::VCarve(Default::default()), 3.0_f64.min(thickness), "V-carving"),
+            Rough3D => (OpKind::Rough3D(Default::default()), thickness, tr!("Zgrubna 3D")),
             _ => return None,
         })
     }
@@ -227,20 +237,21 @@ impl Sub {
                 EngraveSide::Right => Sub::EngRight,
             },
             OpKind::VCarve(_) => Sub::EngVcarve,
+            OpKind::Rough3D(_) => Sub::Rough3D,
         }
     }
 }
 
 pub struct Toolbar {
     pub group: Group,
-    chosen: [Sub; 6],
+    chosen: [Sub; 7],
 }
 
 impl Default for Toolbar {
     fn default() -> Self {
         Self {
             group: Group::Select,
-            chosen: [Sub::Select, Sub::ProfileOut, Sub::PocketOffset, Sub::DrillSimple, Sub::EngCenter, Sub::ZeroPick],
+            chosen: [Sub::Select, Sub::ProfileOut, Sub::PocketOffset, Sub::DrillSimple, Sub::EngCenter, Sub::Rough3D, Sub::ZeroPick],
         }
     }
 }

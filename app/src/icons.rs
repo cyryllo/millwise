@@ -35,6 +35,7 @@ pub enum Icon {
     ZeroTL,
     ZeroPick,
     Preview3D,
+    Rough3D,
     // ikony kroków historii zmian
     Open,
     Delete,
@@ -263,6 +264,23 @@ pub fn draw(painter: &egui::Painter, r: Rect, icon: Icon) {
             poly(&[(20.0, 5.0), (34.0, 13.0), (20.0, 21.0), (6.0, 13.0)], BLUE_LIGHT, st(1.0, OUTLINE));
             poly(&[(6.0, 13.0), (20.0, 21.0), (20.0, 36.0), (6.0, 28.0)], BLUE, st(1.0, OUTLINE));
             poly(&[(34.0, 13.0), (34.0, 28.0), (20.0, 36.0), (20.0, 21.0)], BLUE_DARK, st(1.0, OUTLINE));
+        }
+        Icon::Rough3D => {
+            // przekrój: kopuła modelu na płycie, schodki po zgrubnej i warstwy ścieżek
+            painter.rect_filled(rect(3.0, 31.0, 34.0, 6.0), k, PLATE);
+            let dome: Vec<(f32, f32)> = (0..=24)
+                .map(|i| {
+                    let a = PI * i as f32 / 24.0;
+                    (20.0 - 14.0 * a.cos(), 31.0 - 20.0 * a.sin())
+                })
+                .collect();
+            poly(&dome, BLUE, st(1.0, OUTLINE));
+            line(&[(3.0, 31.0), (3.0, 25.0), (8.5, 25.0), (8.5, 18.0), (12.0, 18.0), (12.0, 11.5), (28.0, 11.5), (28.0, 18.0), (31.5, 18.0), (31.5, 25.0), (37.0, 25.0), (37.0, 31.0)], st(1.4, AMBER));
+            for y in [7.0, 14.5, 21.5, 28.0] {
+                line(&[(2.0, y), (6.0, y)], st(1.3, GREEN));
+                line(&[(34.0, y), (38.0, y)], st(1.3, GREEN));
+            }
+            tool_dot(4.0, 21.5, 2.4);
         }
         Icon::Text => {
             // litera „A” z zarysu i linia bazowa

@@ -615,6 +615,7 @@ version = "0.5.0"
 dependencies = [
  "cam-geom",
  "cam-i18n",
+ "cam-io",
  "cavalier_contours",
  "serde",
 ]
