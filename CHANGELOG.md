@@ -22,6 +22,16 @@ Version numbers:
   down along the line at the set angle instead of plunging — back and forth
   on a short line — then returns to the start at full depth so no wedge of
   material is left, and cuts the whole line.
+- **Automation** (Narzędzia → Automatyzacja…, or the button in the operations
+  panel): one window that can create operations for all curves that have
+  none — chosen per layer (drilling, pocket, outside or inside profile,
+  engraving, skip, or „from the shape”; suggested from the layer name, e.g.
+  OTWORY → drilling, and remembered) — switch corners on in all inside
+  profiles and pockets, set the number of tabs by the part's perimeter and
+  order the operations by tool with the cut-out last. A summary shows what
+  will happen; everything is one step in the history. Holes without a drill
+  of their size are milled along a helix when they are larger than the
+  cutter.
 - **Measuring** (Zaznacz → Zmierz): click two points — they snap to corners
   and circle centres — to see the distance on the drawing and the length,
   ΔX, ΔY and angle in the tool box; a third click starts a new measurement.

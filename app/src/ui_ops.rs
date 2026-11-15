@@ -16,6 +16,8 @@ pub enum OpsAction {
     ExportGcode,
     /// Przejście do symulacji obróbki.
     Simulate,
+    /// Okno automatyzacji.
+    Automation,
     /// Włącz dodawanie/usuwanie krzywych do operacji `i`.
     EditCurves(usize),
     /// Operacja usunięta / zmieniona kolejność — zakończ tryb dodawania.
@@ -106,7 +108,18 @@ pub fn ops_panel(
                 });
             });
         });
-    ui.label(RichText::new("Wybierz operację na pasku po lewej i klikaj krzywe w widoku 2D.").small().weak());
+    ui.horizontal(|ui| {
+        ui.label(RichText::new("Wybierz operację na pasku po lewej i klikaj krzywe w widoku 2D.").small().weak());
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui
+                .small_button("Automatyzacja…")
+                .on_hover_text("Operacje dla krzywych bez operacji (według warstw), uszka, mostki, kolejność")
+                .clicked()
+            {
+                action = OpsAction::Automation;
+            }
+        });
+    });
 
     ui.add_space(6.0);
     ui.horizontal(|ui| {

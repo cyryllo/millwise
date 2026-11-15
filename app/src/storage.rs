@@ -23,6 +23,27 @@ fn config_file(name: &str) -> Option<PathBuf> {
     Some(path)
 }
 
+// ---------- automatyzacja ----------
+
+/// Zapamiętane wybory „co zrobić z warstwą” (nazwa warstwy → kategoria).
+pub fn load_layer_rules() -> std::collections::BTreeMap<String, crate::automation::Category> {
+    config_file("layer-rules.json")
+        .and_then(|p| std::fs::read_to_string(p).ok())
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default()
+}
+
+pub fn save_layer_rules(rules: &std::collections::BTreeMap<String, crate::automation::Category>) {
+    if let Some(p) = config_file("layer-rules.json") {
+        if let Some(dir) = p.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        if let Ok(t) = serde_json::to_string_pretty(rules) {
+            let _ = std::fs::write(p, t);
+        }
+    }
+}
+
 // ---------- grafika ----------
 
 /// Plik-znacznik: ten komputer potrzebuje grafiki przez OpenGL (Vulkan nie otworzył okna).

@@ -2,6 +2,7 @@
 // Licencja: GPL-3.0-or-later
 
 mod app;
+mod automation;
 mod sim_panel;
 mod icons;
 mod toolbar;

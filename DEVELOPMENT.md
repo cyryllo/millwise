@@ -17,7 +17,7 @@ Simulation timing (release build, prints the time of each stage):
 
 `MILLWISE_OPEN` opens a view or a window at start, for screenshots and
 manual checks: `3d`, `simend`, `simat=0.25` (simulation at a fraction of the
-program), `bottom`, `tools`, `machines`, `about`, `keys` (keyboard shortcuts),
+program), `bottom`, `tools`, `machines`, `about`, `keys` (keyboard shortcuts), `auto` (automation window),
 `op=2` (select the third operation) — several separated by commas.
 `MILLWISE_SCREENSHOT=file.ppm` (the window then opens at 1600 × 1000, not
 maximized) saves a picture of the program's own window

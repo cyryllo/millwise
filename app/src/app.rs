@@ -72,6 +72,8 @@ pub struct CamApp {
     param_edit: Option<usize>,
     /// Pomiar: punkty A i B.
     measure: (Option<Vec2>, Option<Vec2>),
+    /// Okno automatyzacji (Some = otwarte).
+    auto: Option<crate::automation::AutoOptions>,
     /// Element projektu rozwinięty na liście po prawej.
     open_source: Option<usize>,
     /// Krok historii, do którego panel ostatnio przewinął listę.
@@ -119,6 +121,7 @@ impl CamApp {
             show_history: true,
             param_edit: None,
             measure: (None, None),
+            auto: None,
             open_source: None,
             history_seen: u64::MAX,
             clipboard: Vec::new(),
@@ -150,6 +153,7 @@ impl CamApp {
                     "machines" => app.machines_window.open = true,
                     "about" => app.about_open = true,
                     "keys" => app.shortcuts_open = true,
+                    "auto" => app.open_automation(),
                     w if w.starts_with("op=") => {
                         app.doc.selected_op = w[3..].parse().ok().filter(|&i: &usize| i < app.doc.ops.len());
                     }
@@ -1158,6 +1162,9 @@ impl CamApp {
                 if ui.button("Biblioteka narzędzi…").clicked() {
                     self.tools_window.open = true;
                 }
+                if ui.button("Automatyzacja…").clicked() {
+                    self.open_automation();
+                }
             });
             ui.menu_button("Maszyny", |ui| {
                 if ui.button("Maszyny…").clicked() {
@@ -1552,6 +1559,104 @@ impl CamApp {
         });
     }
 
+    fn open_automation(&mut self) {
+        let saved = storage::load_layer_rules();
+        let mut opts = crate::automation::AutoOptions::default();
+        for l in &self.doc.layers {
+            let c = saved.get(&l.name).copied().unwrap_or_else(|| crate::automation::Category::from_layer_name(&l.name));
+            opts.layers.insert(l.name.clone(), c);
+        }
+        self.auto = Some(opts);
+    }
+
+    /// Okno automatyzacji: wybór dla warstw i opcji, podsumowanie, „Zastosuj”.
+    fn automation_window(&mut self, ctx: &egui::Context) {
+        use crate::automation::{apply, plan, Category};
+        let Some(mut opts) = self.auto.take() else { return };
+        let machine = self.machine();
+        let p = plan(&self.doc, &self.tools, self.ops_ui.palette_tool, machine.safe_z, &opts);
+        let used: Vec<usize> = self.doc.ops.iter().flat_map(|o| o.contours.iter().copied()).collect();
+        let mut keep = true;
+        let mut apply_now = false;
+        egui::Window::new("Automatyzacja")
+            .collapsible(false)
+            .resizable(false)
+            .default_width(520.0)
+            .show(ctx, |ui| {
+                ui.label(RichText::new("Zaznacz, co program ma zrobić. Całość to jeden krok w historii — Ctrl+Z cofa wszystko.").weak());
+                ui.add_space(6.0);
+                ui.checkbox(&mut opts.create_ops, RichText::new("Operacje dla krzywych bez operacji").strong());
+                if opts.create_ops {
+                    egui::Frame::new().inner_margin(egui::Margin { left: 24, right: 0, top: 2, bottom: 4 }).show(ui, |ui| {
+                        egui::Grid::new("auto_layers").num_columns(3).spacing([12.0, 4.0]).show(ui, |ui| {
+                            ui_kit::label(ui, "Warstwa");
+                            ui_kit::label(ui, "Wolne krzywe");
+                            ui_kit::label(ui, "Co zrobić");
+                            ui.end_row();
+                            for (li, l) in self.doc.layers.iter().enumerate() {
+                                let free = (0..self.doc.contours.len())
+                                    .filter(|&i| self.doc.contours[i].layer == li && !used.contains(&i))
+                                    .count();
+                                ui.label(&l.name);
+                                ui.label(free.to_string());
+                                let cur = opts.layers.entry(l.name.clone()).or_insert(Category::Auto);
+                                egui::ComboBox::from_id_salt(("auto_layer", li)).selected_text(cur.label()).show_ui(ui, |ui| {
+                                    for c in Category::ALL {
+                                        ui.selectable_value(cur, c, c.label());
+                                    }
+                                });
+                                ui.end_row();
+                            }
+                        });
+                        ui.label(
+                            RichText::new("„z kształtu”: okrąg w rozmiarze wiertła to wiercenie (większy niż frez: frezowanie otworu), kontur zewnętrzny to profil zewnętrzny, kontur w środku detalu to profil wewnętrzny, linia otwarta to grawer. Wybory dla warstw są zapamiętywane.")
+                                .small()
+                                .weak(),
+                        );
+                    });
+                }
+                ui.checkbox(&mut opts.corners, RichText::new("Uszka w narożnikach").strong())
+                    .on_hover_text("We wszystkich profilach wewnętrznych i kieszeniach");
+                ui.checkbox(&mut opts.tabs, RichText::new("Mostki według obwodu").strong())
+                    .on_hover_text("Profile zewnętrzne: około jeden mostek na 150 mm obwodu, od 2 do 12");
+                ui.checkbox(&mut opts.order, RichText::new("Kolejność według narzędzi").strong())
+                    .on_hover_text("Operacje tym samym frezem po sobie, wycinanie detalu na końcu");
+                ui.separator();
+                ui_kit::title(ui, "Podsumowanie");
+                for line in p.summary(&opts) {
+                    ui.label(line);
+                }
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    let green = Color32::from_rgb(70, 190, 110);
+                    let b = egui::Button::new(RichText::new("Zastosuj").strong().color(Color32::WHITE))
+                        .fill(green.gamma_multiply(0.3))
+                        .stroke(egui::Stroke::new(1.0, green));
+                    if ui.add(b).clicked() {
+                        apply_now = true;
+                    }
+                    if ui.button("Anuluj").clicked() {
+                        keep = false;
+                    }
+                });
+            });
+        if apply_now {
+            let mut rules = storage::load_layer_rules();
+            for (k, v) in &opts.layers {
+                rules.insert(k.clone(), *v);
+            }
+            storage::save_layer_rules(&rules);
+            let n = p.new_ops.len();
+            apply(&mut self.doc, p, &opts);
+            self.stop_mode();
+            self.view2d.flash(format!("Automatyzacja: {n} nowych operacji"), Self::now(ctx));
+            keep = false;
+        }
+        if keep {
+            self.auto = Some(opts);
+        }
+    }
+
     fn shortcuts_window(&mut self, ctx: &egui::Context) {
         const KEYS: &[(&str, &str)] = &[
             ("Ctrl+O", "otwórz DXF lub projekt"),
@@ -1795,6 +1900,7 @@ impl eframe::App for CamApp {
             match action {
                 OpsAction::None => {}
                 OpsAction::ExportGcode => self.export_gcode(),
+                OpsAction::Automation => self.open_automation(),
                 OpsAction::Simulate => {
                     self.stop_mode();
                     self.mode = ViewMode::Visual;
@@ -1865,6 +1971,7 @@ impl eframe::App for CamApp {
             self.doc.ops_dirty = true;
         }
         self.gcode_window(&ctx);
+        self.automation_window(&ctx);
         self.about_window(&ctx);
         self.shortcuts_window(&ctx);
 

@@ -41,6 +41,31 @@ impl DocContour {
     }
 }
 
+/// Liczba zmian narzędzia między kolejnymi włączonymi operacjami.
+pub fn count_tool_changes<'a>(ops: impl Iterator<Item = &'a Operation>) -> usize {
+    let tools: Vec<u32> = ops.filter(|o| o.enabled).map(|o| o.tool_id).collect();
+    tools.windows(2).filter(|w| w[0] != w[1]).count()
+}
+
+/// Kolejność „według narzędzi”: operacje tym samym frezem po sobie, narzędzia
+/// w kolejności pierwszego użycia; profile zewnętrzne (wycinanie detalu) na
+/// końcu, żeby detal nie odpadł przed resztą obróbki. Kolejność wewnątrz grup bez zmian.
+pub fn grouped_order(ops: &[Operation]) -> Vec<usize> {
+    let cutout = |o: &Operation| matches!(&o.kind, cam_ops::OpKind::Profile(p) if p.side == cam_ops::ProfileSide::Outside);
+    let mut first_use: Vec<u32> = Vec::new();
+    for o in ops {
+        if !first_use.contains(&o.tool_id) {
+            first_use.push(o.tool_id);
+        }
+    }
+    let mut order: Vec<usize> = (0..ops.len()).collect();
+    order.sort_by_key(|&i| {
+        let o = &ops[i];
+        (cutout(o), first_use.iter().position(|&t| t == o.tool_id), i)
+    });
+    order
+}
+
 /// Zmiana z parametrami zapamiętana w historii, żeby można ją było później
 /// przebudować z innymi wartościami (klik w historii).
 #[derive(Clone, Debug, PartialEq)]
@@ -332,27 +357,11 @@ impl Document {
     }
 
     fn count_changes<'a>(ops: impl Iterator<Item = &'a Operation>) -> usize {
-        let tools: Vec<u32> = ops.filter(|o| o.enabled).map(|o| o.tool_id).collect();
-        tools.windows(2).filter(|w| w[0] != w[1]).count()
+        count_tool_changes(ops)
     }
 
-    /// Kolejność „według narzędzi”: operacje tym samym frezem po sobie, narzędzia
-    /// w kolejności pierwszego użycia; profile zewnętrzne (wycinanie detalu) na
-    /// końcu, żeby detal nie odpadł przed resztą obróbki. Kolejność wewnątrz grup bez zmian.
     fn grouped_order(&self) -> Vec<usize> {
-        let cutout = |o: &Operation| matches!(&o.kind, cam_ops::OpKind::Profile(p) if p.side == cam_ops::ProfileSide::Outside);
-        let mut first_use: Vec<u32> = Vec::new();
-        for o in &self.ops {
-            if !first_use.contains(&o.tool_id) {
-                first_use.push(o.tool_id);
-            }
-        }
-        let mut order: Vec<usize> = (0..self.ops.len()).collect();
-        order.sort_by_key(|&i| {
-            let o = &self.ops[i];
-            (cutout(o), first_use.iter().position(|&t| t == o.tool_id), i)
-        });
-        order
+        grouped_order(&self.ops)
     }
 
     pub fn tool_changes_if_grouped(&self) -> usize {
