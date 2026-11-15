@@ -161,7 +161,7 @@ impl Sub {
 
     /// Jeszcze nie zaimplementowane.
     pub fn soon(&self) -> bool {
-        matches!(self, Sub::PocketAdaptive)
+        false
     }
 
     /// Polecenia wykonywane od razu po kliknięciu (nie zmieniają trybu).
@@ -193,6 +193,11 @@ impl Sub {
                 3.0_f64.min(thickness),
                 "Kieszeń zygzak",
             ),
+            PocketAdaptive => (
+                OpKind::Pocket(PocketParams { strategy: PocketStrategy::Adaptive, stepover: 0.15, ..Default::default() }),
+                3.0_f64.min(thickness),
+                "Kieszeń HSM",
+            ),
             DrillSimple => (OpKind::Drill(DrillParams { peck: None, helix: false }), thickness, "Wiercenie"),
             DrillPeck => (OpKind::Drill(DrillParams { peck: Some(3.0), helix: false }), thickness, "Wiercenie z wycofaniem"),
             DrillHelix => (OpKind::Drill(DrillParams { peck: None, helix: true }), thickness, "Frezowanie otworów"),
@@ -210,6 +215,7 @@ impl Sub {
             OpKind::Profile(p) if p.side == ProfileSide::Inside => Sub::ProfileIn,
             OpKind::Profile(_) => Sub::ProfileOut,
             OpKind::Pocket(p) if p.strategy == PocketStrategy::Zigzag => Sub::PocketZigzag,
+            OpKind::Pocket(p) if p.strategy == PocketStrategy::Adaptive => Sub::PocketAdaptive,
             OpKind::Pocket(_) => Sub::PocketOffset,
             OpKind::Drill(p) if p.helix => Sub::DrillHelix,
             OpKind::Drill(p) if p.peck.is_some() => Sub::DrillPeck,

@@ -44,10 +44,37 @@ pub(crate) fn generate(cut: &CutParams, p: &PocketParams, tool: &Tool, contours:
 
     let stepover = p.stepover.clamp(0.05, 1.0) * tool.diameter;
     let finish = p.finish.filter(|a| *a > 1e-6);
+    let adaptive = p.strategy == PocketStrategy::Adaptive;
+    // HSM: pętle „otwarte” promieniem freza — narożniki zaokrąglone co najmniej o r
+    let rho = tool.radius();
+    let to_loops = |sh: &Shape<f64>| -> Vec<Contour> {
+        sh.ccw_plines
+            .iter()
+            .chain(sh.cw_plines.iter())
+            .map(|ip| Contour::from_cavc(&ip.polyline))
+            .filter(|c| c.verts.len() >= 2)
+            .collect()
+    };
+    let d0 = tool.radius() + p.stock_to_leave + finish.unwrap_or(0.0);
+    let walls_exact = to_loops(&shape.parallel_offset(d0, &opts));
     let mut by_level: Vec<Vec<Contour>> = Vec::new();
-    let mut d = tool.radius() + p.stock_to_leave + finish.unwrap_or(0.0);
+    let mut d = d0;
     while by_level.len() < 10_000 {
-        let sh = shape.parallel_offset(d, &opts);
+        let plain = shape.parallel_offset(d, &opts);
+        let sh = if adaptive {
+            // zaokrąglenie może też zabrać wąskie przesmyki (np. między wyspą a ścianą) —
+            // wtedy zostałby materiał; jeśli ubywa więcej niż same narożniki, zwykła pętla
+            let opened = plain.parallel_offset(rho, &opts).parallel_offset(-rho, &opts);
+            let area = |sh: &Shape<f64>| -> (f64, usize) {
+                let ls = to_loops(sh);
+                (ls.iter().map(|c| c.signed_area()).sum::<f64>().abs(), ls.iter().map(|c| c.verts.len()).sum())
+            };
+            let (a_plain, corners) = area(&plain);
+            let (a_open, _) = area(&opened);
+            if a_open >= a_plain - corners as f64 * rho * rho { opened } else { plain }
+        } else {
+            plain
+        };
         let loops: Vec<Contour> = sh
             .ccw_plines
             .iter()
@@ -128,8 +155,22 @@ pub(crate) fn generate(cut: &CutParams, p: &PocketParams, tool: &Tool, contours:
         order.push(i);
     }
 
+    // HSM: na każdej głębokości na koniec przejście po ścianach (dobiera narożniki)
+    let first_wall = loops.len();
+    if adaptive {
+        for c in &walls_exact {
+            let mut c = c.clone();
+            if p.direction == Direction::Conventional {
+                c.reverse();
+            }
+            loops.push(Loop { contour: c, level: 0, parent: None, children: 0 });
+            order.push(loops.len() - 1);
+        }
+    }
+
     // granica obszaru dozwolonego dla środka narzędzia — do sprawdzania przejść
-    let boundary: Vec<Vec<Vec2>> = by_level[0].iter().map(|c| c.flatten(0.01)).collect();
+    let boundary: Vec<Vec<Vec2>> =
+        if adaptive { &walls_exact } else { &by_level[0] }.iter().map(|c| c.flatten(0.01)).collect();
     let link_max = stepover * 1.6 + 0.01;
 
     let tp = &mut res.toolpath;
@@ -152,9 +193,11 @@ pub(crate) fn generate(cut: &CutParams, p: &PocketParams, tool: &Tool, contours:
                 continue;
             }
             let start = walk.point_at(0.0);
+            // do ściany (HSM) można dojechać dalej — przez wybrany obszar, bez wychodzenia z kieszeni
+            let max_link = if i >= first_wall { link_max.max(tool.diameter) } else { link_max };
             let link = at_depth
                 && cur.is_some_and(|c| {
-                    (c.z - z).abs() < 1e-9 && c.xy().distance(start) <= link_max && !crosses(&boundary, c.xy(), start)
+                    (c.z - z).abs() < 1e-9 && c.xy().distance(start) <= max_link && !crosses(&boundary, c.xy(), start)
                 });
             let ramp = if link {
                 tp.feed(P3::from_xy(start, z), cut.feed);
@@ -272,6 +315,7 @@ fn crosses(boundary: &[Vec<Vec2>], a: Vec2, b: Vec2) -> bool {
 mod tests {
     use crate::operation::*;
     use crate::tool::Tool;
+    use crate::toolpath::Move;
     use cam_geom::{Contour, Vec2, Vertex};
 
     fn rect(x0: f64, y0: f64, x1: f64, y1: f64) -> Contour {
@@ -341,6 +385,33 @@ mod tests {
                 assert!((d - 3.0).abs() < 1e-3, "{strategy:?} {finish:?}: {d}");
             }
         }
+    }
+
+    #[test]
+    fn hsm_pocket_reaches_walls_and_corners() {
+        let tool = Tool { diameter: 6.0, ..Default::default() };
+        let mut o = pocket_op();
+        o.kind = OpKind::Pocket(PocketParams { strategy: PocketStrategy::Adaptive, stepover: 0.15, ..Default::default() });
+        let island = Contour::circle(Vec2::new(30.0, 20.0), 5.0);
+        let res = generate(&o, &tool, &[rect(0.0, 0.0, 60.0, 40.0), island]);
+        assert!(res.warnings.is_empty(), "{:?}", res.warnings);
+        let pts: Vec<_> = res.toolpath.polyline(0.01).into_iter().filter(|(p, r)| !r && p.z < -0.01).map(|(p, _)| p).collect();
+        for p in &pts {
+            assert!(p.x >= 3.0 - 1e-6 && p.x <= 57.0 + 1e-6 && p.y >= 3.0 - 1e-6 && p.y <= 37.0 + 1e-6, "poza kieszenią {p:?}");
+            assert!(((p.x - 30.0).powi(2) + (p.y - 20.0).powi(2)).sqrt() >= 8.0 - 1e-3, "w wyspie {p:?}");
+        }
+        for z in [-1.5, -3.0] {
+            let at: Vec<_> = pts.iter().filter(|p| (p.z - z).abs() < 1e-9).collect();
+            let corner = at.iter().map(|p| p.xy().distance(Vec2::new(3.0, 3.0))).fold(f64::MAX, f64::min);
+            assert!(corner < 1e-6, "z={z}: narożnik nieobrobiony ({corner})");
+        }
+        // pętle łączone bez podnoszenia, gdy się da: niewiele więcej podniesień niż w kieszeni
+        // offsetowej (dochodzi przejście po ścianach i wyspie na każdym poziomie)
+        let ups = |r: &OpResult| r.toolpath.moves.windows(2).filter(|w| matches!(w[1], Move::Rapid(p) if p.z > 0.0 && w[0].end().z < 0.0)).count();
+        let mut off = pocket_op();
+        off.kind = OpKind::Pocket(PocketParams { stepover: 0.15, ..Default::default() });
+        let base = generate(&off, &tool, &[rect(0.0, 0.0, 60.0, 40.0), Contour::circle(Vec2::new(30.0, 20.0), 5.0)]);
+        assert!(ups(&res) * 2 <= ups(&base) * 3 + 8, "HSM {} podniesień, offsetowa {}", ups(&res), ups(&base));
     }
 
     #[test]
@@ -530,3 +601,4 @@ mod zigzag_tests {
         }
     }
 }
+

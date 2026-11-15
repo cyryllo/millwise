@@ -32,6 +32,14 @@ Version numbers:
   will happen; everything is one step in the history. Holes without a drill
   of their size are milled along a helix when they are larger than the
   cutter.
+- **HSM pocket** (Kieszeń → Adaptacyjna, or „HSM” in the pocket settings): a
+  small, even step-over (15 % of the diameter to start with) and loops with
+  corners rounded by at least the cutter radius, so the cutter never turns
+  sharply or goes full width into a corner; loops are linked without lifting
+  where possible, and at every depth a pass along the walls takes the
+  corners out. In narrow places the loops are not rounded, so nothing is
+  left. This is a simplified high-speed strategy, not full constant
+  engagement (trochoidal) milling.
 - **V-carving** (Grawer → V-carve): a V or engraving cutter follows the
   middle of each shape with a changing depth — deep where the shape is wide,
   shallow in narrow places, coming up to nothing in sharp corners — so the

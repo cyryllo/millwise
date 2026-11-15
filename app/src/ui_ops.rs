@@ -599,6 +599,10 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
             ui.horizontal(|ui| {
                 changed |= ui.radio_value(&mut p.strategy, PocketStrategy::Offset, "Offsetowa").changed();
                 changed |= ui.radio_value(&mut p.strategy, PocketStrategy::Zigzag, "Zygzak").changed();
+                changed |= ui
+                    .radio_value(&mut p.strategy, PocketStrategy::Adaptive, "HSM")
+                    .on_hover_text("Mały, równy krok i zaokrąglone pętle bez ostrych zakrętów; ściany i narożniki na każdej głębokości")
+                    .changed();
             });
             ui.end_row();
             if p.strategy == PocketStrategy::Zigzag {

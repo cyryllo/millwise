@@ -135,6 +135,12 @@ pub enum PocketStrategy {
     Offset,
     /// Przejścia równoległe tam i z powrotem + przejście wykańczające po obrysie.
     Zigzag,
+    /// HSM: mały, równy krok, pętle z zaokrąglonymi narożnikami (bez ostrych
+    /// zakrętów i wcinania się całą szerokością w narożnikach), połączone bez
+    /// podnoszenia, gdy się da; na każdej głębokości przejście po ścianach
+    /// dobiera narożniki. W wąskich miejscach pętle bez zaokrąglenia — żeby nic
+    /// nie zostało.
+    Adaptive,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
