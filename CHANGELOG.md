@@ -72,8 +72,10 @@ Version numbers:
 
 - **Basic tool set.** The starting tool library now has flat, ball and V
   (60°) cutters and drills in 3, 4 and 6 mm (15 tools). An existing library
-  gets them with „Add the basic set” in the tool library window — only the
-  ones that are missing, the user's own tools stay as they are.
+  gets the missing ones automatically, once, on the first start after the
+  update (the user's own tools stay as they are, and a deleted one does not
+  come back); „Add the basic set” in the tool library window adds them again
+  on request.
 
 ### Changed
 

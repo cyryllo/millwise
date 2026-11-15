@@ -174,15 +174,22 @@ fn fmt_num(v: f64) -> String {
     t.trim_end_matches('0').trim_end_matches('.').to_string()
 }
 
+/// Wersja zestawu startowego: 1 — pierwsze 7 narzędzi, 2 — zestaw podstawowy 3 / 4 / 6 mm.
+pub const DEFAULTS_VERSION: u32 = 2;
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ToolLibrary {
     pub tools: Vec<Tool>,
+    /// Którą wersję zestawu startowego biblioteka już dostała (0 = sprzed zapisywania wersji).
+    /// Nowe narzędzia z zestawu dochodzą tylko raz — usunięte przez użytkownika nie wracają.
+    #[serde(default)]
+    pub defaults: u32,
 }
 
 impl ToolLibrary {
     /// Startowy zestaw typowych narzędzi.
     pub fn with_defaults() -> Self {
-        let mut lib = ToolLibrary::default();
+        let mut lib = ToolLibrary { defaults: DEFAULTS_VERSION, ..Default::default() };
         let base = Tool::default();
         for t in [
             Tool { number: 1, name: tr!("Frez płaski 6 mm").into(), ..base.clone() },
@@ -381,6 +388,17 @@ impl ToolLibrary {
         n
     }
 
+    /// Biblioteka zapisana przed nowszym zestawem startowym: dodaje (raz) brakujące
+    /// narzędzia z zestawu. Zwraca `Some(liczba dodanych)`, gdy bibliotekę trzeba zapisać.
+    pub fn upgrade_defaults(&mut self) -> Option<usize> {
+        if self.defaults >= DEFAULTS_VERSION {
+            return None;
+        }
+        let n = self.add_missing_defaults();
+        self.defaults = DEFAULTS_VERSION;
+        Some(n)
+    }
+
     pub fn next_id(&self) -> u32 {
         self.tools.iter().map(|t| t.id).max().map_or(1, |m| m + 1)
     }
@@ -450,5 +468,21 @@ mod tests {
         nums.dedup();
         assert_eq!(nums.len(), old.tools.len(), "numery bez powtórzeń");
         assert_eq!(old.add_missing_defaults(), 0);
+
+        // automatycznie, raz: stara biblioteka (bez wersji) dostaje zestaw, potem już nie
+        let mut saved = ToolLibrary::default();
+        for t in lib.tools.iter().filter(|t| t.number <= 7) {
+            saved.tools.push(t.clone());
+        }
+        let json = serde_json::to_string(&ToolLibrary { defaults: 0, ..saved.clone() }).unwrap().replace(",\"defaults\":0", "");
+        let mut loaded: ToolLibrary = serde_json::from_str(&json).unwrap();
+        assert_eq!(loaded.defaults, 0, "plik sprzed wersji zestawu");
+        assert_eq!(loaded.upgrade_defaults(), Some(lib.tools.len() - 7));
+        // użytkownik usuwa jeden z nowych — po ponownym uruchomieniu nie wraca
+        let id = loaded.tools.iter().find(|t| t.number == 9).unwrap().id;
+        loaded.remove(id);
+        assert_eq!(loaded.upgrade_defaults(), None);
+        assert!(!loaded.tools.iter().any(|t| t.number == 9));
+        assert_eq!(ToolLibrary::with_defaults().clone().upgrade_defaults(), None);
     }
 }

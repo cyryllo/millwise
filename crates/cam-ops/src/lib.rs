@@ -19,5 +19,5 @@ pub use operation::{
     PocketParams, PocketStrategy, ProfileParams, ProfileSide, Rough3DParams, Side, Tabs, VCarveParams,
 };
 pub use rough3d::ModelInput;
-pub use tool::{CutPreset, FluteDir, Tool, ToolKind, ToolLibrary, DEFAULT_MATERIAL};
+pub use tool::{DEFAULTS_VERSION, CutPreset, FluteDir, Tool, ToolKind, ToolLibrary, DEFAULT_MATERIAL};
 pub use toolpath::{Move, Toolpath, P3};

@@ -63,6 +63,7 @@
  "Część konturów operacji nie istnieje": "Some curves of the operation do not exist",
  "Dla otworów większych niż narzędzie": "For holes larger than the tool",
  "Do biblioteki dodano narzędzia z projektu.": "Tools from the project were added to the library.",
+ "Do biblioteki narzędzi dodano zestaw podstawowy (frezy płaskie, kulowe, V i wiertła 3 / 4 / 6 mm): {} narzędzi.": "The basic set (flat, ball and V cutters and drills 3 / 4 / 6 mm) was added to the tool library: {} tools.",
  "Do dołu": "Bottom",
  "Do góry": "Top",
  "Do lewej": "Left",

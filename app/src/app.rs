@@ -153,7 +153,17 @@ pub struct CamApp {
 impl CamApp {
     pub fn new(cc: &eframe::CreationContext<'_>, files: Vec<PathBuf>) -> Self {
         cc.egui_ctx.set_visuals(egui::Visuals::dark());
-        let (tools, tools_warning) = storage::load_tools();
+        let (mut tools, mut tools_warning) = storage::load_tools();
+        // biblioteka sprzed zestawu podstawowego: brakujące narzędzia dochodzą raz
+        let mut tools_info = None;
+        if let Some(n) = tools.upgrade_defaults() {
+            if let Err(e) = storage::save_tools(&tools) {
+                tools_warning = tools_warning.or(Some(format!("{e:#}")));
+            }
+            if n > 0 {
+                tools_info = Some(tr!("Do biblioteki narzędzi dodano zestaw podstawowy (frezy płaskie, kulowe, V i wiertła 3 / 4 / 6 mm): {} narzędzi.", n));
+            }
+        }
         let (machines, machines_warning) = storage::load_machines();
         let doc = Document::default();
         let history = History::new(&doc, tr!("Nowy projekt"));
@@ -174,7 +184,7 @@ impl CamApp {
             work_mode: ViewMode::Project,
             ops_ui: OpsUi::default(),
             error: tools_warning.or(machines_warning),
-            info: None,
+            info: tools_info,
             gcode_preview: None,
             about_open: false,
             shortcuts_open: false,

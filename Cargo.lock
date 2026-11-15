@@ -618,6 +618,7 @@ dependencies = [
  "cam-io",
  "cavalier_contours",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

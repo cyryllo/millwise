@@ -456,7 +456,7 @@ mod tests {
                 let t = k as f64 / n as f64;
                 let q = a.xy().lerp(b.xy(), t);
                 let z = a.z + (b.z - a.z) * t;
-                if let Some(zm) = idx.drop_tool(q, &prof, 0.0) {
+                if idx.drop_tool(q, &prof, 0.0).is_some() {
                     // bez wcinania: narzędzie mniejsze o ćwierć oczka z każdej strony nie dotyka modelu
                     // (tolerancja próbkowania i upraszczania, mierzona prostopadle do powierzchni)
                     let zs = idx.drop_tool(q, &prof, -h.cell * 0.25 - 1e-3).unwrap_or(f64::NEG_INFINITY);
