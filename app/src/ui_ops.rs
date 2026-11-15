@@ -715,6 +715,44 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
                 ui.end_row();
             }
             changed |= num(ui, tr!("Naddatek na modelu"), &mut p.allowance, -5.0..=20.0, 0.01, " mm");
+            // resztki po większym narzędziu
+            ui_kit::label(ui, tr!("Tylko resztki"));
+            ui.horizontal(|ui| {
+                let mut on = p.rest_tool.is_some();
+                if ui
+                    .checkbox(&mut on, "")
+                    .on_hover_text(tr!("Tylko tam, gdzie większe narzędzie nie sięgnęło (wąskie doliny, narożniki)"))
+                    .changed()
+                {
+                    // domyślnie: najmniejsze narzędzie większe od tego
+                    p.rest_tool = on
+                        .then(|| {
+                            lib.tools
+                                .iter()
+                                .filter(|t| t.id != op.tool_id && t.diameter > d)
+                                .min_by(|a, b| a.diameter.partial_cmp(&b.diameter).unwrap())
+                                .or_else(|| lib.tools.iter().find(|t| t.id != op.tool_id))
+                                .map(|t| t.id)
+                        })
+                        .flatten();
+                    changed = true;
+                }
+                if let Some(id) = p.rest_tool {
+                    let name = lib.get(id).map_or_else(|| tr!("— brak —").to_string(), |t| format!("T{} Ø{}", t.number, t.diameter));
+                    egui::ComboBox::from_id_salt("rest_tool").selected_text(tr!("po {}", name)).show_ui(ui, |ui| {
+                        for t in lib.tools.iter().filter(|t| t.id != op.tool_id) {
+                            if ui.selectable_label(t.id == id, format!("T{} · {}", t.number, t.name)).clicked() {
+                                p.rest_tool = Some(t.id);
+                                changed = true;
+                            }
+                        }
+                    });
+                }
+            });
+            ui.end_row();
+            if p.rest_tool.is_some() {
+                changed |= num(ui, tr!("Resztki grubsze niż"), &mut p.rest_min, 0.01..=10.0, 0.01, " mm");
+            }
             ui.label("");
             ui.label(
                 RichText::new(tr!("Frez opuszczany na model w gęstych punktach — dotyka powierzchni, nie wcinając się. Najlepiej frez kulowy, po obróbce zgrubnej."))

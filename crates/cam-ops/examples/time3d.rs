@@ -26,20 +26,20 @@ fn main() {
         contours: vec![],
     };
     let t = Instant::now();
-    let r = generate_with_model(&op, &tool, &[], Some(&ModelInput { heights: &h, stock }));
+    let r = generate_with_model(&op, &tool, &[], Some(&ModelInput { heights: &h, stock, ref_tool: None }));
     println!("zgrubna: {} ruchów, {:?}, {:?}", r.toolpath.moves.len(), t.elapsed(), r.warnings);
     for (name, kind) in [("płaski", ToolKind::FlatEnd), ("kulowy", ToolKind::BallEnd)] {
         let tool = Tool { diameter: 6.0, kind, ..Default::default() };
         let op = Operation { kind: OpKind::Finish3D(Finish3DParams::default()), ..op.clone() };
         let t = Instant::now();
-        let r = generate_with_model(&op, &tool, &[], Some(&ModelInput { heights: &h, stock }));
+        let r = generate_with_model(&op, &tool, &[], Some(&ModelInput { heights: &h, stock, ref_tool: None }));
         println!("wykańczająca ({name}): {} ruchów, {:?}, {:?}", r.toolpath.moves.len(), t.elapsed(), r.warnings);
         let op = Operation {
             kind: OpKind::Finish3D(Finish3DParams { strategy: Finish3DStrategy::Waterline, ..Default::default() }),
             ..op.clone()
         };
         let t = Instant::now();
-        let r = generate_with_model(&op, &tool, &[], Some(&ModelInput { heights: &h, stock }));
+        let r = generate_with_model(&op, &tool, &[], Some(&ModelInput { heights: &h, stock, ref_tool: None }));
         println!("warstwice ({name}): {} ruchów, {:?}, {:?}", r.toolpath.moves.len(), t.elapsed(), r.warnings);
     }
 }

@@ -3,7 +3,7 @@
 //! dotyka powierzchni, nie wcinając się w nią. Linie na przemian w obie strony,
 //! sąsiednie połączone po powierzchni; opcjonalnie drugi raz w poprzek.
 
-use crate::model::{DropIndex, ToolProfile};
+use crate::model::{DropIndex, ModelHeights, ToolProfile};
 use crate::operation::{CutParams, Finish3DParams, Finish3DStrategy, OpResult};
 use crate::rough3d::ModelInput;
 use crate::tool::Tool;
@@ -36,6 +36,7 @@ pub(crate) fn generate(cut: &CutParams, p: &Finish3DParams, tool: &Tool, contour
     let bottom = cut.bottom_z();
     let a = p.allowance;
     let z_at = |q: Vec2| idx.drop_tool(q, &prof, a).map_or(bottom, |z| z.max(bottom));
+    let Some(rest) = rest_filter(cut, p, tool, m, &idx, res) else { return };
     let mut angles = vec![p.angle];
     if p.cross {
         angles.push(p.angle + 90.0);
@@ -59,7 +60,25 @@ pub(crate) fn generate(cut: &CutParams, p: &Finish3DParams, tool: &Tool, contour
             }
             for (u0, u1) in spans {
                 let line = sample(u * u0 + v * vv, u * u1 + v * vv, ds, tol, &z_at);
-                passes.push(simplify3(&line, tol * 0.5));
+                match &rest {
+                    None => passes.push(simplify3(&line, tol * 0.5)),
+                    // resztki: tylko kawałki linii nad nimi
+                    Some(r) => {
+                        let mut run: Vec<P3> = Vec::new();
+                        for q in line {
+                            if r.height_at(q.xy()).is_some() {
+                                run.push(q);
+                            } else if run.len() >= 2 {
+                                passes.push(simplify3(&std::mem::take(&mut run), tol * 0.5));
+                            } else {
+                                run.clear();
+                            }
+                        }
+                        if run.len() >= 2 {
+                            passes.push(simplify3(&run, tol * 0.5));
+                        }
+                    }
+                }
             }
         }
         // przejścia: sąsiednie łączone po powierzchni, dalsze — przez wysokość bezpieczną
@@ -121,6 +140,89 @@ fn refine(a: P3, b: P3, tol: f64, z_at: &dyn Fn(Vec2) -> f64, out: &mut Vec<P3>,
     refine(pm, b, tol, z_at, out, depth + 1);
 }
 
+/// Wysokości opuszczenia narzędzia w węzłach siatki `area.min + (i, j)·step` (równolegle);
+/// `NEG_INFINITY` — narzędzie nie dotyka modelu.
+fn drop_grid(idx: &DropIndex, prof: &ToolProfile, a: f64, area: cam_geom::Aabb2, step: f64) -> (Vec<f32>, usize, usize) {
+    let nx = (area.size().x / step).ceil() as usize + 1;
+    let ny = (area.size().y / step).ceil() as usize + 1;
+    let mut tz = vec![f32::NEG_INFINITY; nx * ny];
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+    let rows = ny.div_ceil(threads).max(1);
+    std::thread::scope(|sc| {
+        for (c, chunk) in tz.chunks_mut(rows * nx).enumerate() {
+            sc.spawn(move || {
+                for (k, v) in chunk.iter_mut().enumerate() {
+                    let (i, j) = (k % nx, c * rows + k / nx);
+                    let q = area.min + Vec2::new(i as f64 * step, j as f64 * step);
+                    *v = idx.drop_tool(q, prof, a).map_or(f32::NEG_INFINITY, |z| z as f32);
+                }
+            });
+        }
+    });
+    (tz, nx, ny)
+}
+
+/// Obszary resztek po narzędziu odniesienia: węzły siatki, w których zostało na
+/// modelu więcej niż `min` materiału, poszerzone o `grow` (promień nowego narzędzia).
+/// Zostawiony materiał: najniższe położenie powierzchni narzędzia odniesienia
+/// (opuszczanego w węzłach) nad danym punktem minus wysokość modelu w tym punkcie.
+fn rest_areas(h: &ModelHeights, idx: &DropIndex, reft: &Tool, bottom: f64, min: f64, grow: f64) -> ModelHeights {
+    let rr = reft.radius();
+    let step = h.cell.max(0.1).max(rr / 20.0);
+    let area = h.bounds().expanded(rr + grow + 2.0 * step);
+    let prof = ToolProfile::of(reft);
+    let (tz, nx, ny) = drop_grid(idx, &prof, 0.0, area, step);
+    let tz: Vec<f32> = tz.into_iter().map(|z| if z.is_finite() { z } else { bottom as f32 }).collect();
+    // przesunięcia w kole narzędzia odniesienia i wysokość jego powierzchni nad czubkiem
+    let k = (rr / step).floor() as isize;
+    let mut offs: Vec<(isize, isize, f32)> = Vec::new();
+    for dj in -k..=k {
+        for di in -k..=k {
+            let d = ((di * di + dj * dj) as f64).sqrt() * step;
+            if d <= rr {
+                offs.push((di, dj, prof.height_at(d) as f32));
+            }
+        }
+    }
+    let mut rest = vec![f32::NEG_INFINITY; nx * ny];
+    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
+    let rows = ny.div_ceil(threads).max(1);
+    std::thread::scope(|sc| {
+        for (c, chunk) in rest.chunks_mut(rows * nx).enumerate() {
+            let (tz, offs) = (&tz, &offs);
+            sc.spawn(move || {
+                for (kk, v) in chunk.iter_mut().enumerate() {
+                    let (i, j) = ((kk % nx) as isize, (c * rows + kk / nx) as isize);
+                    let x = area.min + Vec2::new(i as f64 * step, j as f64 * step);
+                    let Some(model) = h.height_at(x) else { continue };
+                    // najniżej, gdzie sięgnęła powierzchnia narzędzia odniesienia nad x
+                    let mut left = f32::INFINITY;
+                    for &(di, dj, hh) in offs {
+                        let (pi, pj) = (i + di, j + dj);
+                        if pi < 0 || pj < 0 || pi >= nx as isize || pj >= ny as isize {
+                            continue;
+                        }
+                        left = left.min(tz[pj as usize * nx + pi as usize] + hh);
+                    }
+                    if left as f64 - model > min {
+                        *v = 1.0;
+                    }
+                }
+            });
+        }
+    });
+    let mask = ModelHeights {
+        min: area.min - Vec2::new(step * 0.5, step * 0.5),
+        cell: step,
+        nx,
+        ny,
+        z: rest,
+        z_min: 1.0,
+        z_max: 1.0,
+    };
+    mask.dilated(grow)
+}
+
 /// Warstwice: na każdej wysokości narzędzie obchodzi model po linii, na której
 /// opuszczone narzędzie dotyka go dokładnie na tej wysokości. Wysokości opuszczenia
 /// liczone raz w węzłach siatki (równolegle), linie — z interpolacji między węzłami.
@@ -150,26 +252,11 @@ fn waterline(cut: &CutParams, p: &Finish3DParams, tool: &Tool, contours: &[Conto
     // siatka wysokości opuszczenia narzędzia: wokół modelu z zapasem na promień
     let step = h.cell.clamp(0.1, 0.5);
     let area = h.bounds().expanded(r + p.allowance.max(0.0) + 2.0 * step);
-    let nx = (area.size().x / step).ceil() as usize + 1;
-    let ny = (area.size().y / step).ceil() as usize + 1;
     let prof = ToolProfile::of(tool);
     let idx = DropIndex::new(h);
-    let a = p.allowance;
-    let mut tz = vec![f32::NEG_INFINITY; nx * ny];
-    let threads = std::thread::available_parallelism().map_or(4, |n| n.get());
-    let rows = ny.div_ceil(threads);
-    std::thread::scope(|sc| {
-        for (c, chunk) in tz.chunks_mut(rows * nx).enumerate() {
-            let (idx, prof) = (&idx, &prof);
-            sc.spawn(move || {
-                for (k, v) in chunk.iter_mut().enumerate() {
-                    let (i, j) = (k % nx, c * rows + k / nx);
-                    let q = area.min + Vec2::new(i as f64 * step, j as f64 * step);
-                    *v = idx.drop_tool(q, prof, a).map_or(f32::NEG_INFINITY, |z| z as f32);
-                }
-            });
-        }
-    });
+    let (tz, nx, ny) = drop_grid(&idx, &prof, p.allowance, area, step);
+    let Some(rest) = rest_filter(cut, p, tool, m, &idx, res) else { return };
+    let keep = |q: Vec2| inside(q) && rest.as_ref().is_none_or(|r| r.height_at(q).is_some());
     let dz = (p.stepover.clamp(0.01, 1.0) * tool.diameter).max(0.01);
     let bottom = cut.bottom_z();
     let tol = (step * 0.1).max(0.005);
@@ -180,12 +267,13 @@ fn waterline(cut: &CutParams, p: &Finish3DParams, tool: &Tool, contours: &[Conto
         for mut c in crate::model::iso_contours(&tz, nx, ny, area.min, step, z, step * 2.0, tol) {
             c.reverse();
             let pts: Vec<Vec2> = c.verts.iter().map(|v| v.p).collect();
-            if limit.is_empty() {
+            if limit.is_empty() && rest.is_none() {
                 paths.push((pts, true));
                 continue;
             }
-            // z granicą: tylko kawałki wewnątrz wybranych krzywych
-            let flags: Vec<bool> = pts.iter().map(|&q| inside(q)).collect();
+            // z granicą albo resztkami: tylko kawałki wewnątrz wybranych krzywych / na resztkach
+            let pts = densify(&pts, step);
+            let flags: Vec<bool> = pts.iter().map(|&q| keep(q)).collect();
             if flags.iter().all(|f| *f) {
                 paths.push((pts, true));
                 continue;
@@ -228,6 +316,35 @@ fn waterline(cut: &CutParams, p: &Finish3DParams, tool: &Tool, contours: &[Conto
         }
     }
     res.toolpath.retract(cut.safe_z);
+}
+
+/// Obszary resztek, gdy operacja zbiera resztki po innym narzędziu: `Some(None)` — bez
+/// resztek (cała powierzchnia), `Some(Some(maska))`, `None` — nie da się (ostrzeżenie).
+fn rest_filter(cut: &CutParams, p: &Finish3DParams, tool: &Tool, m: &ModelInput, idx: &DropIndex, res: &mut OpResult) -> Option<Option<ModelHeights>> {
+    if p.rest_tool.is_none() {
+        return Some(None);
+    }
+    let Some(reft) = &m.ref_tool else {
+        res.warnings.push(tr!("Resztki: nie ma narzędzia odniesienia w bibliotece").into());
+        return None;
+    };
+    if reft.diameter <= tool.diameter {
+        res.warnings.push(tr!("Resztki: narzędzie odniesienia powinno być większe niż to (Ø{} ≤ Ø{})", reft.diameter, tool.diameter));
+    }
+    Some(Some(rest_areas(m.heights, idx, reft, cut.bottom_z(), p.rest_min.max(0.0), tool.radius())))
+}
+
+/// Punkty łamanej zamkniętej co najwyżej co `step` (do przycinania do obszaru).
+fn densify(pts: &[Vec2], step: f64) -> Vec<Vec2> {
+    let mut out = Vec::with_capacity(pts.len());
+    for (k, &a) in pts.iter().enumerate() {
+        let b = pts[(k + 1) % pts.len()];
+        let n = (a.distance(b) / step).ceil().max(1.0) as usize;
+        for i in 0..n {
+            out.push(a.lerp(b, i as f64 / n as f64));
+        }
+    }
+    out
 }
 
 /// Odcinki linii {q: q·v = vv} wewnątrz obszaru (parzysto-nieparzyście), jako zakresy współrzędnej u.
@@ -321,7 +438,7 @@ mod tests {
     fn raster_follows_the_surface_without_gouging() {
         let h = dome();
         let tool = Tool { diameter: 6.0, kind: ToolKind::BallEnd, ..Default::default() };
-        let m = ModelInput { heights: &h, stock: Aabb2 { min: Vec2::new(0.0, 0.0), max: Vec2::new(30.0, 30.0) } };
+        let m = ModelInput { heights: &h, stock: Aabb2 { min: Vec2::new(0.0, 0.0), max: Vec2::new(30.0, 30.0) }, ref_tool: None };
         let res = generate_with_model(&op(false), &tool, &[], Some(&m));
         assert!(res.warnings.is_empty(), "{:?}", res.warnings);
         let prof = ToolProfile::of(&tool);
@@ -368,7 +485,7 @@ mod tests {
         let idx = DropIndex::new(&h);
         let tool = Tool { diameter: 6.0, kind: ToolKind::BallEnd, ..Default::default() };
         let prof = ToolProfile::of(&tool);
-        let m = ModelInput { heights: &h, stock: Aabb2 { min: Vec2::new(0.0, 0.0), max: Vec2::new(30.0, 30.0) } };
+        let m = ModelInput { heights: &h, stock: Aabb2 { min: Vec2::new(0.0, 0.0), max: Vec2::new(30.0, 30.0) }, ref_tool: None };
         let mut o = op(false);
         o.kind = OpKind::Finish3D(Finish3DParams { strategy: Finish3DStrategy::Waterline, stepover: 1.0 / 6.0, ..Default::default() });
         o.cut.depth = 9.0;
@@ -403,5 +520,45 @@ mod tests {
             ccw_like += (a.xy() - c).cross(b.xy() - c);
         }
         assert!(ccw_like < 0.0, "współbieżnie: wokół wyspy zgodnie z ruchem wskazówek zegara");
+    }
+
+    #[test]
+    fn rest_machining_only_where_the_bigger_tool_did_not_reach() {
+        // płyta 40 × 20 (wierzch Z 0) z rowkiem szerokości 4 mm (x 18–22), głębokości 3 mm
+        let quad = |x0: f32, y0: f32, x1: f32, y1: f32, z: f32| {
+            [[[x0, y0, z], [x1, y0, z], [x1, y1, z]], [[x0, y0, z], [x1, y1, z], [x0, y1, z]]]
+        };
+        let mut t = Vec::new();
+        t.extend(quad(0.0, 0.0, 18.0, 20.0, 0.0));
+        t.extend(quad(22.0, 0.0, 40.0, 20.0, 0.0));
+        t.extend(quad(18.0, 0.0, 22.0, 20.0, -3.0));
+        let h = ModelHeights::from_triangles(&t, 0.05).unwrap();
+        let big = Tool { id: 7, diameter: 10.0, kind: ToolKind::BallEnd, ..Default::default() };
+        let small = Tool { diameter: 3.0, kind: ToolKind::BallEnd, ..Default::default() };
+        let stock = Aabb2 { min: Vec2::new(0.0, 0.0), max: Vec2::new(40.0, 20.0) };
+        let mk = |strategy, rest: bool| {
+            let mut o = op(false);
+            o.cut.depth = 3.0;
+            o.kind = OpKind::Finish3D(Finish3DParams { strategy, stepover: 0.2, rest_tool: rest.then_some(7), ..Default::default() });
+            o
+        };
+        let m = ModelInput { heights: &h, stock, ref_tool: Some(big.clone()) };
+        for strategy in [Finish3DStrategy::Raster, Finish3DStrategy::Waterline] {
+            let res = generate_with_model(&mk(strategy, true), &small, &[], Some(&m));
+            assert!(res.warnings.is_empty(), "{:?}", res.warnings);
+            let pts: Vec<_> = res.toolpath.polyline(0.01).into_iter().filter(|q| !q.1 && q.0.z < 4.0).map(|q| q.0).collect();
+            assert!(!pts.is_empty(), "{strategy:?}: brak ścieżki resztek");
+            for q in &pts {
+                assert!(q.x > 16.0 && q.x < 24.0, "{strategy:?}: poza rowkiem: {q:?}");
+            }
+            assert!(pts.iter().any(|q| q.z < -2.9), "{strategy:?}: do dna rowka");
+        }
+        // bez resztek: cała płyta
+        let all = generate_with_model(&mk(Finish3DStrategy::Raster, false), &small, &[], Some(&m));
+        assert!(all.toolpath.polyline(0.01).iter().any(|q| !q.1 && q.0.x < 5.0));
+        // bez narzędzia odniesienia: ostrzeżenie, bez ścieżki
+        let none = ModelInput { heights: &h, stock, ref_tool: None };
+        let r = generate_with_model(&mk(Finish3DStrategy::Raster, true), &small, &[], Some(&none));
+        assert!(!r.warnings.is_empty() && r.toolpath.moves.len() <= 1);
     }
 }

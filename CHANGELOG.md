@@ -58,6 +58,9 @@ Version numbers:
   A second strategy, „Waterline”, goes around the model at constant heights
   (level spacing as a share of the cutter diameter, climb milling), for steep
   walls that parallel passes leave rough; selected curves limit it too.
+  „Rest only” (with either strategy) machines only where a bigger tool chosen
+  from the library could not reach — narrow valleys and inside corners —
+  with a minimum rest thickness; the rest of the model is skipped.
 
 - **English user interface.** Widok → Język / Language switches between
   Polski and English at once, without a restart; the choice is remembered.

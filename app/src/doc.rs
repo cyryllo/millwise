@@ -189,6 +189,8 @@ pub(crate) struct Key3D {
     geom: Vec<Contour>,
     heights: std::sync::Arc<cam_ops::model::ModelHeights>,
     stock: Aabb2,
+    /// Narzędzie odniesienia (obróbka resztek).
+    ref_tool: Option<cam_ops::Tool>,
 }
 
 impl PartialEq for Key3D {
@@ -199,6 +201,7 @@ impl PartialEq for Key3D {
             && self.geom == o.geom
             && std::sync::Arc::ptr_eq(&self.heights, &o.heights)
             && self.stock == o.stock
+            && self.ref_tool == o.ref_tool
     }
 }
 
@@ -223,7 +226,7 @@ impl Key3D {
         std::thread::Builder::new()
             .name("millwise-3d".into())
             .spawn(move || {
-                let m = cam_ops::ModelInput { heights: &key.heights, stock: key.stock };
+                let m = cam_ops::ModelInput { heights: &key.heights, stock: key.stock, ref_tool: key.ref_tool.clone() };
                 let _ = tx.send(cam_ops::generate_with_model(&op, &key.tool, &key.geom, Some(&m)));
             })
             .expect("nie można uruchomić wątku obliczeń 3D");
@@ -610,6 +613,10 @@ impl Document {
                             geom: geom.clone(),
                             heights: h.clone(),
                             stock: sb,
+                            ref_tool: match &op.kind {
+                                cam_ops::OpKind::Finish3D(p) => p.rest_tool.and_then(|id| lib.get(id)).cloned(),
+                                _ => None,
+                            },
                         };
                         let result = match cache3d.iter().position(|c| c.key == key) {
                             Some(k) => cache3d[k].result.clone(),
@@ -622,7 +629,7 @@ impl Document {
                                 OpResult::default()
                             }
                             None => {
-                                let m = cam_ops::ModelInput { heights: h, stock: sb };
+                                let m = cam_ops::ModelInput { heights: h, stock: sb, ref_tool: key.ref_tool.clone() };
                                 cam_ops::generate_with_model(op, tool, &geom, Some(&m))
                             }
                         };

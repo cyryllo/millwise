@@ -276,11 +276,24 @@ pub struct Finish3DParams {
     pub cross: bool,
     /// Naddatek zostawiany na modelu [mm] (ujemny = głębiej).
     pub allowance: f64,
+    /// Tylko resztki: narzędzie (id w bibliotece), po którym zostały — obróbka tylko tam,
+    /// gdzie ono nie sięgnęło (wąskie doliny, narożniki).
+    pub rest_tool: Option<u32>,
+    /// Najmniejsza grubość resztek, które warto zbierać [mm].
+    pub rest_min: f64,
 }
 
 impl Default for Finish3DParams {
     fn default() -> Self {
-        Self { strategy: Finish3DStrategy::Raster, stepover: 0.1, angle: 0.0, cross: false, allowance: 0.0 }
+        Self {
+            strategy: Finish3DStrategy::Raster,
+            stepover: 0.1,
+            angle: 0.0,
+            cross: false,
+            allowance: 0.0,
+            rest_tool: None,
+            rest_min: 0.1,
+        }
     }
 }
 

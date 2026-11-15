@@ -14,6 +14,8 @@ use cam_i18n::tr;
 pub struct ModelInput<'a> {
     pub heights: &'a ModelHeights,
     pub stock: Aabb2,
+    /// Narzędzie odniesienia dla obróbki resztek (z biblioteki).
+    pub ref_tool: Option<Tool>,
 }
 
 pub(crate) fn generate(cut: &CutParams, p: &Rough3DParams, tool: &Tool, contours: &[Contour], m: &ModelInput, res: &mut OpResult) {
@@ -159,7 +161,7 @@ mod tests {
         let h = stepped();
         let tool = Tool { diameter: 6.0, ..Default::default() };
         let stock = Aabb2 { min: Vec2::new(-5.0, -5.0), max: Vec2::new(45.0, 35.0) };
-        let m = ModelInput { heights: &h, stock };
+        let m = ModelInput { heights: &h, stock, ref_tool: None };
         let a = 0.5;
         let res = generate_with_model(&rough_op(a), &tool, &[], Some(&m));
         assert!(res.warnings.is_empty(), "{:?}", res.warnings);
@@ -187,7 +189,7 @@ mod tests {
         let h = stepped();
         let tool = Tool { diameter: 6.0, ..Default::default() };
         let stock = Aabb2 { min: Vec2::new(-5.0, -5.0), max: Vec2::new(45.0, 35.0) };
-        let m = ModelInput { heights: &h, stock };
+        let m = ModelInput { heights: &h, stock, ref_tool: None };
         let mut b = cam_geom::Contour::new(true);
         b.verts = [(0.0, 0.0), (20.0, 0.0), (20.0, 30.0), (0.0, 30.0)].iter().map(|&(x, y)| cam_geom::Vertex::new(x, y, 0.0)).collect();
         let res = generate_with_model(&rough_op(0.5), &tool, &[b], Some(&m));
