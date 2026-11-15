@@ -33,7 +33,7 @@ impl Group {
     pub fn subs(&self) -> &'static [Sub] {
         use Sub::*;
         match self {
-            Group::Select => &[Select, Move, Rotate, FlipH, FlipV, Scale, Align, Array],
+            Group::Select => &[Select, Move, Rotate, FlipH, FlipV, Scale, Align, Array, Measure],
             Group::Profile => &[ProfileOut, ProfileIn, Corners],
             Group::Pocket => &[PocketOffset, PocketZigzag, PocketAdaptive],
             Group::Drill => &[DrillSimple, DrillPeck, DrillHelix],
@@ -68,6 +68,8 @@ pub enum Sub {
     Scale,
     Align,
     Array,
+    /// Pomiar odległości między dwoma punktami.
+    Measure,
     ProfileOut,
     ProfileIn,
     /// Uszka w narożnikach istniejących operacji wewnętrznych (klik krzywej).
@@ -100,6 +102,7 @@ impl Sub {
             Scale => "Skaluj",
             Align => "Wyrównaj",
             Array => "Szyk",
+            Measure => "Zmierz",
             ProfileOut => "Zewnętrzny",
             ProfileIn => "Wewnętrzny",
             Corners => "Narożniki",
@@ -131,6 +134,7 @@ impl Sub {
             Scale => Icon::Scale,
             Align => Icon::Align,
             Array => Icon::Array,
+            Measure => Icon::Measure,
             ProfileOut => Icon::ProfileOut,
             ProfileIn => Icon::ProfileIn,
             Corners => Icon::Corners,

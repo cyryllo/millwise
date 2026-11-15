@@ -52,7 +52,6 @@ Plan ustalony, start dopiero po dopracowaniu 2D. Szczegóły w
         wycięciem detalu;
   - [ ] automatyczna liczba mostków według obwodu detalu.
 - [ ] Napisy (tekst) w programie do graweru, bez osobnego CAD-a.
-- [ ] Pomiar odległości w widoku 2D.
 
 **Paczki i program**
 

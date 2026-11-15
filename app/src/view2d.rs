@@ -11,6 +11,8 @@ pub enum Interaction<'a> {
     PickPoint,
     /// Klik krzywej zgłasza ją aplikacji (np. narożniki operacji); bez zaznaczania.
     PickContour,
+    /// Pomiar: punkty z przyciąganiem; `a` — pierwszy punkt, `b` — drugi (gdy pomiar zamknięty).
+    Measure { a: Option<cam_geom::Vec2>, b: Option<cam_geom::Vec2> },
 }
 
 /// Zdarzenia z widoku obsługiwane przez aplikację.
@@ -152,7 +154,7 @@ impl View2D {
         }
 
         let pick_tol = 6.0 / self.scale;
-        let picking_point = matches!(inter, Interaction::PickPoint);
+        let picking_point = matches!(inter, Interaction::PickPoint | Interaction::Measure { .. });
         self.hovered = if self.box_start.is_none() && !picking_point {
             self.cursor_world.and_then(|p| doc.pick(p, pick_tol))
         } else {
@@ -190,7 +192,7 @@ impl View2D {
                 None if !additive => events.push(ViewEvent::Empty),
                 None => {}
             },
-            Interaction::PickPoint if clicked => {
+            Interaction::PickPoint | Interaction::Measure { .. } if clicked => {
                 if let Some(p) = snapped {
                     events.push(ViewEvent::Point(p));
                 }
@@ -348,6 +350,25 @@ impl View2D {
             painter.rect_stroke(r, 0.0, Stroke::new(1.0, col), StrokeKind::Middle);
         }
 
+        // pomiar: linia od A do B (albo do kursora) z długością
+        if let Interaction::Measure { a: Some(a), b } = inter {
+            if let Some(b) = b.or(snapped) {
+                let (sa, sb) = (self.to_screen(rect, a), self.to_screen(rect, b));
+                let col = Color32::from_rgb(250, 200, 70);
+                painter.line_segment([sa, sb], Stroke::new(1.5, col));
+                for s in [sa, sb] {
+                    painter.circle_filled(s, 3.5, col);
+                }
+                let d = b - a;
+                painter.text(
+                    sa.lerp(sb, 0.5) + egui::vec2(8.0, -8.0),
+                    egui::Align2::LEFT_BOTTOM,
+                    format!("{:.3} mm", d.length()),
+                    egui::FontId::proportional(14.0),
+                    col,
+                );
+            }
+        }
         if let Some(p) = snapped {
             let sp = self.to_screen(rect, p);
             let c = Color32::WHITE;

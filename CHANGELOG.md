@@ -22,6 +22,9 @@ Version numbers:
   down along the line at the set angle instead of plunging — back and forth
   on a short line — then returns to the start at full depth so no wedge of
   material is left, and cuts the whole line.
+- **Measuring** (Zaznacz → Zmierz): click two points — they snap to corners
+  and circle centres — to see the distance on the drawing and the length,
+  ΔX, ΔY and angle in the tool box; a third click starts a new measurement.
 
 ## 0.4.0 (2026-11-14)
 

@@ -70,6 +70,8 @@ pub struct CamApp {
     show_history: bool,
     /// Edycja zmiany z parametrami (szyk, skala, obrót) wybranej w historii: krok sprzed niej.
     param_edit: Option<usize>,
+    /// Pomiar: punkty A i B.
+    measure: (Option<Vec2>, Option<Vec2>),
     /// Element projektu rozwinięty na liście po prawej.
     open_source: Option<usize>,
     /// Krok historii, do którego panel ostatnio przewinął listę.
@@ -116,6 +118,7 @@ impl CamApp {
             history,
             show_history: true,
             param_edit: None,
+            measure: (None, None),
             open_source: None,
             history_seen: u64::MAX,
             clipboard: Vec::new(),
@@ -390,6 +393,7 @@ impl CamApp {
     fn stop_mode(&mut self) {
         self.toolbar.reset();
         self.pick_target = None;
+        self.measure = (None, None);
     }
 
     fn now(ctx: &egui::Context) -> f64 {
@@ -601,6 +605,12 @@ impl CamApp {
                         self.doc.add_op_contours(t, &found);
                     }
                 }
+                ViewEvent::Point(p) if self.toolbar.current() == Sub::Measure => {
+                    self.measure = match self.measure {
+                        (Some(a), None) => (Some(a), Some(p)),
+                        _ => (Some(p), None),
+                    };
+                }
                 ViewEvent::Point(p) => {
                     if self.toolbar.current() == Sub::ZeroPick {
                         self.doc.set_zero(p);
@@ -670,6 +680,27 @@ impl CamApp {
                                     ui.add(egui::DragValue::new(&mut e.dy).speed(0.1).suffix(" mm"));
                                     if ui.button("Przesuń").clicked() {
                                         apply(doc.move_selected(Vec2::new(e.dx, e.dy)));
+                                    }
+                                });
+                            }
+                            Sub::Measure => {
+                                let m = self.measure;
+                                ui.horizontal(|ui| {
+                                    ui.strong("Zmierz");
+                                    match m {
+                                        (Some(a), Some(b)) => {
+                                            let d = b - a;
+                                            let ang = d.y.atan2(d.x).to_degrees();
+                                            ui.label(RichText::new(format!("{:.3} mm", d.length())).strong().color(Color32::from_rgb(250, 200, 70)));
+                                            ui.label(format!("ΔX {:.3}   ΔY {:.3}   kąt {:.2}°", d.x, d.y, ang));
+                                            ui.label(RichText::new("klik — nowy pomiar").weak());
+                                        }
+                                        (Some(_), None) => {
+                                            ui.label("kliknij drugi punkt");
+                                        }
+                                        _ => {
+                                            ui.label("kliknij pierwszy punkt (przyciąga do wierzchołków i środków okręgów)");
+                                        }
                                     }
                                 });
                             }
@@ -1808,6 +1839,7 @@ impl eframe::App for CamApp {
                     (None, Sub::Move) => Interaction::Move,
                     (None, Sub::ZeroPick) => Interaction::PickPoint,
                     (None, Sub::Corners) => Interaction::PickContour,
+                    (None, Sub::Measure) => Interaction::Measure { a: self.measure.0, b: self.measure.1 },
                     _ => Interaction::Select,
                 };
                 events = self.view2d.ui(ui, rect, &mut self.doc, &tool_d, inter, Some((machine.travel_x, machine.travel_y)));

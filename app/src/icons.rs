@@ -14,6 +14,7 @@ pub enum Icon {
     Scale,
     Align,
     Array,
+    Measure,
     ProfileOut,
     ProfileIn,
     Corners,
@@ -260,6 +261,20 @@ pub fn draw(painter: &egui::Painter, r: Rect, icon: Icon) {
             poly(&[(20.0, 5.0), (34.0, 13.0), (20.0, 21.0), (6.0, 13.0)], BLUE_LIGHT, st(1.0, OUTLINE));
             poly(&[(6.0, 13.0), (20.0, 21.0), (20.0, 36.0), (6.0, 28.0)], BLUE, st(1.0, OUTLINE));
             poly(&[(34.0, 13.0), (34.0, 28.0), (20.0, 36.0), (20.0, 21.0)], BLUE_DARK, st(1.0, OUTLINE));
+        }
+        Icon::Measure => {
+            // linijka z podziałką i strzałka wymiaru
+            let ruler = [(4.0, 24.0), (36.0, 24.0), (36.0, 34.0), (4.0, 34.0)];
+            poly(&ruler, AMBER, st(1.0, OUTLINE));
+            for (k, x) in [8.0, 12.0, 16.0, 20.0, 24.0, 28.0, 32.0].iter().enumerate() {
+                let h = if k % 2 == 0 { 5.0 } else { 3.0 };
+                line(&[(*x, 24.0), (*x, 24.0 + h)], st(1.2, OUTLINE));
+            }
+            line(&[(6.0, 13.0), (34.0, 13.0)], st(1.6, WHITE));
+            poly(&[(4.0, 13.0), (9.0, 9.5), (9.0, 16.5)], WHITE, Stroke::NONE);
+            poly(&[(36.0, 13.0), (31.0, 9.5), (31.0, 16.5)], WHITE, Stroke::NONE);
+            line(&[(4.0, 7.0), (4.0, 19.0)], st(1.2, WHITE));
+            line(&[(36.0, 7.0), (36.0, 19.0)], st(1.2, WHITE));
         }
         Icon::Corners => {
             // płyta z kwadratowym otworem i okrągłymi uszkami w rogach
