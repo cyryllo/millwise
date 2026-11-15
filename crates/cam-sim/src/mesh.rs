@@ -95,12 +95,13 @@ pub(crate) fn build_mesh(sim: &Simulator) -> SimMesh {
 
     // --- uskoki na krawędziach (wspólne dla sąsiednich komórek) ---
     let mut step_cache: HashMap<EdgeKey, Vec<Step>> = HashMap::new();
+    // gęsta ścieżka (przejścia gęstsze niż siatka): cała siatka bez dokładnych ścian
+    let dense = sim.dense();
     let mut steps_of = |key: EdgeKey| -> Vec<Step> {
         let (i, j, dir) = key;
         let (i2, j2) = if dir == 0 { (i + 1, j) } else { (i, j + 1) };
         let mid = m.center(i, j).lerp(m.center(i2, j2), 0.5);
-        // gęsta ścieżka (przejścia gęstsze niż siatka): bez dokładnych ścian i bez pamięci podręcznej
-        if sim.dense_at(mid) {
+        if dense {
             return Vec::new();
         }
         step_cache
@@ -190,7 +191,7 @@ pub(crate) fn build_mesh(sim: &Simulator) -> SimMesh {
                 if zmax - zmin > 1e-4 {
                     // zbocze: punkt środkowy o dokładnej wysokości — załamania idą wzdłuż geometrii
                     let pc = m.center(i, j).lerp(m.center(i + 1, j + 1), 0.5);
-                    let zc = if sim.dense_at(pc) { hs.iter().sum::<f32>() * 0.25 } else { sim.height_exact(pc) as f32 };
+                    let zc = if dense { hs.iter().sum::<f32>() * 0.25 } else { sim.height_exact(pc) as f32 };
                     let mut n = [0.0f32; 3];
                     for (ci, cj) in corners {
                         let k = normals[cj * nx + ci];

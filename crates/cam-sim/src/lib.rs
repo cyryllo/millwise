@@ -341,6 +341,8 @@ pub fn timeline(ops: &[SimOp], rapid_rate: f64) -> (Vec<SimPoint>, Vec<f64>) {
 
 /// Powyżej tylu odcinków w kubełku siatka materiału nie liczy dokładnych ścian.
 const DENSE_BUCKET: usize = 192;
+/// Od takiego udziału gęstych kubełków cała siatka jest uproszczona.
+const DENSE_SHARE: f64 = 0.2;
 
 pub struct Simulator {
     pub map: Heightmap,
@@ -503,16 +505,18 @@ impl Simulator {
         self.advance_to(t);
     }
 
-    /// Czy w okolicy punktu jest tyle odcinków ścieżki, że dokładne liczenie wysokości
-    /// między węzłami nic nie daje (przejścia gęstsze niż siatka), a kosztuje bardzo dużo.
-    pub fn dense_at(&self, p: Vec2) -> bool {
-        let m = &self.map;
-        let bx = ((p.x - m.origin.x) / self.bucket).floor();
-        let by = ((p.y - m.origin.y) / self.bucket).floor();
-        if bx < 0.0 || by < 0.0 || bx as usize >= self.bnx || by as usize >= self.bny {
-            return false;
-        }
-        self.buckets[by as usize * self.bnx + bx as usize].len() > DENSE_BUCKET
+    /// Czy ścieżka jest gdziekolwiek tak gęsta, że dokładne liczenie ścian między węzłami
+    /// nic nie daje (przejścia gęstsze niż siatka), a kosztuje bardzo dużo. Decyzja dla
+    /// całej siatki naraz — mieszanie komórek dokładnych i uproszczonych gubiło ściany.
+    pub fn dense(&self) -> bool {
+        self.dense_share() > DENSE_SHARE
+    }
+
+    /// Udział kubełków (z jakąkolwiek ścieżką), w których ścieżka jest gęstsza niż siatka.
+    pub fn dense_share(&self) -> f64 {
+        let used = self.buckets.iter().filter(|b| !b.is_empty()).count();
+        let dense = self.buckets.iter().filter(|b| b.len() > DENSE_BUCKET).count();
+        dense as f64 / used.max(1) as f64
     }
 
     /// Dokładna wysokość materiału w dowolnym punkcie (nie tylko w węzłach siatki).

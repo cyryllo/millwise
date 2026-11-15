@@ -118,6 +118,10 @@ Version numbers:
   the graphics card in parts that fit its limits, a solid that grows beyond
   2 million triangles switches the simulation to the Fast engine (with a
   note), and a graphics error no longer closes the program.
+- **Holes in walls in the Fast engine** after the speed-up for dense
+  toolpaths: exact and simplified cells were mixed in one surface. The
+  choice is now made for the whole surface (simplified only when the
+  toolpath is dense across most of the stock), so walls stay closed.
 
 ## 0.5.0 (2026-11-15)
 

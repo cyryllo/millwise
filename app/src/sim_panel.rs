@@ -793,7 +793,7 @@ mod perf {
         eprintln!("symulacja: {:?}, odcinków ścieżki: {}", t.elapsed(), sim.path.len());
         let t = Instant::now();
         let m = sim.mesh();
-        eprintln!("siatka: {:?}, wierzchołków {}, trójkątów {}", t.elapsed(), m.verts.len(), m.indices.len() / 3);
+        eprintln!("siatka: {:?}, wierzchołków {}, trójkątów {}, gęste kubełki {:.3}", t.elapsed(), m.verts.len(), m.indices.len() / 3, sim.dense_share());
         for frac in [0.137, 1.0] {
             sim.reset();
             sim.advance_to(sim.duration() * frac);
@@ -876,12 +876,13 @@ mod perf {
         let t = Instant::now();
         let m = hm.mesh();
         eprintln!(
-            "mapa wysokości: {} odcinków, przeliczenie {:?}, siatka {:?} ({} trójkątów, komórka {:.3} mm)",
+            "mapa wysokości: {} odcinków, przeliczenie {:?}, siatka {:?} ({} trójkątów, komórka {:.3} mm, gęste kubełki {:.3})",
             hm.path.len(),
             t_adv,
             t.elapsed(),
             m.indices.len() / 3,
-            hm.map.cell
+            hm.map.cell,
+            hm.dense_share()
         );
         if std::env::var_os("PERF_ONLY_FAST").is_some() {
             return;
