@@ -28,20 +28,14 @@ po sylwetce, symulacja „Ścieżki”. Szczegóły w [ROADMAP.md](ROADMAP.md).
 
 ## 3. Karta graficzna (GPU)
 
-Teraz karta tylko rysuje, wszystko liczy procesor. Dwa etapy (po wydaniu 0.7.0):
+Symulacja materiału na karcie jest (silnik „GPU”). Dalej:
 
-- [ ] **Symulacja ubytku materiału na karcie.** Każdy ruch frezu „rysowany”
-      do tekstury wysokości (zostaje najniższy punkt — zwykłe rysowanie z testem
-      głębokości, bez obliczeń ogólnych, więc działa też przez OpenGL), a
-      powierzchnia materiału wyświetlana wprost z tej tekstury. Miliony ruchów
-      w czasie rzeczywistym, bez gotowania klatek i wielkich siatek w pamięci.
-      Zostaje obok silników Bryła / Szybki / Ścieżki; trzeba pilnować limitów
-      karty (rozmiar tekstury, OpenGL na kartach NVIDIA).
 - [ ] **Ścieżki w widoku 2D rysowane przez kartę.** Teraz procesor przygotowuje
       każdą linię w każdej klatce — przy gęstych ścieżkach 3D (np. co 0,1 mm)
       widok 2D zwalnia przy przesuwaniu i powiększaniu. Ścieżki wysyłane na
       kartę raz po zmianie (jak w widoku 3D), rysowane w każdej klatce bez
       przeliczania.
+- [ ] Silnik GPU: wykrywanie ruchów szybkich w materiale (jak w silnikach Bryła i Szybki).
 
 ## 4. Pomysły na dalej
 

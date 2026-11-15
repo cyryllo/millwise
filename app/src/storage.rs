@@ -46,6 +46,29 @@ pub fn save_language(l: cam_i18n::Lang) {
     let _ = std::fs::write(&p, serde_json::to_string_pretty(&v).unwrap_or_default());
 }
 
+/// Ustawienie „symulacja materiału na karcie graficznej” (domyślnie włączone).
+pub fn saved_gpu_sim() -> bool {
+    let read = || -> Option<bool> {
+        let text = std::fs::read_to_string(config_file("settings.json")?).ok()?;
+        let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+        v.get("gpu_simulation")?.as_bool()
+    };
+    read().unwrap_or(true)
+}
+
+pub fn save_gpu_sim(on: bool) {
+    let Some(p) = config_file("settings.json") else { return };
+    let mut v: serde_json::Value = std::fs::read_to_string(&p)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    v["gpu_simulation"] = serde_json::Value::Bool(on);
+    if let Some(dir) = p.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(&p, serde_json::to_string_pretty(&v).unwrap_or_default());
+}
+
 // ---------- automatyzacja ----------
 
 /// Zapamiętane wybory „co zrobić z warstwą” (nazwa warstwy → kategoria).

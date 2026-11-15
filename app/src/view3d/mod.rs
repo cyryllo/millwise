@@ -3,6 +3,7 @@
 
 use cam_i18n::tr;
 mod camera;
+pub mod gpu_sim;
 mod renderer;
 
 use crate::doc::Document;
@@ -132,6 +133,15 @@ impl View3D {
                     self.sim_key = None;
                 }
             }
+        }
+        // silnik „GPU”: przygotowanie klatki (dorysowanie nowych ruchów w render())
+        match sim.and_then(|s| s.gpu.as_ref()) {
+            Some(input) if sim.is_some_and(|s| s.show_material) => {
+                let g = renderer.gpu.get_or_insert_with(|| gpu_sim::GpuSim::new(&rs.device));
+                g.prepare(&rs.device, &rs.queue, input);
+                renderer.gpu_active = true;
+            }
+            _ => renderer.gpu_active = false,
         }
         // symulacja „Ścieżki”: linie postępu (przebudowa tylko po zmianie czasu)
         let pkey = sim.and_then(|s| s.progress.map(|p| p.1));
@@ -329,6 +339,8 @@ pub struct SimDisplay<'a> {
     pub side: Option<cam_ops::Side>,
     /// Tryb „Ścieżki” (bez materiału): linie postępu (od, do, kolor) i ich wersja.
     pub progress: Option<(&'a [(cam_ops::P3, cam_ops::P3, Color32)], (u64, u64))>,
+    /// Silnik „GPU”: materiał liczony i rysowany przez kartę graficzną.
+    pub gpu: Option<gpu_sim::GpuSimInput<'a>>,
 }
 
 struct SceneOpts {

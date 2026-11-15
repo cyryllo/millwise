@@ -63,8 +63,27 @@ pub enum Engine {
     /// Mapa wysokości — bardzo szybka, dla dużych programów.
     Fast,
     /// Bez materiału: model docelowy, ścieżki wykonane i ostatnia warstwa — natychmiast,
-    /// przy dowolnej liczbie ruchów (domyślny dla obróbki 3D).
+    /// przy dowolnej liczbie ruchów.
     Paths,
+    /// Ubytek materiału liczony i rysowany przez kartę graficzną — płynnie przy
+    /// dowolnej liczbie ruchów (gdy w ustawieniach włączone GPU).
+    Gpu,
+}
+
+impl Engine {
+    fn code(self) -> u8 {
+        match self {
+            Engine::Solid => 0,
+            Engine::Fast => 1,
+            Engine::Paths => 2,
+            Engine::Gpu => 3,
+        }
+    }
+
+    /// Silniki bez wątku przeliczającego (oś czasu liczona od razu).
+    fn instant(self) -> bool {
+        matches!(self, Engine::Paths | Engine::Gpu)
+    }
 }
 
 fn spawn_worker(
@@ -179,7 +198,7 @@ fn spawn_worker(
 pub struct SimState {
     worker: Option<Worker>,
     /// Klucz danych, z których zbudowano symulację.
-    built_for: Option<(u64, u64, u64, usize, (bool, bool), bool)>,
+    built_for: Option<(u64, u64, u64, usize, (bool, bool), u8)>,
     /// Numer symulacji (zmienia się przy przebudowie).
     sim_serial: u64,
     ops: Vec<(usize, String)>,
@@ -227,6 +246,12 @@ pub struct SimState {
     progress_lines: Vec<(P3, P3, Color32)>,
     progress_time: f64,
     progress_serial: u64,
+    /// Ustawienie: symulacja materiału na karcie graficznej (silnik „GPU” do wyboru i domyślny).
+    pub gpu_enabled: bool,
+    /// Silnik „GPU”: narzędzia operacji, półfabrykat (x0, y0, x1, y1), spód.
+    gpu_tools: Vec<ToolShape>,
+    gpu_area: [f64; 4],
+    gpu_bottom: f64,
 }
 
 /// Od tylu ruchów silnik bryłowy liczyłby za długo — automatycznie „Szybki”.
@@ -272,22 +297,40 @@ impl Default for SimState {
             progress_lines: Vec::new(),
             progress_time: f64::NAN,
             progress_serial: 0,
+            gpu_enabled: true,
+            gpu_tools: Vec::new(),
+            gpu_area: [0.0; 4],
+            gpu_bottom: 0.0,
         }
     }
 }
 
 impl SimState {
+    pub fn with_gpu(on: bool) -> Self {
+        SimState { gpu_enabled: on, ..Default::default() }
+    }
+
+    /// Włącza / wyłącza silnik „GPU” (ustawienie); silnik wybierany znów automatycznie.
+    pub fn set_gpu_enabled(&mut self, on: bool) {
+        self.gpu_enabled = on;
+        self.engine_auto = true;
+        self.too_big = None;
+    }
+
     /// Uruchamia przeliczenie od nowa, gdy zmieniły się ścieżki, półfabrykat lub dokładność.
     pub fn sync(&mut self, ctx: &egui::Context, doc: &Document, lib: &ToolLibrary, machine: &Machine) {
         self.sides = doc.stock.two_sided.is_some() && doc.ops.iter().any(|o| o.enabled && o.side == cam_ops::Side::B);
         let side_b = self.sides && self.side == cam_ops::Side::B;
         let has3d = doc.ops.iter().any(|o| o.enabled && cam_ops::needs_model(&o.kind));
+        if !self.gpu_enabled && self.engine == Engine::Gpu {
+            self.engine_auto = true;
+        }
         if self.engine_auto && has3d {
-            // obróbka 3D: bez symulacji ubytku — model docelowy i ścieżki (zawsze płynnie)
-            self.engine = Engine::Paths;
+            // obróbka 3D: materiał na karcie graficznej albo — bez GPU — model docelowy i ścieżki
+            self.engine = if self.gpu_enabled { Engine::Gpu } else { Engine::Paths };
             self.dense = None;
         } else if self.engine_auto {
-            if self.engine == Engine::Paths {
+            if self.engine.instant() {
                 self.engine = Engine::Solid;
             }
             let moves: usize = doc
@@ -300,8 +343,12 @@ impl SimState {
                 .sum();
             if moves > DENSE_MOVES {
                 if self.dense.is_none() {
-                    self.engine = Engine::Fast;
-                    self.resolution = self.resolution.max(800);
+                    if self.gpu_enabled {
+                        self.engine = Engine::Gpu;
+                    } else {
+                        self.engine = Engine::Fast;
+                        self.resolution = self.resolution.max(800);
+                    }
                 }
                 self.dense = Some(moves);
             } else {
@@ -317,7 +364,7 @@ impl SimState {
             doc.stock.margin.to_bits(),
             self.resolution,
             (self.engine == Engine::Solid, side_b),
-            self.engine == Engine::Paths,
+            self.engine.code(),
         );
         if self.built_for == Some(key) {
             return;
@@ -355,8 +402,11 @@ impl SimState {
         if data.is_empty() {
             return;
         }
-        if self.engine == Engine::Paths {
-            // bez wątku: tylko oś czasu — gotowe od razu
+        if self.engine.instant() {
+            // bez wątku: tylko oś czasu — gotowe od razu (materiał liczy karta albo go nie ma)
+            self.gpu_tools = data.iter().map(|(t, _)| t.clone()).collect();
+            self.gpu_area = [area.min.x, area.min.y, area.max.x, area.max.y];
+            self.gpu_bottom = -doc.stock.thickness;
             let ops: Vec<SimOp> = data.iter().map(|(t, p)| SimOp { tool: t.clone(), points: p }).collect();
             let (path, op_start) = cam_sim::timeline(&ops, machine.rapid_xy);
             self.duration = path.last().map_or(0.0, |p| p.t);
@@ -379,7 +429,7 @@ impl SimState {
 
     /// Odbiór wyników z wątku i postęp odtwarzania; wywoływane co klatkę.
     pub fn tick(&mut self, ctx: &egui::Context) {
-        if self.engine == Engine::Paths && !self.timeline.is_empty() {
+        if self.engine.instant() && !self.timeline.is_empty() {
             if self.playing {
                 let dt = ctx.input(|i| i.stable_dt).min(0.1) as f64;
                 self.time = (self.time + dt * self.speed).min(self.duration);
@@ -388,7 +438,7 @@ impl SimState {
                 }
                 ctx.request_repaint();
             }
-            if self.progress_time.to_bits() != self.time.to_bits() {
+            if self.engine == Engine::Paths && self.progress_time.to_bits() != self.time.to_bits() {
                 self.build_progress();
             }
             return;
@@ -423,6 +473,7 @@ impl SimState {
                     self.too_big = Some(n);
                     if let Some(k) = &mut self.built_for {
                         k.4 .0 = false;
+                        k.5 = Engine::Fast.code();
                     }
                 }
             }
@@ -524,7 +575,7 @@ impl SimState {
     }
 
     pub fn display<'a>(&'a self, doc: &Document, lib: &ToolLibrary) -> Option<SimDisplay<'a>> {
-        if self.engine == Engine::Paths && !self.timeline.is_empty() {
+        if self.engine.instant() && !self.timeline.is_empty() {
             let tool = if self.show_tool {
                 self.timeline_pos().and_then(|(k, p)| {
                     let oi = self.timeline[k].op;
@@ -535,18 +586,36 @@ impl SimState {
             } else {
                 None
             };
+            let gpu = self.engine == Engine::Gpu;
+            // piksele tekstury wysokości dla wybranej dokładności
+            let px = match self.resolution {
+                200 => 1024,
+                400 => 2048,
+                800 => 4096,
+                _ => 8192,
+            };
             return Some(SimDisplay {
                 mesh: &self.empty_mesh,
                 key: (self.sim_serial, u64::MAX),
                 top: 0.0,
                 bottom: -doc.stock.thickness as f32,
                 tool,
-                show_material: false,
+                show_material: gpu && self.show_material,
                 show_paths: self.show_paths,
                 show_rapids: self.show_rapids,
                 show_model: self.show_model,
                 side: self.sides.then_some(self.side),
-                progress: Some((&self.progress_lines, (self.sim_serial, self.progress_serial))),
+                progress: (!gpu).then_some((&self.progress_lines[..], (self.sim_serial, self.progress_serial))),
+                gpu: gpu.then(|| crate::view3d::gpu_sim::GpuSimInput {
+                    timeline: &self.timeline,
+                    tools: &self.gpu_tools,
+                    area: self.gpu_area,
+                    top: 0.0,
+                    bottom: self.gpu_bottom,
+                    time: self.time,
+                    resolution: px,
+                    key: self.sim_serial,
+                }),
             });
         }
         let frame = self.frame.as_ref()?;
@@ -571,6 +640,7 @@ impl SimState {
             show_model: self.show_model,
             side: self.sides.then_some(self.side),
             progress: None,
+            gpu: None,
         })
     }
 
@@ -654,7 +724,14 @@ impl SimState {
             let c = ui
                 .selectable_value(&mut self.engine, Engine::Paths, tr!("Ścieżki"))
                 .on_hover_text(tr!("Bez materiału: model docelowy, wykonane ścieżki i ostatnia warstwa wyróżniona — płynnie przy każdej wielkości programu"));
-            if a.clicked() || b.clicked() || c.clicked() {
+            let g = if self.gpu_enabled {
+                ui.selectable_value(&mut self.engine, Engine::Gpu, "GPU")
+                    .on_hover_text(tr!("Ubytek materiału liczy i rysuje karta graficzna — płynnie przy każdej wielkości programu (Widok › symulacja na GPU)"))
+                    .clicked()
+            } else {
+                false
+            };
+            if a.clicked() || b.clicked() || c.clicked() || g {
                 self.engine_auto = false;
                 self.too_big = None;
             }
@@ -673,7 +750,7 @@ impl SimState {
                     .color(Color32::from_rgb(230, 180, 80)),
             );
         }
-        ui.add_enabled_ui(self.engine == Engine::Fast, |ui| ui.horizontal(|ui| {
+        ui.add_enabled_ui(matches!(self.engine, Engine::Fast | Engine::Gpu), |ui| ui.horizontal(|ui| {
             ui.label(tr!("Dokładność"));
             let label = |n: usize| match n {
                 200 => tr!("zgrubna"),
@@ -694,6 +771,8 @@ impl SimState {
                     .small()
                     .weak(),
             );
+        } else if self.engine == Engine::Gpu {
+            ui.label(RichText::new(tr!("Materiał liczy karta graficzna — każda klatka dorysowuje tylko nowe ruchy.")).small().weak());
         } else {
         ui.label(
             RichText::new(tr!("komórka {:.2} mm · przeliczenie {} ms · klatka {} ms", self.cell, self.millis, frame_ms))
@@ -733,7 +812,7 @@ impl SimState {
         }
 
         ui.separator();
-        if self.engine == Engine::Paths {
+        if self.engine.instant() {
             ui.label(RichText::new(tr!("Kolizje ruchów szybkich sprawdza silnik Bryła albo Szybki.")).small().weak());
         } else if self.collisions.is_empty() {
             ui.label(RichText::new(tr!("Kolizje ruchów szybkich: brak")).color(Color32::from_rgb(120, 220, 140)));

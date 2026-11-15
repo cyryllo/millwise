@@ -179,7 +179,7 @@ impl CamApp {
             view2d: View2D::default(),
             view3d: View3D::default(),
             view_model: View3D::default(),
-            sim: SimState::default(),
+            sim: SimState::with_gpu(storage::saved_gpu_sim()),
             mode: ViewMode::Project,
             work_mode: ViewMode::Project,
             ops_ui: OpsUi::default(),
@@ -1516,6 +1516,16 @@ impl CamApp {
                 ui.radio_value(&mut self.mode, ViewMode::Project, tr!("Projekt 2D  (Tab)"));
                 ui.add_enabled_ui(self.doc.stock.model.is_some(), |ui| ui.radio_value(&mut self.mode, ViewMode::Model, tr!("Model 3D")));
                 ui.radio_value(&mut self.mode, ViewMode::Visual, tr!("Symulacja  (Tab)"));
+                ui.separator();
+                let mut gpu = self.sim.gpu_enabled;
+                if ui
+                    .checkbox(&mut gpu, tr!("Symulacja materiału na karcie graficznej (GPU)"))
+                    .on_hover_text(tr!("Płynny ubytek materiału przy dużych programach. Na słabej karcie (np. zintegrowanej) wyłącz — wtedy symulację liczy procesor."))
+                    .changed()
+                {
+                    self.sim.set_gpu_enabled(gpu);
+                    storage::save_gpu_sim(gpu);
+                }
                 ui.separator();
                 if ui.button(tr!("Dopasuj  (F)")).clicked() {
                     self.view2d.fit_requested = true;

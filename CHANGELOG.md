@@ -111,6 +111,17 @@ Version numbers:
   instant for any program size. The Solid and Fast engines can still be
   chosen by hand.
 
+- **Material simulation on the graphics card (GPU engine).** Each tool move
+  is drawn by the graphics card into a height texture as the exact shape of
+  the pass (flat, ball, bull-nose and V cutters), keeping the lowest point,
+  and the material surface is shown straight from that texture — no meshes
+  are built by the processor. A frame only adds the new moves, so playback
+  and seeking stay smooth for programs of any size, also through OpenGL.
+  Accuracy from 1024 to 8192 pixels along the stock. It is the default for
+  3D and very dense programs; View › „Material simulation on the graphics
+  card (GPU)” turns it off for weak graphics cards (the simulation is then
+  computed by the processor, as before).
+
 ### Fixed
 
 - **Crash in the simulation of very detailed material** („Buffer size … is

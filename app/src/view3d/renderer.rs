@@ -6,9 +6,9 @@ use egui_wgpu::wgpu;
 use egui_wgpu::wgpu::util::DeviceExt;
 use glam::Mat4;
 
-const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
-const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
-const SAMPLES: u32 = 4;
+pub(crate) const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
+pub(crate) const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+pub(crate) const SAMPLES: u32 = 4;
 
 #[repr(C)]
 #[derive(Clone, Copy, Pod, Zeroable)]
@@ -109,6 +109,9 @@ pub struct Renderer {
     /// Linie postępu symulacji „Ścieżki” (kawałki).
     progress: Vec<Option<DynBuf>>,
     progress_used: usize,
+    /// Symulacja materiału na karcie (silnik „GPU”) i czy rysować ją w tej klatce.
+    pub gpu: Option<super::gpu_sim::GpuSim>,
+    pub gpu_active: bool,
     target: Option<Target>,
     texture_id: Option<eframe::egui::TextureId>,
     pub clear_color: wgpu::Color,
@@ -237,6 +240,8 @@ impl Renderer {
             dyn_lines: None,
             progress: Vec::new(),
             progress_used: 0,
+            gpu: None,
+            gpu_active: false,
             target: None,
             texture_id: None,
             clear_color: wgpu::Color { r: 0.012, g: 0.014, b: 0.018, a: 1.0 },
@@ -352,6 +357,11 @@ impl Renderer {
 
         let target = self.target.as_ref().unwrap();
         let mut encoder = rs.device.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("millwise_3d") });
+        // symulacja na karcie: najpierw nowe ruchy do tekstury wysokości
+        if let (true, Some(g)) = (self.gpu_active, self.gpu.as_mut()) {
+            g.write_uniforms(&rs.queue, view_proj, u.light);
+            g.encode(&mut encoder);
+        }
         {
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("millwise_3d_pass"),
@@ -375,6 +385,10 @@ impl Renderer {
                 pass.set_pipeline(&self.mesh_pipeline);
                 pass.set_vertex_buffer(0, b.buf.slice(..));
                 pass.draw(0..b.count, 0..1);
+            }
+            if let (true, Some(g)) = (self.gpu_active, self.gpu.as_ref()) {
+                g.draw(&mut pass);
+                pass.set_bind_group(0, &self.bind_group, &[]);
             }
             for (vb, ib) in self.sim.iter().take(self.sim_used) {
                 if let (Some(vb), Some(ib)) = (vb, ib) {

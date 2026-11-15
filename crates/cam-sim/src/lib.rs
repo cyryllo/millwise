@@ -43,6 +43,30 @@ impl ToolShape {
         ToolShape { radius, kind }
     }
 
+    /// Promienie pierścieni do siatki dolnej powierzchni narzędzia (bez osi): płaski — sam
+    /// obwód, stożek — czubek i obwód, kula i zaokrąglenie — gęściej tam, gdzie stromo.
+    pub fn ring_radii(&self) -> Vec<f64> {
+        let r = self.radius;
+        let arc = |from: f64, rc: f64, n: usize| (1..=n).map(move |k| from + rc * (k as f64 / n as f64 * std::f64::consts::FRAC_PI_2).sin());
+        match self.kind {
+            Profile::Flat => vec![r],
+            Profile::Cone { tip_r, .. } if tip_r > 1e-6 && tip_r < r => vec![tip_r, r],
+            Profile::Cone { .. } => vec![r],
+            Profile::Ball => arc(0.0, r, 8).collect(),
+            Profile::Bull { r: rc } => {
+                let flat = (r - rc).max(0.0);
+                let mut v: Vec<f64> = if flat > 1e-6 { vec![flat] } else { Vec::new() };
+                v.extend(arc(flat, r - flat, 6));
+                v
+            }
+        }
+    }
+
+    /// Dolna powierzchnia płaska (bez spadku od osi) — wystarczy obwód.
+    pub fn is_flat(&self) -> bool {
+        matches!(self.kind, Profile::Flat)
+    }
+
     pub fn flat(diameter: f64) -> Self {
         Self::new(&ToolKind::FlatEnd, diameter)
     }
