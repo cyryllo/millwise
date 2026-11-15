@@ -119,6 +119,8 @@ pub struct SolidSim {
     meshes: Vec<Option<(Arc<Manifold>, Arc<SimMesh>)>>,
     top: f64,
     bottom: f64,
+    /// Bryła przerosła limit trójkątów (liczba trójkątów) — przeliczenie przerwane.
+    pub too_big: Option<usize>,
     /// Czas: budowa brył przejść i sumowanie, odejmowanie [s].
     pub t_hull: f64,
     pub t_union: f64,
@@ -168,6 +170,7 @@ impl SolidSim {
             keys: vec![(0, state.clone())],
             cur: (0, state),
             meshes: vec![None; nx * ny],
+            too_big: None,
             top: max.z,
             bottom: min.z,
             t_hull: 0.0,
@@ -234,6 +237,12 @@ impl SolidSim {
             self.t_union += t0.elapsed().as_secs_f64();
             for (k, ((cutter, touched), &(_, end))) in cutters.into_iter().zip(part).enumerate() {
                 self.subtract(&mut state, &cutter, &touched);
+                // za szczegółowa bryła: rysowanie i odtwarzanie byłyby bardzo wolne (i za duże dla karty)
+                let tris: usize = state.iter().map(|t| t.num_tri()).sum();
+                if tris > MAX_TRIANGLES {
+                    self.too_big = Some(tris);
+                    return false;
+                }
                 if end == n || (end / every) % stride == 0 {
                     self.keys.push((end, state.clone()));
                 }
@@ -337,6 +346,9 @@ impl SolidSim {
 /// Tolerancja upraszczania siatki po operacjach boolowskich [mm] — scala
 /// rozdrobnione trójkąty leżące w jednej płaszczyźnie (bez zmiany kształtu).
 const SIMPLIFY_TOL: f64 = 1e-4;
+
+/// Najwięcej trójkątów bryły — powyżej tego symulacja przechodzi na mapę wysokości.
+pub const MAX_TRIANGLES: usize = 2_000_000;
 
 /// Najwięcej trójkątów we wszystkich klatkach kluczowych razem (ok. 200 MB pamięci).
 const KEY_TRIANGLES: usize = 600_000;

@@ -32,6 +32,10 @@ struct Uniforms {
     light: [f32; 4],
 }
 
+/// Najwięcej wierzchołków w jednym buforze karty (40 B każdy → 40 MB; limit kart to
+/// zwykle co najmniej 256 MB). Wielokrotność 6 — kawałki zawierają całe trójkąty i odcinki.
+pub const CHUNK_VERTS: usize = 1_048_578; // 174 763 × 6
+
 /// Geometria sceny przygotowana na CPU.
 #[derive(Default)]
 pub struct SceneData {
@@ -94,11 +98,13 @@ pub struct Renderer {
     transparent_pipeline: wgpu::RenderPipeline,
     uniform_buf: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
-    lines: Option<GpuBuf>,
-    opaque: Option<GpuBuf>,
-    transparent: Option<GpuBuf>,
-    sim_vb: Option<DynBuf>,
-    sim_ib: Option<DynBuf>,
+    // bufory dzielone na kawałki — pojedynczy bufor nie może przekroczyć limitu karty
+    lines: Vec<GpuBuf>,
+    opaque: Vec<GpuBuf>,
+    transparent: Vec<GpuBuf>,
+    /// Siatka materiału: kawałki (wierzchołki, indeksy), wykorzystane `sim_used`.
+    sim: Vec<(Option<DynBuf>, Option<DynBuf>)>,
+    sim_used: usize,
     dyn_lines: Option<DynBuf>,
     target: Option<Target>,
     texture_id: Option<eframe::egui::TextureId>,
@@ -107,6 +113,10 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new(device: &wgpu::Device) -> Self {
+        // błąd karty graficznej (np. za duży bufor) nie może zamykać programu — tylko komunikat
+        device.on_uncaptured_error(std::sync::Arc::new(|e: wgpu::Error| {
+            eprintln!("Millwise: błąd grafiki (wgpu): {e}");
+        }));
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("millwise_3d"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
@@ -216,11 +226,11 @@ impl Renderer {
             transparent_pipeline,
             uniform_buf,
             bind_group,
-            lines: None,
-            opaque: None,
-            transparent: None,
-            sim_vb: None,
-            sim_ib: None,
+            lines: Vec::new(),
+            opaque: Vec::new(),
+            transparent: Vec::new(),
+            sim: Vec::new(),
+            sim_used: 0,
             dyn_lines: None,
             target: None,
             texture_id: None,
@@ -229,27 +239,38 @@ impl Renderer {
     }
 
     pub fn upload(&mut self, device: &wgpu::Device, scene: &SceneData) {
-        fn mk<T: Pod>(device: &wgpu::Device, label: &str, data: &[T]) -> Option<GpuBuf> {
-            if data.is_empty() {
-                return None;
-            }
-            let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some(label),
-                contents: bytemuck::cast_slice(data),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
-            Some(GpuBuf { buf, count: data.len() as u32 })
+        // kawałki po CHUNK_VERTS wierzchołków (wielokrotność 6: całe trójkąty i całe odcinki)
+        fn mk<T: Pod>(device: &wgpu::Device, label: &str, data: &[T]) -> Vec<GpuBuf> {
+            data.chunks(CHUNK_VERTS)
+                .map(|part| {
+                    let buf = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some(label),
+                        contents: bytemuck::cast_slice(part),
+                        usage: wgpu::BufferUsages::VERTEX,
+                    });
+                    GpuBuf { buf, count: part.len() as u32 }
+                })
+                .collect()
         }
         self.lines = mk(device, "millwise_lines_vb", &scene.lines);
         self.opaque = mk(device, "millwise_opaque_vb", &scene.opaque);
         self.transparent = mk(device, "millwise_transparent_vb", &scene.transparent);
     }
 
-    /// Siatka materiału z symulacji (indeksowana); pusta = ukryta.
-    pub fn upload_sim(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, verts: &[MeshVertex], indices: &[u32]) {
-        let idx = indices;
-        DynBuf::write(&mut self.sim_vb, device, queue, bytemuck::cast_slice(verts), verts.len() as u32, wgpu::BufferUsages::VERTEX, "millwise_sim_vb");
-        DynBuf::write(&mut self.sim_ib, device, queue, bytemuck::cast_slice(idx), idx.len() as u32, wgpu::BufferUsages::INDEX, "millwise_sim_ib");
+    /// Kawałek `k` siatki materiału z symulacji (wierzchołki, indeksy w obrębie kawałka),
+    /// najwyżej `CHUNK_VERTS` wierzchołków.
+    pub fn upload_sim_chunk(&mut self, device: &wgpu::Device, queue: &wgpu::Queue, k: usize, verts: &[MeshVertex], idx: &[u32]) {
+        while self.sim.len() <= k {
+            self.sim.push((None, None));
+        }
+        let slot = &mut self.sim[k];
+        DynBuf::write(&mut slot.0, device, queue, bytemuck::cast_slice(verts), verts.len() as u32, wgpu::BufferUsages::VERTEX, "millwise_sim_vb");
+        DynBuf::write(&mut slot.1, device, queue, bytemuck::cast_slice(idx), idx.len() as u32, wgpu::BufferUsages::INDEX, "millwise_sim_ib");
+    }
+
+    /// Ile kawałków siatki materiału rysować (0 = ukryta).
+    pub fn set_sim_chunks(&mut self, n: usize) {
+        self.sim_used = n.min(self.sim.len());
     }
 
     /// Linie zmieniające się co klatkę (narzędzie).
@@ -333,20 +354,22 @@ impl Renderer {
                 multiview_mask: None,
             });
             pass.set_bind_group(0, &self.bind_group, &[]);
-            if let Some(b) = &self.opaque {
+            for b in &self.opaque {
                 pass.set_pipeline(&self.mesh_pipeline);
                 pass.set_vertex_buffer(0, b.buf.slice(..));
                 pass.draw(0..b.count, 0..1);
             }
-            if let (Some(vb), Some(ib)) = (&self.sim_vb, &self.sim_ib) {
-                if vb.count > 0 && ib.count > 0 {
-                    pass.set_pipeline(&self.mesh_pipeline);
-                    pass.set_vertex_buffer(0, vb.buf.slice(..));
-                    pass.set_index_buffer(ib.buf.slice(..), wgpu::IndexFormat::Uint32);
-                    pass.draw_indexed(0..ib.count, 0, 0..1);
+            for (vb, ib) in self.sim.iter().take(self.sim_used) {
+                if let (Some(vb), Some(ib)) = (vb, ib) {
+                    if vb.count > 0 && ib.count > 0 {
+                        pass.set_pipeline(&self.mesh_pipeline);
+                        pass.set_vertex_buffer(0, vb.buf.slice(..));
+                        pass.set_index_buffer(ib.buf.slice(..), wgpu::IndexFormat::Uint32);
+                        pass.draw_indexed(0..ib.count, 0, 0..1);
+                    }
                 }
             }
-            if let Some(b) = &self.lines {
+            for b in &self.lines {
                 pass.set_pipeline(&self.line_pipeline);
                 pass.set_vertex_buffer(0, b.buf.slice(..));
                 pass.draw(0..b.count, 0..1);
@@ -356,7 +379,7 @@ impl Renderer {
                 pass.set_vertex_buffer(0, b.buf.slice(..));
                 pass.draw(0..b.count, 0..1);
             }
-            if let Some(b) = &self.transparent {
+            for b in &self.transparent {
                 pass.set_pipeline(&self.transparent_pipeline);
                 pass.set_vertex_buffer(0, b.buf.slice(..));
                 pass.draw(0..b.count, 0..1);

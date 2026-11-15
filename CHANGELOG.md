@@ -103,6 +103,14 @@ Version numbers:
   computed on all processor cores. The finishing pass spacing is entered in
   millimetres.
 
+### Fixed
+
+- **Crash in the simulation of very detailed material** („Buffer size … is
+  greater than the maximum buffer size”). The material surface now goes to
+  the graphics card in parts that fit its limits, a solid that grows beyond
+  2 million triangles switches the simulation to the Fast engine (with a
+  note), and a graphics error no longer closes the program.
+
 ## 0.5.0 (2026-11-15)
 
 ### Added

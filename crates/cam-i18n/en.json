@@ -51,6 +51,7 @@
  "Brak ścieżki — dodaj krzywe": "No toolpath — add curves",
  "Brama jeździ nad stołem, np. 6040": "The gantry moves over the table, e.g. 6040",
  "Bryła": "Solid",
+ "Bryła za szczegółowa ({:.1} mln trójkątów) — symulacja na silniku Szybkim.": "Solid too detailed ({:.1} million triangles) — the simulation uses the Fast engine.",
  "Błąd": "Error",
  "Błędny wierzchołek w pliku STL": "Invalid vertex in the STL file",
  "Cały program jest liczony raz — potem przewijanie i odtwarzanie są płynne.": "The whole program is computed once — then seeking and playback are smooth.",

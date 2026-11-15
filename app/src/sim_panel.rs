@@ -44,6 +44,8 @@ enum Msg {
     Progress(f32),
     Ready { duration: f64, op_start: Vec<f64>, collisions: Vec<Collision>, cell: f64, millis: u128 },
     Frame(Box<Frame>),
+    /// Bryła przekroczyła limit trójkątów — symulacja na mapie wysokości.
+    SolidTooBig(usize),
 }
 
 struct Worker {
@@ -110,9 +112,17 @@ fn spawn_worker(
                     c.request_repaint();
                     alive
                 });
-                if !ok {
-                    return;
+                match (ok, s.too_big) {
+                    (true, _) => {}
+                    // bryła za szczegółowa — dalej na mapie wysokości (już policzonej)
+                    (false, Some(n)) => {
+                        let _ = tx_msg.send(Msg::SolidTooBig(n));
+                    }
+                    (false, None) => return,
                 }
+            }
+            if solid.as_ref().is_some_and(|s| s.too_big.is_some()) {
+                solid = None;
             }
             let ready = Msg::Ready {
                 duration: dur,
@@ -204,6 +214,8 @@ pub struct SimState {
     engine_auto: bool,
     /// Automatycznie wybrano silnik „Szybki”, bo program jest bardzo gęsty (liczba ruchów).
     dense: Option<usize>,
+    /// Bryła przerosła limit (liczba trójkątów) — przełączono na „Szybki”.
+    too_big: Option<usize>,
 }
 
 /// Od tylu ruchów silnik bryłowy liczyłby za długo — automatycznie „Szybki”.
@@ -243,6 +255,7 @@ impl Default for SimState {
             scrubbing: false,
             engine_auto: true,
             dense: None,
+            too_big: None,
         }
     }
 }
@@ -340,6 +353,15 @@ impl SimState {
                 Msg::Frame(f) => {
                     self.frame = Some(*f);
                     self.pending = false;
+                }
+                Msg::SolidTooBig(n) => {
+                    // wątek liczy już na mapie wysokości — bez przebudowy symulacji
+                    self.engine = Engine::Fast;
+                    self.engine_auto = false;
+                    self.too_big = Some(n);
+                    if let Some(k) = &mut self.built_for {
+                        k.4 .0 = false;
+                    }
                 }
             }
         }
@@ -475,8 +497,16 @@ impl SimState {
                 .on_hover_text(tr!("Mapa wysokości — natychmiastowe przeliczenie, dla bardzo dużych programów"));
             if a.clicked() || b.clicked() {
                 self.engine_auto = false;
+                self.too_big = None;
             }
         });
+        if let (Some(n), Engine::Fast) = (self.too_big, self.engine) {
+            ui.label(
+                RichText::new(tr!("Bryła za szczegółowa ({:.1} mln trójkątów) — symulacja na silniku Szybkim.", n as f64 / 1e6))
+                    .small()
+                    .color(Color32::from_rgb(230, 180, 80)),
+            );
+        }
         if let (Some(n), true, Engine::Fast) = (self.dense, self.engine_auto, self.engine) {
             ui.label(
                 RichText::new(tr!("Bardzo gęsta ścieżka ({} ruchów) — wybrano silnik Szybki; Bryła liczyłaby się bardzo długo.", n))
@@ -702,6 +732,10 @@ mod perf {
             true
         });
         eprintln!("bryła: {} odcinków, co {every}, przeliczenie {:?}, {}", ss.segment_count(), t.elapsed(), ss.stats());
+        if let Some(n) = ss.too_big {
+            eprintln!("bryła za szczegółowa: {n} trójkątów — przerwano");
+            return;
+        }
         eprintln!("klatki kluczowe: {} trójkątów razem", ss.keyframe_triangles());
         // przewijanie ręczne: skoki w różne miejsca
         let dur = sim.duration();

@@ -115,14 +115,16 @@ impl View3D {
         match sim {
             Some(sd) if sd.show_material => {
                 if self.sim_key != Some(sd.key) {
-                    let v = color_sim_mesh(sd.mesh, sd.top, sd.bottom);
-                    renderer.upload_sim(&rs.device, &rs.queue, &v, &sd.mesh.indices);
+                    let n = sim_mesh_chunks(sd.mesh, sd.top, sd.bottom, renderer::CHUNK_VERTS, |k, v, i| {
+                        renderer.upload_sim_chunk(&rs.device, &rs.queue, k, v, i)
+                    });
+                    renderer.set_sim_chunks(n);
                     self.sim_key = Some(sd.key);
                 }
             }
             _ => {
                 if self.sim_key.is_some() {
-                    renderer.upload_sim(&rs.device, &rs.queue, &[], &[]);
+                    renderer.set_sim_chunks(0);
                     self.sim_key = None;
                 }
             }
@@ -478,29 +480,64 @@ fn push_box(out: &mut Vec<MeshVertex>, min: Vec3, max: Vec3, color: [f32; 4]) {
 }
 
 /// Kolory siatki materiału: góra — drewno, dno wycięć ciemniejsze z głębokością, ściany, boki.
-fn color_sim_mesh(mesh: &cam_sim::SimMesh, top: f32, bottom: f32) -> Vec<MeshVertex> {
+/// Siatka materiału w kawałkach dla karty graficznej: każdy kawałek ma najwyżej
+/// `max_verts` wierzchołków (z kolorami) i własne indeksy i od razu idzie do `emit(nr, …)`.
+/// Wielka siatka (np. po gęstym wykańczaniu) nie mieści się w jednym buforze — i nie jest
+/// kopiowana w całości naraz. Zwraca liczbę kawałków.
+fn sim_mesh_chunks(
+    mesh: &cam_sim::SimMesh,
+    top: f32,
+    bottom: f32,
+    max_verts: usize,
+    mut emit: impl FnMut(usize, &[MeshVertex], &[u32]),
+) -> usize {
     let range = (top - bottom).max(1e-3);
     let wood_top = egui::Rgba::from(Color32::from_rgb(200, 164, 112));
     let cut_hi = egui::Rgba::from(Color32::from_rgb(178, 136, 88));
     let cut_lo = egui::Rgba::from(Color32::from_rgb(120, 86, 52));
     let wall = egui::Rgba::from(Color32::from_rgb(168, 126, 80));
     let side = egui::Rgba::from(Color32::from_rgb(150, 112, 70));
-    mesh.verts
-        .iter()
-        .map(|v| {
-            let z = v.pos[2];
-            let c = match v.kind {
-                1 => wall,
-                2 => side,
-                _ if z >= top - 1e-3 => wood_top,
-                _ => {
-                    let f = ((top - z) / range).clamp(0.0, 1.0);
-                    cut_hi * (1.0 - f) + cut_lo * f
-                }
-            };
-            MeshVertex { pos: v.pos, normal: v.normal, color: [c.r(), c.g(), c.b(), 1.0] }
-        })
-        .collect()
+    let color = |v: &cam_sim::SimVertex| {
+        let z = v.pos[2];
+        let c = match v.kind {
+            1 => wall,
+            2 => side,
+            _ if z >= top - 1e-3 => wood_top,
+            _ => {
+                let f = ((top - z) / range).clamp(0.0, 1.0);
+                cut_hi * (1.0 - f) + cut_lo * f
+            }
+        };
+        MeshVertex { pos: v.pos, normal: v.normal, color: [c.r(), c.g(), c.b(), 1.0] }
+    };
+    // numer wierzchołka w bieżącym kawałku: (kawałek + 1, numer); 0 = jeszcze nie użyty
+    let mut local: Vec<(u32, u32)> = vec![(0, 0); mesh.verts.len()];
+    let mut n = 0;
+    let mut verts: Vec<MeshVertex> = Vec::new();
+    let mut idx: Vec<u32> = Vec::new();
+    let mut stamp = 1u32;
+    for tri in mesh.indices.chunks_exact(3) {
+        if verts.len() + 3 > max_verts {
+            emit(n, &verts, &idx);
+            n += 1;
+            verts.clear();
+            idx.clear();
+            stamp += 1;
+        }
+        for &g in tri {
+            let slot = &mut local[g as usize];
+            if slot.0 != stamp {
+                *slot = (stamp, verts.len() as u32);
+                verts.push(color(&mesh.verts[g as usize]));
+            }
+            idx.push(slot.1);
+        }
+    }
+    if !idx.is_empty() {
+        emit(n, &verts, &idx);
+        n += 1;
+    }
+    n
 }
 
 /// Sylwetka narzędzia z linii: okręgi na czubku i końcu ostrzy, tworzące, oś.
@@ -531,4 +568,45 @@ fn tool_outline(tip: cam_ops::P3, r: f64, len: f64, color: Color32) -> Vec<LineV
     }
     line(&mut out, t, t + Vec3::Z * len * 2.2, lin(Color32::from_rgb(235, 90, 70)));
     out
+}
+
+#[cfg(test)]
+mod chunk_tests {
+    use super::*;
+
+    #[test]
+    fn big_mesh_is_split_into_chunks_with_the_same_triangles() {
+        // siatka 300 × 300 węzłów, indeksowana jak mapa wysokości
+        let n = 300;
+        let mut mesh = cam_sim::SimMesh::default();
+        for j in 0..n {
+            for i in 0..n {
+                mesh.verts.push(cam_sim::SimVertex { pos: [i as f32, j as f32, -(i % 7) as f32], normal: [0.0, 0.0, 1.0], kind: 0 });
+            }
+        }
+        for j in 0..n - 1 {
+            for i in 0..n - 1 {
+                let a = (j * n + i) as u32;
+                mesh.indices.extend_from_slice(&[a, a + 1, a + n as u32 + 1, a, a + n as u32 + 1, a + n as u32]);
+            }
+        }
+        let mut chunks: Vec<(Vec<MeshVertex>, Vec<u32>)> = Vec::new();
+        let n = sim_mesh_chunks(&mesh, 0.0, -10.0, 10_000, |k, v, i| {
+            assert_eq!(k, chunks.len());
+            chunks.push((v.to_vec(), i.to_vec()));
+        });
+        assert_eq!(n, chunks.len());
+        assert!(chunks.len() >= 9, "{}", chunks.len());
+        let mut k = 0;
+        for (v, idx) in &chunks {
+            assert!(v.len() <= 10_000);
+            for &l in idx {
+                // ten sam wierzchołek co w całej siatce, w tej samej kolejności trójkątów
+                assert_eq!(v[l as usize].pos, mesh.verts[mesh.indices[k] as usize].pos);
+                k += 1;
+            }
+        }
+        assert_eq!(k, mesh.indices.len());
+        assert_eq!(sim_mesh_chunks(&cam_sim::SimMesh::default(), 0.0, -1.0, 100, |_, _, _| {}), 0);
+    }
 }
