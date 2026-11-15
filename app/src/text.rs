@@ -1,5 +1,6 @@
 //! Napisy: tekst zamieniany na krzywe (zarysy liter) z czcionki TrueType.
 
+use cam_i18n::tr;
 use cam_geom::{Contour, Vec2, Vertex};
 use std::path::PathBuf;
 
@@ -18,8 +19,8 @@ impl FontChoice {
     pub fn label(&self) -> String {
         match self {
             FontChoice::Ubuntu => "Ubuntu".into(),
-            FontChoice::Hack => "Hack (stała szerokość)".into(),
-            FontChoice::File(p) => p.file_name().map_or("plik".into(), |n| n.to_string_lossy().into_owned()),
+            FontChoice::Hack => tr!("Hack (stała szerokość)").into(),
+            FontChoice::File(p) => p.file_name().map_or(tr!("plik").into(), |n| n.to_string_lossy().into_owned()),
         }
     }
 
@@ -90,7 +91,7 @@ impl ttf_parser::OutlineBuilder for Outline {
 /// linii bazowej pierwszego wiersza; `height` — wysokość wielkich liter [mm];
 /// `spacing` — dodatkowy odstęp między znakami [mm]; kolejne wiersze niżej.
 pub fn text_contours(font: &[u8], text: &str, height: f64, spacing: f64) -> Result<Vec<Contour>, String> {
-    let face = ttf_parser::Face::parse(font, 0).map_err(|e| format!("Nie można odczytać czcionki: {e}"))?;
+    let face = ttf_parser::Face::parse(font, 0).map_err(|e| tr!("Nie można odczytać czcionki: {}", e))?;
     let cap = face.capital_height().filter(|h| *h > 0).map_or(face.ascender() as f64 * 0.7, |h| h as f64);
     let scale = height.max(0.01) / cap;
     let line_h = (face.height() as f64 + face.line_gap() as f64) * scale;

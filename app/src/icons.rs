@@ -1,5 +1,6 @@
 //! Ikony i rysunki rysowane wektorowo (ostre w każdej skali, bez plików graficznych).
 
+use cam_i18n::tr;
 use cam_ops::ToolKind;
 use eframe::egui::{self, Color32, Pos2, Rect, Shape, Stroke, StrokeKind};
 use std::f32::consts::PI;
@@ -484,7 +485,7 @@ pub fn tool_button(ui: &mut egui::Ui, icon: Icon, label: &str, active: bool, ena
     };
     painter.galley(Pos2::new(rect.center().x, icon_rect.bottom() + 3.0), galley, text_color);
     if !enabled {
-        resp.on_hover_text("Wkrótce")
+        resp.on_hover_text(tr!("Wkrótce"))
     } else {
         resp
     }

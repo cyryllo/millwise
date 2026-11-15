@@ -14,6 +14,7 @@ mod ui_ops;
 mod ui_tools;
 mod doc;
 mod history;
+mod i18n_check;
 mod view2d;
 mod view3d;
 
@@ -87,6 +88,8 @@ fn main() -> eframe::Result<()> {
     }
 
     let args: Vec<String> = std::env::args().skip(1).collect();
+    // język: zapisany w ustawieniach, a za pierwszym razem — język systemu
+    cam_i18n::set_lang(storage::saved_language().unwrap_or_else(cam_i18n::Lang::from_system));
     choose_backend(&args);
     let files: Vec<std::path::PathBuf> =
         args.iter().filter(|a| !a.starts_with("--")).map(std::path::PathBuf::from).collect();

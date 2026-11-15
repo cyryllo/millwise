@@ -1,6 +1,7 @@
 //! Okno biblioteki narzędzi: lista, wizualny wybór rodzaju freza, rysunek z wymiarami,
 //! parametry skrawania dla materiałów.
 
+use cam_i18n::tr;
 use crate::icons;
 use cam_ops::{CutPreset, FluteDir, Tool, ToolKind, ToolLibrary};
 use eframe::egui::{self, Color32, Pos2, Rect, RichText, Stroke, StrokeKind};
@@ -30,12 +31,12 @@ fn kind_options() -> [ToolKind; 6] {
 
 fn kind_short(k: &ToolKind) -> &'static str {
     match k {
-        ToolKind::FlatEnd => "Płaski",
-        ToolKind::BallEnd => "Kulowy",
-        ToolKind::BullNose { .. } => "Z promieniem",
-        ToolKind::VBit { .. } => "V (fazowanie)",
-        ToolKind::Engraver { .. } => "Grawerski",
-        ToolKind::Drill { .. } => "Wiertło",
+        ToolKind::FlatEnd => tr!("Płaski"),
+        ToolKind::BallEnd => tr!("Kulowy"),
+        ToolKind::BullNose { .. } => tr!("Z promieniem"),
+        ToolKind::VBit { .. } => tr!("V (fazowanie)"),
+        ToolKind::Engraver { .. } => tr!("Grawerski"),
+        ToolKind::Drill { .. } => tr!("Wiertło"),
     }
 }
 
@@ -55,31 +56,31 @@ impl ToolsWindow {
         }
         let mut changed = false;
         let mut open = self.open;
-        egui::Window::new("Biblioteka narzędzi")
+        egui::Window::new(tr!("Biblioteka narzędzi"))
             .open(&mut open)
             .default_size([1120.0, 680.0])
             .resizable(true)
             .collapsible(false)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    if ui.button(RichText::new("+ Nowy").strong()).clicked() {
-                        let t = Tool { number: lib.next_number(), name: "Nowy frez".into(), ..Default::default() };
+                    if ui.button(RichText::new(tr!("+ Nowy")).strong()).clicked() {
+                        let t = Tool { number: lib.next_number(), name: tr!("Nowy frez").into(), ..Default::default() };
                         self.selected = Some(lib.add(t));
                         self.preset = None;
                         changed = true;
                     }
                     if let Some(id) = self.selected {
-                        if ui.button("Duplikuj").clicked() {
+                        if ui.button(tr!("Duplikuj")).clicked() {
                             if let Some(t) = lib.get(id).cloned() {
-                                let t = Tool { number: lib.next_number(), name: format!("{} (kopia)", t.name), ..t };
+                                let t = Tool { number: lib.next_number(), name: tr!("{} (kopia)", t.name), ..t };
                                 self.selected = Some(lib.add(t));
                                 changed = true;
                             }
                         }
                         let in_use = used.contains(&id);
                         if ui
-                            .add_enabled(!in_use, egui::Button::new("Usuń"))
-                            .on_disabled_hover_text("Narzędzie jest używane przez operację")
+                            .add_enabled(!in_use, egui::Button::new(tr!("Usuń")))
+                            .on_disabled_hover_text(tr!("Narzędzie jest używane przez operację"))
                             .clicked()
                         {
                             lib.remove(id);
@@ -89,7 +90,7 @@ impl ToolsWindow {
                         }
                     }
                     if let Some(p) = crate::storage::tools_path() {
-                        ui.label(RichText::new(format!("{} · wspólna dla wszystkich projektów", p.display())).small().weak());
+                        ui.label(RichText::new(tr!("{} · wspólna dla wszystkich projektów", p.display())).small().weak());
                     }
                 });
                 ui.separator();
@@ -111,13 +112,13 @@ impl ToolsWindow {
                     });
                     ui.separator();
                     let Some(t) = self.selected.and_then(|id| lib.get_mut(id)) else {
-                        ui.label("Wybierz narzędzie z listy.");
+                        ui.label(tr!("Wybierz narzędzie z listy."));
                         return;
                     };
                     // --- rodzaj + rysunek ---
                     ui.vertical(|ui| {
                         ui.set_width(370.0);
-                        ui.strong("Rodzaj freza");
+                        ui.strong(tr!("Rodzaj freza"));
                         egui::Grid::new("kinds").spacing([8.0, 8.0]).show(ui, |ui| {
                             for (n, k) in kind_options().into_iter().enumerate() {
                                 let active = same_kind(&k, &t.kind);
@@ -248,25 +249,25 @@ fn row(ui: &mut egui::Ui, label: &str, v: &mut f64, range: std::ops::RangeInclus
 fn params(ui: &mut egui::Ui, t: &mut Tool, preset: &mut Option<usize>) -> bool {
     let mut changed = false;
     egui::Grid::new("tool_general").num_columns(2).spacing([10.0, 5.0]).show(ui, |ui| {
-        ui.label("Numer (T)");
+        ui.label(tr!("Numer (T)"));
         let mut n = t.number as f64;
         if ui.add(egui::DragValue::new(&mut n).range(0.0..=999.0).speed(0.1).max_decimals(0)).changed() {
             t.number = n as u32;
             changed = true;
         }
         ui.end_row();
-        ui.label("Nazwa");
+        ui.label(tr!("Nazwa"));
         changed |= ui.add(egui::TextEdit::singleline(&mut t.name).desired_width(240.0)).changed();
         ui.end_row();
     });
 
     ui.add_space(6.0);
-    ui.strong("Geometria");
+    ui.strong(tr!("Geometria"));
     egui::Grid::new("tool_geom").num_columns(2).spacing([10.0, 5.0]).show(ui, |ui| {
-        changed |= row(ui, "Średnica", &mut t.diameter, 0.01..=200.0, 0.01, " mm", Some(DIM_D));
-        changed |= row(ui, "Długość ostrzy", &mut t.flute_length, 0.1..=300.0, 0.1, " mm", Some(DIM_L));
-        changed |= row(ui, "Średnica chwytu", &mut t.shank_diameter, 0.1..=100.0, 0.01, " mm", None);
-        ui.label("Liczba ostrzy");
+        changed |= row(ui, tr!("Średnica"), &mut t.diameter, 0.01..=200.0, 0.01, " mm", Some(DIM_D));
+        changed |= row(ui, tr!("Długość ostrzy"), &mut t.flute_length, 0.1..=300.0, 0.1, " mm", Some(DIM_L));
+        changed |= row(ui, tr!("Średnica chwytu"), &mut t.shank_diameter, 0.1..=100.0, 0.01, " mm", None);
+        ui.label(tr!("Liczba ostrzy"));
         let mut f = t.flutes as f64;
         if ui.add(egui::DragValue::new(&mut f).range(1.0..=12.0).speed(0.05).max_decimals(0)).changed() {
             t.flutes = f as u32;
@@ -275,19 +276,19 @@ fn params(ui: &mut egui::Ui, t: &mut Tool, preset: &mut Option<usize>) -> bool {
         ui.end_row();
         match &mut t.kind {
             ToolKind::BullNose { corner_radius } => {
-                changed |= row(ui, "Promień naroża", corner_radius, 0.0..=50.0, 0.05, " mm", None);
+                changed |= row(ui, tr!("Promień naroża"), corner_radius, 0.0..=50.0, 0.05, " mm", None);
             }
             ToolKind::VBit { angle, tip_diameter } | ToolKind::Engraver { angle, tip_diameter } => {
-                changed |= row(ui, "Kąt", angle, 5.0..=170.0, 0.5, "°", None);
-                changed |= row(ui, "Średnica czubka", tip_diameter, 0.0..=10.0, 0.01, " mm", None);
+                changed |= row(ui, tr!("Kąt"), angle, 5.0..=170.0, 0.5, "°", None);
+                changed |= row(ui, tr!("Średnica czubka"), tip_diameter, 0.0..=10.0, 0.01, " mm", None);
             }
             ToolKind::Drill { point_angle } => {
-                changed |= row(ui, "Kąt wierzchołkowy", point_angle, 60.0..=180.0, 0.5, "°", None);
+                changed |= row(ui, tr!("Kąt wierzchołkowy"), point_angle, 60.0..=180.0, 0.5, "°", None);
             }
             _ => {}
         }
         if matches!(t.kind, ToolKind::FlatEnd | ToolKind::BallEnd | ToolKind::BullNose { .. }) {
-            ui.label("Kierunek spirali");
+            ui.label(tr!("Kierunek spirali"));
             ui.horizontal(|ui| {
                 for d in [FluteDir::Upcut, FluteDir::Downcut, FluteDir::Compression] {
                     changed |= ui.selectable_value(&mut t.flute_dir, d, d.label()).changed();
@@ -298,31 +299,31 @@ fn params(ui: &mut egui::Ui, t: &mut Tool, preset: &mut Option<usize>) -> bool {
     });
 
     ui.add_space(8.0);
-    ui.strong("Parametry skrawania dla materiału");
+    ui.strong(tr!("Parametry skrawania dla materiału"));
     if preset.is_some_and(|k| k >= t.presets.len()) {
         *preset = None;
     }
     ui.horizontal_wrapped(|ui| {
-        if ui.selectable_label(preset.is_none(), "Domyślne").clicked() {
+        if ui.selectable_label(preset.is_none(), tr!("Domyślne")).clicked() {
             *preset = None;
         }
         for (k, p) in t.presets.iter().enumerate() {
-            if ui.selectable_label(*preset == Some(k), &p.material).clicked() {
+            if ui.selectable_label(*preset == Some(k), cam_i18n::tr_dyn(&p.material)).clicked() {
                 *preset = Some(k);
             }
         }
         if t.presets.is_empty()
             && ui
-                .button("Typowe materiały")
-                .on_hover_text("Utwórz zestawy Drewno / MDF / Aluminium / Plexi wyliczone z parametrów domyślnych — sprawdź je przed użyciem")
+                .button(tr!("Typowe materiały"))
+                .on_hover_text(tr!("Utwórz zestawy Drewno / MDF / Aluminium / Plexi wyliczone z parametrów domyślnych — sprawdź je przed użyciem"))
                 .clicked()
         {
             *t = t.clone().with_material_presets();
             changed = true;
         }
-        if ui.button("+ materiał").clicked() {
+        if ui.button(tr!("+ materiał")).clicked() {
             let mut p = t.base_preset();
-            p.material = format!("Materiał {}", t.presets.len() + 1);
+            p.material = tr!("Materiał {}", t.presets.len() + 1);
             t.presets.push(p);
             *preset = Some(t.presets.len() - 1);
             changed = true;
@@ -337,9 +338,9 @@ fn params(ui: &mut egui::Ui, t: &mut Tool, preset: &mut Option<usize>) -> bool {
     if let Some(k) = *preset {
         p = &mut t.presets[k];
         ui.horizontal(|ui| {
-            ui.label("Nazwa materiału");
+            ui.label(tr!("Nazwa materiału"));
             changed |= ui.add(egui::TextEdit::singleline(&mut p.material).desired_width(160.0)).changed();
-            if ui.small_button("Usuń zestaw").clicked() {
+            if ui.small_button(tr!("Usuń zestaw")).clicked() {
                 remove = true;
             }
         });
@@ -349,12 +350,12 @@ fn params(ui: &mut egui::Ui, t: &mut Tool, preset: &mut Option<usize>) -> bool {
     }
     let mut edited = false;
     egui::Grid::new("tool_cut").num_columns(2).spacing([10.0, 5.0]).show(ui, |ui| {
-        edited |= row(ui, "Obroty", &mut p.rpm, 0.0..=100000.0, 100.0, " obr/min", None);
-        edited |= row(ui, "Posuw (XY)", &mut p.feed, 1.0..=50000.0, 10.0, " mm/min", None);
-        edited |= row(ui, "Posuw wgłębny (Z)", &mut p.plunge_feed, 1.0..=50000.0, 5.0, " mm/min", None);
-        edited |= row(ui, "Krok w dół", &mut p.step_down, 0.01..=100.0, 0.05, " mm", None);
+        edited |= row(ui, tr!("Obroty"), &mut p.rpm, 0.0..=100000.0, 100.0, tr!(" obr/min"), None);
+        edited |= row(ui, tr!("Posuw (XY)"), &mut p.feed, 1.0..=50000.0, 10.0, " mm/min", None);
+        edited |= row(ui, tr!("Posuw wgłębny (Z)"), &mut p.plunge_feed, 1.0..=50000.0, 5.0, " mm/min", None);
+        edited |= row(ui, tr!("Krok w dół"), &mut p.step_down, 0.01..=100.0, 0.05, " mm", None);
         let mut pct = p.stepover * 100.0;
-        ui.label("Stepover");
+        ui.label(tr!("Stepover"));
         if ui.add(egui::DragValue::new(&mut pct).range(1.0..=100.0).speed(0.5).suffix(" % Ø")).changed() {
             p.stepover = pct / 100.0;
             edited = true;
@@ -364,8 +365,8 @@ fn params(ui: &mut egui::Ui, t: &mut Tool, preset: &mut Option<usize>) -> bool {
     let fz = if flutes > 0 && p.rpm > 0.0 { p.feed / (p.rpm * flutes as f64) } else { 0.0 };
     let vc = std::f64::consts::PI * d * p.rpm / 1000.0;
     ui.horizontal(|ui| {
-        stat(ui, "Posuw na ząb (fz)", format!("{fz:.3} mm"));
-        stat(ui, "Prędkość skrawania (Vc)", format!("{vc:.0} m/min"));
+        stat(ui, tr!("Posuw na ząb (fz)"), format!("{fz:.3} mm"));
+        stat(ui, tr!("Prędkość skrawania (Vc)"), format!("{vc:.0} m/min"));
     });
     if editing_base && edited {
         let b = p.clone();
@@ -384,7 +385,7 @@ fn params(ui: &mut egui::Ui, t: &mut Tool, preset: &mut Option<usize>) -> bool {
     }
 
     ui.add_space(8.0);
-    ui.label("Notatki");
+    ui.label(tr!("Notatki"));
     changed |= ui.add(egui::TextEdit::multiline(&mut t.notes).desired_rows(3).desired_width(f32::INFINITY)).changed();
     changed
 }

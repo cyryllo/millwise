@@ -1,5 +1,6 @@
 //! Zapis/odczyt: globalna biblioteka narzędzi i maszyn oraz pliki projektu (.millwise).
 
+use cam_i18n::tr;
 use crate::doc::{DocContour, Document, Layer, Stock};
 use anyhow::{Context, Result};
 use cam_geom::Contour;
@@ -21,6 +22,28 @@ fn config_file(name: &str) -> Option<PathBuf> {
         let _ = std::fs::copy(&old, &path);
     }
     Some(path)
+}
+
+// ---------- ustawienia programu ----------
+
+/// Język zapisany w ustawieniach (`settings.json`); brak = język systemu.
+pub fn saved_language() -> Option<cam_i18n::Lang> {
+    let text = std::fs::read_to_string(config_file("settings.json")?).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&text).ok()?;
+    cam_i18n::Lang::from_code(v.get("language")?.as_str()?)
+}
+
+pub fn save_language(l: cam_i18n::Lang) {
+    let Some(p) = config_file("settings.json") else { return };
+    let mut v: serde_json::Value = std::fs::read_to_string(&p)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_else(|| serde_json::json!({}));
+    v["language"] = serde_json::Value::String(l.code().into());
+    if let Some(dir) = p.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    let _ = std::fs::write(&p, serde_json::to_string_pretty(&v).unwrap_or_default());
 }
 
 // ---------- automatyzacja ----------
@@ -73,7 +96,7 @@ pub fn tools_path() -> Option<PathBuf> {
 
 pub fn load_tools() -> (ToolLibrary, Option<String>) {
     let Some(path) = tools_path() else {
-        return (ToolLibrary::with_defaults(), Some("Brak katalogu konfiguracji — biblioteka nie będzie zapisywana".into()));
+        return (ToolLibrary::with_defaults(), Some(tr!("Brak katalogu konfiguracji — biblioteka nie będzie zapisywana").into()));
     };
     match std::fs::read_to_string(&path) {
         Ok(text) => match serde_json::from_str::<ToolLibrary>(&text) {
@@ -84,7 +107,7 @@ pub fn load_tools() -> (ToolLibrary, Option<String>) {
                 let _ = std::fs::copy(&path, &backup);
                 (
                     ToolLibrary::with_defaults(),
-                    Some(format!("Nie można odczytać {}: {e}. Kopia: {}", path.display(), backup.display())),
+                    Some(tr!("Nie można odczytać {}: {}. Kopia: {}", path.display(), e, backup.display())),
                 )
             }
         },
@@ -97,7 +120,7 @@ pub fn load_tools() -> (ToolLibrary, Option<String>) {
 }
 
 pub fn save_tools(lib: &ToolLibrary) -> Result<()> {
-    let path = tools_path().context("Brak katalogu konfiguracji")?;
+    let path = tools_path().context(tr!("Brak katalogu konfiguracji"))?;
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
@@ -126,7 +149,7 @@ pub fn load_machines() -> (MachineLibrary, Option<String>) {
                 let _ = std::fs::copy(&path, &backup);
                 (
                     MachineLibrary::with_defaults(),
-                    Some(format!("Nie można odczytać {}: {e}. Kopia: {}", path.display(), backup.display())),
+                    Some(tr!("Nie można odczytać {}: {}. Kopia: {}", path.display(), e, backup.display())),
                 )
             }
         },
@@ -139,7 +162,7 @@ pub fn load_machines() -> (MachineLibrary, Option<String>) {
 }
 
 pub fn save_machines(lib: &MachineLibrary) -> Result<()> {
-    let path = machines_path().context("Brak katalogu konfiguracji")?;
+    let path = machines_path().context(tr!("Brak katalogu konfiguracji"))?;
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }
@@ -208,7 +231,7 @@ pub fn save_project(doc: &Document, lib: &ToolLibrary, path: &Path) -> Result<()
         post: doc.post.clone(),
     };
     std::fs::write(path, serde_json::to_string_pretty(&pf)?)
-        .with_context(|| format!("Nie można zapisać {}", path.display()))?;
+        .with_context(|| tr!("Nie można zapisać {}", path.display()))?;
     Ok(())
 }
 
@@ -216,10 +239,10 @@ pub fn save_project(doc: &Document, lib: &ToolLibrary, path: &Path) -> Result<()
 /// (po id, potem po numerze i średnicy); brakujące są do niej dodawane.
 /// Zwraca dokument i informację, czy biblioteka się zmieniła.
 pub fn load_project(path: &Path, lib: &mut ToolLibrary) -> Result<(Document, bool)> {
-    let text = std::fs::read_to_string(path).with_context(|| format!("Nie można odczytać {}", path.display()))?;
-    let pf: ProjectFile = serde_json::from_str(&text).context("Niepoprawny plik projektu")?;
+    let text = std::fs::read_to_string(path).with_context(|| tr!("Nie można odczytać {}", path.display()))?;
+    let pf: ProjectFile = serde_json::from_str(&text).context(tr!("Niepoprawny plik projektu"))?;
     if pf.format != FORMAT && pf.format != FORMAT_OLD {
-        anyhow::bail!("To nie jest plik projektu Millwise");
+        anyhow::bail!(tr!("To nie jest plik projektu Millwise"));
     }
     let mut lib_changed = false;
     let mut remap: Vec<(u32, u32)> = Vec::new();

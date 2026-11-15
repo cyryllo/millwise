@@ -1,5 +1,6 @@
 //! Postprocesor G-code: GRBL / FluidNC oraz LinuxCNC, profile maszyn.
 
+use cam_i18n::tr;
 pub mod machine;
 pub use machine::{Controller, HomeCorner, Machine, MachineKind, MachineLibrary, SpindleKind};
 
@@ -46,9 +47,9 @@ pub enum ToolChange {
 impl ToolChange {
     pub fn label(&self) -> &'static str {
         match self {
-            ToolChange::ManualPause => "Ręczna (pauza M0)",
-            ToolChange::Automatic => "Automatyczna (M6)",
-            ToolChange::SeparateFiles => "Osobne pliki",
+            ToolChange::ManualPause => tr!("Ręczna (pauza M0)"),
+            ToolChange::Automatic => tr!("Automatyczna (M6)"),
+            ToolChange::SeparateFiles => tr!("Osobne pliki"),
         }
     }
 }
@@ -232,7 +233,7 @@ pub fn emit(title: &str, ops: &[ProgramOp], s: &PostSettings) -> String {
         w.line("%");
     }
     w.comment(&format!("Millwise - {title}"));
-    w.comment(&format!("Sterownik: {}", s.dialect.label()));
+    w.comment(&tr!("Sterownik: {}", s.dialect.label()));
     let mut tools: Vec<&Tool> = Vec::new();
     for op in ops {
         if !tools.iter().any(|t| t.id == op.tool.id) {
@@ -258,7 +259,7 @@ pub fn emit(title: &str, ops: &[ProgramOp], s: &PostSettings) -> String {
     let mut cur_tool: Option<u32> = None;
     let mut cur_rpm: Option<f64> = None;
     for op in ops {
-        w.comment(&format!("Operacja: {}", op.name));
+        w.comment(&tr!("Operacja: {}", op.name));
         if cur_tool != Some(op.tool.id) {
             let first = cur_tool.is_none();
             if !first {
@@ -281,9 +282,9 @@ pub fn emit(title: &str, ops: &[ProgramOp], s: &PostSettings) -> String {
                     w.line(&format!("G43 H{}", op.tool.number));
                 }
             } else if first {
-                w.comment(&format!("Zaloz narzedzie T{}: {}", op.tool.number, op.tool.name));
+                w.comment(&tr!("Zaloz narzedzie T{}: {}", op.tool.number, op.tool.name));
             } else {
-                w.comment(&format!("Zmien narzedzie na T{}: {}", op.tool.number, op.tool.name));
+                w.comment(&tr!("Zmien narzedzie na T{}: {}", op.tool.number, op.tool.name));
                 w.line("M0");
             }
             // po zmianie narzędzia pozycja jest nieznana
@@ -373,7 +374,7 @@ pub fn emit_split(title: &str, ops: &[ProgramOp], s: &PostSettings) -> Vec<(Stri
         }
         let part = &ops[start..end];
         let suffix = format!("{}_T{}", out.len() + 1, part[0].tool.number);
-        out.push((suffix, emit(&format!("{title} cz. {}", out.len() + 1), part, s)));
+        out.push((suffix, emit(&tr!("{} cz. {}", title, out.len() + 1), part, s)));
         start = end;
     }
     out

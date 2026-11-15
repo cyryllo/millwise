@@ -1,6 +1,7 @@
 //! Grawer / prowadzenie po linii: środek narzędzia na linii albo narzędzie
 //! z lewej / prawej strony linii (offset o promień).
 
+use cam_i18n::tr;
 use crate::operation::{order_inside_first, start_near, CutParams, EngraveParams, EngraveSide, OpResult};
 use crate::path::z_levels;
 use crate::profile::{cut_closed, cut_open};
@@ -20,7 +21,7 @@ pub(crate) fn generate(cut: &CutParams, p: &EngraveParams, tool: &Tool, contours
                 let d = if side == EngraveSide::Left { r } else { -r };
                 let out: Vec<Contour> = c.to_cavc().parallel_offset(d).iter().map(Contour::from_cavc).collect();
                 if out.is_empty() {
-                    res.warnings.push(format!("Krzywa #{}: brak miejsca na narzędzie po tej stronie", i + 1));
+                    res.warnings.push(tr!("Krzywa #{}: brak miejsca na narzędzie po tej stronie", i + 1));
                 }
                 out
             }

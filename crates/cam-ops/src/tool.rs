@@ -1,5 +1,6 @@
 //! Narzędzia (frezy, wiertła) i biblioteka narzędzi.
 
+use cam_i18n::tr;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -21,12 +22,12 @@ pub enum ToolKind {
 impl ToolKind {
     pub fn label(&self) -> &'static str {
         match self {
-            ToolKind::FlatEnd => "Płaski",
-            ToolKind::BallEnd => "Kulowy",
-            ToolKind::BullNose { .. } => "Z promieniem naroża",
-            ToolKind::VBit { .. } => "V (fazowanie)",
-            ToolKind::Engraver { .. } => "Grawerski",
-            ToolKind::Drill { .. } => "Wiertło",
+            ToolKind::FlatEnd => tr!("Płaski"),
+            ToolKind::BallEnd => tr!("Kulowy"),
+            ToolKind::BullNose { .. } => tr!("Z promieniem naroża"),
+            ToolKind::VBit { .. } => tr!("V (fazowanie)"),
+            ToolKind::Engraver { .. } => tr!("Grawerski"),
+            ToolKind::Drill { .. } => tr!("Wiertło"),
         }
     }
 }
@@ -44,10 +45,10 @@ pub enum FluteDir {
 impl FluteDir {
     pub fn label(&self) -> &'static str {
         match self {
-            FluteDir::Upcut => "W górę (upcut)",
-            FluteDir::Downcut => "W dół (downcut)",
-            FluteDir::Compression => "Kompresyjny",
-            FluteDir::Straight => "Prosty",
+            FluteDir::Upcut => tr!("W górę (upcut)"),
+            FluteDir::Downcut => tr!("W dół (downcut)"),
+            FluteDir::Compression => tr!("Kompresyjny"),
+            FluteDir::Straight => tr!("Prosty"),
         }
     }
 }
@@ -102,7 +103,7 @@ impl Default for Tool {
         Tool {
             id: 0,
             number: 1,
-            name: "Frez 6 mm".into(),
+            name: tr!("Frez 6 mm").into(),
             kind: ToolKind::FlatEnd,
             diameter: 6.0,
             flute_length: 20.0,
@@ -184,10 +185,10 @@ impl ToolLibrary {
         let mut lib = ToolLibrary::default();
         let base = Tool::default();
         for t in [
-            Tool { number: 1, name: "Frez płaski 6 mm".into(), ..base.clone() },
+            Tool { number: 1, name: tr!("Frez płaski 6 mm").into(), ..base.clone() },
             Tool {
                 number: 2,
-                name: "Frez płaski 3 mm".into(),
+                name: tr!("Frez płaski 3 mm").into(),
                 diameter: 3.0,
                 shank_diameter: 3.175,
                 flute_length: 12.0,
@@ -198,7 +199,7 @@ impl ToolLibrary {
             },
             Tool {
                 number: 3,
-                name: "Frez płaski 1/8\"".into(),
+                name: tr!("Frez płaski 1/8\"").into(),
                 diameter: 3.175,
                 shank_diameter: 3.175,
                 flute_length: 12.0,
@@ -209,7 +210,7 @@ impl ToolLibrary {
             },
             Tool {
                 number: 4,
-                name: "Frez kulowy 6 mm".into(),
+                name: tr!("Frez kulowy 6 mm").into(),
                 kind: ToolKind::BallEnd,
                 feed: 1500.0,
                 step_down: 1.0,
@@ -218,7 +219,7 @@ impl ToolLibrary {
             },
             Tool {
                 number: 7,
-                name: "Grawerski 30° / 0,2".into(),
+                name: tr!("Grawerski 30° / 0,2").into(),
                 kind: ToolKind::Engraver { angle: 30.0, tip_diameter: 0.2 },
                 diameter: 3.175,
                 shank_diameter: 3.175,
@@ -242,7 +243,7 @@ impl ToolLibrary {
             },
             Tool {
                 number: 6,
-                name: "Wiertło 6 mm".into(),
+                name: tr!("Wiertło 6 mm").into(),
                 kind: ToolKind::Drill { point_angle: 118.0 },
                 rpm: 8000.0,
                 feed: 300.0,

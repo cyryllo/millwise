@@ -30,6 +30,7 @@ not build exactly.
 
 | Crate | Contents |
 |---|---|
+| `crates/cam-i18n` | translations: `tr!` and the English dictionary `en.json` |
 | `crates/cam-geom` | contours with arcs (bulge), joining pieces into contours, transforms, offset (cavalier_contours) |
 | `crates/cam-io` | DXF import |
 | `crates/cam-ops` | tools, operations (profile, pocket, drilling, engraving) → toolpaths |
@@ -45,6 +46,18 @@ User data: `~/.config/millwise/` (`tools.json`, `machines.json`, and
 `use-opengl` when the default graphics did not open the window and Millwise
 switched to OpenGL — delete it or start with `--vulkan` to try again). On the first start after the rename they are
 copied from the old `camsoft` folder; projects saved as `.camsoft` still open.
+
+## Translations
+
+The interface is written in Polish; every text shown to the user goes
+through `tr!("…")` (crate `crates/cam-i18n`). The Polish text is the key, the
+English dictionary is `crates/cam-i18n/en.json` (Polish → English). Values
+go in with `{}` (or `{:.2}`, `{:>8}`): `tr!("Zapisano: {}", name)`. The test
+`every_translated_text_has_an_english_entry` fails when a `tr!` text has no
+English entry or its placeholders differ. Texts that are data (layer names,
+material names in files, G-code words) are not wrapped; material names are
+shown through `tr_dyn`. A new language = a new dictionary file and a
+`Lang` variant.
 
 ## Linux AppImage
 

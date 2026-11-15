@@ -1,6 +1,7 @@
 //! Kieszeń: ścieżki równoległe do konturu (offsetowe) od środka na zewnątrz,
 //! z obsługą wysp. Kontury zagnieżdżone na zmianę: granica / wyspa / granica…
 
+use cam_i18n::tr;
 use crate::operation::{dogbones, ramp_length, CutParams, Direction, Entry, OpResult, PocketParams, PocketStrategy};
 use crate::path::{z_levels, PathWalk, WalkSpec};
 use crate::tool::Tool;
@@ -19,7 +20,7 @@ struct Loop {
 pub(crate) fn generate(cut: &CutParams, p: &PocketParams, tool: &Tool, contours: &[Contour], res: &mut OpResult) {
     let closed: Vec<&Contour> = contours.iter().filter(|c| c.closed && c.verts.len() >= 2).collect();
     if closed.len() < contours.len() {
-        res.warnings.push("Kieszeń: pominięto kontury otwarte".into());
+        res.warnings.push(tr!("Kieszeń: pominięto kontury otwarte").into());
     }
     if closed.is_empty() {
         return;
@@ -89,7 +90,7 @@ pub(crate) fn generate(cut: &CutParams, p: &PocketParams, tool: &Tool, contours:
         d += stepover;
     }
     if by_level.is_empty() {
-        res.warnings.push(format!("Narzędzie Ø{} nie mieści się w kieszeni", tool.diameter));
+        res.warnings.push(tr!("Narzędzie Ø{} nie mieści się w kieszeni", tool.diameter));
         return;
     }
 

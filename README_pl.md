@@ -11,7 +11,7 @@
 Millwise to darmowy program CAM dla 3-osiowych frezarek CNC. Z rysunków DXF
 tworzy ścieżki narzędzia i zapisuje G-code dla **GRBL / FluidNC** oraz
 **LinuxCNC**. Jest napisany w Rust i działa na Linuksie (wersji dla Windows na
-razie nie planujemy).
+razie nie planujemy). Interfejs jest po polsku i po angielsku.
 
 ![Główne okno Millwise](docs/screenshot.png)
 

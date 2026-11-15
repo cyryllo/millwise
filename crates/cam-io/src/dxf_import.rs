@@ -4,6 +4,7 @@
 //! ELLIPSE oraz INSERT (bloki, z transformacją). Wszystko jest rzutowane na
 //! płaszczyznę XY i łączone w kontury osobno dla każdej warstwy.
 
+use cam_i18n::tr;
 use anyhow::{Context, Result};
 use cam_geom::contour::arc_steps;
 use cam_geom::{chain_segments, Contour, Vec2, Vertex};
@@ -47,7 +48,7 @@ pub struct DxfImport {
 pub fn load_dxf(path: impl AsRef<Path>, opts: &ImportOptions) -> Result<DxfImport> {
     let path = path.as_ref();
     let drawing =
-        Drawing::load_file(path).with_context(|| format!("Nie można wczytać pliku {}", path.display()))?;
+        Drawing::load_file(path).with_context(|| tr!("Nie można wczytać pliku {}", path.display()))?;
     Ok(import_drawing(&drawing, opts))
 }
 
@@ -75,22 +76,22 @@ pub fn import_drawing(drawing: &Drawing, opts: &ImportOptions) -> DxfImport {
         out.layers.push(layer);
     }
     for (kind, n) in ctx.skipped {
-        out.warnings.push(format!("Pominięto {n} × {kind} (nieobsługiwany typ)"));
+        out.warnings.push(tr!("Pominięto {} × {} (nieobsługiwany typ)", n, kind));
     }
     out
 }
 
 fn units_scale(u: Units) -> (f64, &'static str) {
     match u {
-        Units::Inches => (25.4, "cale"),
-        Units::Feet => (304.8, "stopy"),
+        Units::Inches => (25.4, tr!("cale")),
+        Units::Feet => (304.8, tr!("stopy")),
         Units::Centimeters => (10.0, "cm"),
         Units::Meters => (1000.0, "m"),
         Units::Decimeters => (100.0, "dm"),
         Units::Microns => (0.001, "µm"),
         Units::Mils => (0.0254, "mils"),
         Units::Millimeters => (1.0, "mm"),
-        _ => (1.0, "brak (przyjęto mm)"),
+        _ => (1.0, tr!("brak (przyjęto mm)")),
     }
 }
 
@@ -193,7 +194,7 @@ impl<'a> Ctx<'a> {
             EntityType::Polyline(p) => {
                 // 3D polyline (8), siatki (16, 64) — pomijamy
                 if p.flags & (8 | 16 | 64) != 0 {
-                    *self.skipped.entry("POLYLINE 3D/siatka").or_default() += 1;
+                    *self.skipped.entry(tr!("POLYLINE 3D/siatka")).or_default() += 1;
                     return;
                 }
                 let c = Contour {
@@ -223,7 +224,7 @@ impl<'a> Ctx<'a> {
                     return;
                 }
                 let Some(block) = self.blocks.get(ins.name.as_str()).copied() else {
-                    *self.skipped.entry("INSERT bez bloku").or_default() += 1;
+                    *self.skipped.entry(tr!("INSERT bez bloku")).or_default() += 1;
                     return;
                 };
                 let rot = ins.rotation.to_radians();
@@ -274,7 +275,7 @@ impl<'a> Ctx<'a> {
             EntityType::Solid(_) => *self.skipped.entry("SOLID").or_default() += 1,
             EntityType::Face3D(_) => *self.skipped.entry("3DFACE").or_default() += 1,
             EntityType::Image(_) => *self.skipped.entry("IMAGE").or_default() += 1,
-            _ => *self.skipped.entry("inne").or_default() += 1,
+            _ => *self.skipped.entry(tr!("inne")).or_default() += 1,
         }
     }
 }

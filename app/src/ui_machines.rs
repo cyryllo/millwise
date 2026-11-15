@@ -1,5 +1,6 @@
 //! Okno „Maszyny”: lista profili, podgląd pola roboczego, parametry w zakładkach.
 
+use cam_i18n::tr;
 use crate::icons;
 use cam_post::{Controller, HomeCorner, Machine, MachineKind, MachineLibrary, SpindleKind, ToolChange};
 use eframe::egui::{self, Color32, Pos2, Rect, RichText, Stroke, StrokeKind};
@@ -34,31 +35,31 @@ impl MachinesWindow {
         }
         let mut changed = false;
         let mut open = self.open;
-        egui::Window::new("Maszyny")
+        egui::Window::new(tr!("Maszyny"))
             .open(&mut open)
             .default_size([1120.0, 640.0])
             .collapsible(false)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    if ui.button(RichText::new("+ Nowa").strong()).clicked() {
-                        self.selected = Some(lib.add(Machine { name: "Nowa maszyna".into(), ..Default::default() }));
+                    if ui.button(RichText::new(tr!("+ Nowa")).strong()).clicked() {
+                        self.selected = Some(lib.add(Machine { name: tr!("Nowa maszyna").into(), ..Default::default() }));
                         changed = true;
                     }
                     if let Some(id) = self.selected {
-                        if ui.button("Duplikuj").clicked() {
+                        if ui.button(tr!("Duplikuj")).clicked() {
                             if let Some(m) = lib.get(id).cloned() {
-                                self.selected = Some(lib.add(Machine { name: format!("{} (kopia)", m.name), ..m }));
+                                self.selected = Some(lib.add(Machine { name: tr!("{} (kopia)", m.name), ..m }));
                                 changed = true;
                             }
                         }
-                        if ui.add_enabled(lib.machines.len() > 1, egui::Button::new("Usuń")).clicked() {
+                        if ui.add_enabled(lib.machines.len() > 1, egui::Button::new(tr!("Usuń"))).clicked() {
                             lib.remove(id);
                             self.selected = lib.active().map(|m| m.id);
                             changed = true;
                         }
                         let is_active = lib.active == id;
                         if ui
-                            .add_enabled(!is_active, egui::Button::new(RichText::new("Ustaw jako aktywną").color(Color32::from_rgb(140, 230, 160))))
+                            .add_enabled(!is_active, egui::Button::new(RichText::new(tr!("Ustaw jako aktywną")).color(Color32::from_rgb(140, 230, 160))))
                             .clicked()
                         {
                             lib.active = id;
@@ -86,9 +87,9 @@ impl MachinesWindow {
                     // --- pole robocze ---
                     ui.vertical(|ui| {
                         ui.set_width(330.0);
-                        ui.strong("Pole robocze (widok z góry)");
+                        ui.strong(tr!("Pole robocze (widok z góry)"));
                         work_area(ui, m, part);
-                        ui.label(RichText::new("Położenie bazowania (home)").weak());
+                        ui.label(RichText::new(tr!("Położenie bazowania (home)")).weak());
                         egui::Grid::new("home").spacing([6.0, 6.0]).show(ui, |ui| {
                             for (n, h) in HomeCorner::ALL.into_iter().enumerate() {
                                 let b = egui::Button::new(h.label())
@@ -109,9 +110,9 @@ impl MachinesWindow {
                     ui.vertical(|ui| {
                         ui.horizontal(|ui| {
                             for (t, l) in [
-                                (Tab::General, "Ogólne i pole robocze"),
-                                (Tab::Motion, "Ruch"),
-                                (Tab::Spindle, "Wrzeciono i narzędzia"),
+                                (Tab::General, tr!("Ogólne i pole robocze")),
+                                (Tab::Motion, tr!("Ruch")),
+                                (Tab::Spindle, tr!("Wrzeciono i narzędzia")),
                                 (Tab::Gcode, "G-code"),
                             ] {
                                 ui.selectable_value(&mut self.tab, t, RichText::new(l).strong());
@@ -145,7 +146,7 @@ fn machine_row(ui: &mut egui::Ui, m: &Machine, selected: bool, active: bool) -> 
     if active {
         let r = Rect::from_min_size(Pos2::new(rect.right() - 66.0, rect.top() + 8.0), egui::vec2(58.0, 16.0));
         p.rect_filled(r, 4.0, Color32::from_rgb(90, 220, 120));
-        p.text(r.center(), egui::Align2::CENTER_CENTER, "AKTYWNA", egui::FontId::proportional(10.0), Color32::from_rgb(15, 42, 18));
+        p.text(r.center(), egui::Align2::CENTER_CENTER, tr!("AKTYWNA"), egui::FontId::proportional(10.0), Color32::from_rgb(15, 42, 18));
     }
     ui.add_space(4.0);
     resp
@@ -181,7 +182,7 @@ fn work_area(ui: &mut egui::Ui, m: &Machine, part: Option<(f64, f64)>) {
     let dim = Color32::from_gray(190);
     p.text(Pos2::new(area.center().x, area.top() - 8.0), egui::Align2::CENTER_BOTTOM, format!("X {} mm", m.travel_x), egui::FontId::monospace(12.0), dim);
     p.text(Pos2::new(area.left() - 8.0, area.center().y), egui::Align2::RIGHT_CENTER, format!("Y\n{}", m.travel_y), egui::FontId::monospace(12.0), dim);
-    p.text(rect.right_bottom() - egui::vec2(10.0, 8.0), egui::Align2::RIGHT_BOTTOM, format!("Z {} mm", m.travel_z), egui::FontId::proportional(11.0), Color32::from_gray(150));
+    p.text(rect.right_bottom() - egui::vec2(10.0, 8.0), egui::Align2::RIGHT_BOTTOM, tr!("Z {} mm", m.travel_z), egui::FontId::proportional(11.0), Color32::from_gray(150));
 }
 
 fn num(ui: &mut egui::Ui, label: &str, v: &mut f64, range: std::ops::RangeInclusive<f64>, speed: f64, suffix: &str) -> bool {
@@ -217,7 +218,7 @@ fn kind_button(ui: &mut egui::Ui, k: MachineKind, active: bool) -> egui::Respons
 
 fn general(ui: &mut egui::Ui, m: &mut Machine) -> bool {
     let mut ch = false;
-    ui.label("Rodzaj maszyny");
+    ui.label(tr!("Rodzaj maszyny"));
     ui.horizontal_wrapped(|ui| {
         for k in MachineKind::ALL {
             if kind_button(ui, k, m.kind == k).clicked() && m.kind != k {
@@ -228,10 +229,10 @@ fn general(ui: &mut egui::Ui, m: &mut Machine) -> bool {
     });
     ui.add_space(6.0);
     egui::Grid::new("m_general").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
-        ui.label("Nazwa");
+        ui.label(tr!("Nazwa"));
         ch |= ui.add(egui::TextEdit::singleline(&mut m.name).desired_width(260.0)).changed();
         ui.end_row();
-        ui.label("Sterownik (postprocesor)");
+        ui.label(tr!("Sterownik (postprocesor)"));
         ui.horizontal(|ui| {
             for c in Controller::ALL {
                 if ui.selectable_value(&mut m.controller, c, c.label()).changed() {
@@ -241,12 +242,12 @@ fn general(ui: &mut egui::Ui, m: &mut Machine) -> bool {
             }
         });
         ui.end_row();
-        ch |= num(ui, "Zakres X", &mut m.travel_x, 1.0..=10000.0, 1.0, " mm");
-        ch |= num(ui, "Zakres Y", &mut m.travel_y, 1.0..=10000.0, 1.0, " mm");
-        ch |= num(ui, "Zakres Z", &mut m.travel_z, 1.0..=2000.0, 1.0, " mm");
-        ch |= num(ui, "Maks. wysunięcie narzędzia", &mut m.max_tool_length, 1.0..=500.0, 1.0, " mm");
-        ch |= num(ui, "Wys. bezpieczna (domyślna)", &mut m.safe_z, 0.5..=200.0, 0.1, " mm");
-        ui.label("Układ współrzędnych");
+        ch |= num(ui, tr!("Zakres X"), &mut m.travel_x, 1.0..=10000.0, 1.0, " mm");
+        ch |= num(ui, tr!("Zakres Y"), &mut m.travel_y, 1.0..=10000.0, 1.0, " mm");
+        ch |= num(ui, tr!("Zakres Z"), &mut m.travel_z, 1.0..=2000.0, 1.0, " mm");
+        ch |= num(ui, tr!("Maks. wysunięcie narzędzia"), &mut m.max_tool_length, 1.0..=500.0, 1.0, " mm");
+        ch |= num(ui, tr!("Wys. bezpieczna (domyślna)"), &mut m.safe_z, 0.5..=200.0, 0.1, " mm");
+        ui.label(tr!("Układ współrzędnych"));
         egui::ComboBox::from_id_salt("wcs").selected_text(m.wcs.clone()).show_ui(ui, |ui| {
             for w in ["G54", "G55", "G56", "G57", "G58", "G59"] {
                 ch |= ui.selectable_value(&mut m.wcs, w.to_string(), w).changed();
@@ -259,7 +260,7 @@ fn general(ui: &mut egui::Ui, m: &mut Machine) -> bool {
 
 fn motion(ui: &mut egui::Ui, m: &mut Machine) -> bool {
     let mut ch = false;
-    ui.label(RichText::new("Do szacowania czasu i ostrzeżeń o zbyt dużych posuwach.").weak());
+    ui.label(RichText::new(tr!("Do szacowania czasu i ostrzeżeń o zbyt dużych posuwach.")).weak());
     egui::Grid::new("m_motion").num_columns(3).spacing([12.0, 6.0]).show(ui, |ui| {
         ui.label("");
         ui.strong("X / Y");
@@ -271,35 +272,35 @@ fn motion(ui: &mut egui::Ui, m: &mut Machine) -> bool {
             ch |= ui.add(egui::DragValue::new(b).range(1.0..=100000.0).speed(10.0).suffix(suffix)).changed();
             ui.end_row();
         };
-        pair(ui, "Maks. posuw roboczy", &mut m.max_feed_xy, &mut m.max_feed_z, " mm/min");
-        pair(ui, "Ruchy szybkie (G0)", &mut m.rapid_xy, &mut m.rapid_z, " mm/min");
-        pair(ui, "Przyspieszenie", &mut m.accel_xy, &mut m.accel_z, " mm/s²");
+        pair(ui, tr!("Maks. posuw roboczy"), &mut m.max_feed_xy, &mut m.max_feed_z, " mm/min");
+        pair(ui, tr!("Ruchy szybkie (G0)"), &mut m.rapid_xy, &mut m.rapid_z, " mm/min");
+        pair(ui, tr!("Przyspieszenie"), &mut m.accel_xy, &mut m.accel_z, " mm/s²");
     });
     ch
 }
 
 fn spindle(ui: &mut egui::Ui, m: &mut Machine) -> bool {
     let mut ch = false;
-    ui.strong("Wrzeciono");
+    ui.strong(tr!("Wrzeciono"));
     ui.horizontal(|ui| {
         for s in [SpindleKind::Manual, SpindleKind::Pwm, SpindleKind::Vfd] {
             ch |= ui.selectable_value(&mut m.spindle, s, s.label()).changed();
         }
     });
     egui::Grid::new("m_spindle").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
-        ch |= num(ui, "Obroty min.", &mut m.rpm_min, 0.0..=100000.0, 100.0, " obr/min");
-        ch |= num(ui, "Obroty maks.", &mut m.rpm_max, 0.0..=100000.0, 100.0, " obr/min");
-        ch |= num(ui, "Czas rozpędzania", &mut m.spindle_delay, 0.0..=60.0, 0.1, " s");
+        ch |= num(ui, tr!("Obroty min."), &mut m.rpm_min, 0.0..=100000.0, 100.0, tr!(" obr/min"));
+        ch |= num(ui, tr!("Obroty maks."), &mut m.rpm_max, 0.0..=100000.0, 100.0, tr!(" obr/min"));
+        ch |= num(ui, tr!("Czas rozpędzania"), &mut m.spindle_delay, 0.0..=60.0, 0.1, " s");
     });
     ui.add_space(6.0);
-    ui.strong("Zmiana narzędzia");
+    ui.strong(tr!("Zmiana narzędzia"));
     ui.horizontal(|ui| {
         for t in [ToolChange::ManualPause, ToolChange::Automatic, ToolChange::SeparateFiles] {
             ch |= ui.selectable_value(&mut m.tool_change, t, t.label()).changed();
         }
     });
     let mut use_pos = m.tool_change_pos.is_some();
-    if ui.checkbox(&mut use_pos, "Odjazd do pozycji zmiany (G53, współrzędne maszyny)").changed() {
+    if ui.checkbox(&mut use_pos, tr!("Odjazd do pozycji zmiany (G53, współrzędne maszyny)")).changed() {
         m.tool_change_pos = if use_pos { Some([0.0, 0.0, -5.0]) } else { None };
         ch = true;
     }
@@ -312,11 +313,11 @@ fn spindle(ui: &mut egui::Ui, m: &mut Machine) -> bool {
         });
     }
     ui.add_space(6.0);
-    ui.strong("Wyposażenie");
-    ch |= ui.checkbox(&mut m.coolant_mist, "Chłodzenie mgłą (M7)").changed();
-    ch |= ui.checkbox(&mut m.coolant_flood, "Chłodzenie / odciąg (M8)").changed();
+    ui.strong(tr!("Wyposażenie"));
+    ch |= ui.checkbox(&mut m.coolant_mist, tr!("Chłodzenie mgłą (M7)")).changed();
+    ch |= ui.checkbox(&mut m.coolant_flood, tr!("Chłodzenie / odciąg (M8)")).changed();
     ui.horizontal(|ui| {
-        ch |= ui.checkbox(&mut m.probe, "Sonda Z, grubość płytki").changed();
+        ch |= ui.checkbox(&mut m.probe, tr!("Sonda Z, grubość płytki")).changed();
         ch |= ui.add_enabled(m.probe, egui::DragValue::new(&mut m.probe_plate).range(0.0..=100.0).speed(0.1).suffix(" mm")).changed();
     });
     ch
@@ -325,10 +326,10 @@ fn spindle(ui: &mut egui::Ui, m: &mut Machine) -> bool {
 fn gcode(ui: &mut egui::Ui, m: &mut Machine) -> bool {
     let mut ch = false;
     egui::Grid::new("m_gcode").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
-        ui.label("Rozszerzenie pliku");
+        ui.label(tr!("Rozszerzenie pliku"));
         ch |= ui.add(egui::TextEdit::singleline(&mut m.extension).desired_width(80.0)).changed();
         ui.end_row();
-        ui.label("Miejsca po przecinku");
+        ui.label(tr!("Miejsca po przecinku"));
         let mut d = m.decimals as f64;
         if ui.add(egui::DragValue::new(&mut d).range(1.0..=6.0).speed(0.05)).changed() {
             m.decimals = d as usize;
@@ -336,20 +337,20 @@ fn gcode(ui: &mut egui::Ui, m: &mut Machine) -> bool {
         }
         ui.end_row();
         if m.controller == Controller::LinuxCnc {
-            ch |= num(ui, "Tolerancja G64", &mut m.linuxcnc_path_tolerance, 0.0..=1.0, 0.001, " mm");
+            ch |= num(ui, tr!("Tolerancja G64"), &mut m.linuxcnc_path_tolerance, 0.0..=1.0, 0.001, " mm");
         }
     });
     ui.horizontal(|ui| {
-        ch |= ui.checkbox(&mut m.arcs, "Łuki G2/G3").changed();
-        ch |= ui.checkbox(&mut m.line_numbers, "Numery linii N").changed();
-        ch |= ui.checkbox(&mut m.comments, "Komentarze").changed();
+        ch |= ui.checkbox(&mut m.arcs, tr!("Łuki G2/G3")).changed();
+        ch |= ui.checkbox(&mut m.line_numbers, tr!("Numery linii N")).changed();
+        ch |= ui.checkbox(&mut m.comments, tr!("Komentarze")).changed();
     });
     ui.add_space(6.0);
-    ui.label("Początek programu (puste = domyślny)");
+    ui.label(tr!("Początek programu (puste = domyślny)"));
     ch |= ui
         .add(egui::TextEdit::multiline(&mut m.header).code_editor().desired_rows(3).desired_width(f32::INFINITY).hint_text("G17 G21 G90 G94\nG54"))
         .changed();
-    ui.label("Koniec programu (puste = domyślny)");
+    ui.label(tr!("Koniec programu (puste = domyślny)"));
     ch |= ui
         .add(egui::TextEdit::multiline(&mut m.footer).code_editor().desired_rows(3).desired_width(f32::INFINITY).hint_text("M5\nM30"))
         .changed();

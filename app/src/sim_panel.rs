@@ -5,6 +5,7 @@
 //! na żądanie — stan na dany czas i siatka 3D. Interfejs pokazuje ostatnią
 //! gotową klatkę, więc nigdy nie przycina.
 
+use cam_i18n::tr;
 use crate::doc::Document;
 use crate::ui_ops::fmt_time;
 use crate::view2d::op_color;
@@ -350,35 +351,35 @@ impl SimState {
     /// `bottom` rysuje dodatkowe przyciski na samym dole panelu (G-code).
     pub fn panel(&mut self, ui: &mut egui::Ui, bottom: impl FnOnce(&mut egui::Ui)) {
         ui.add_space(6.0);
-        ui.heading("Symulacja");
+        ui.heading(tr!("Symulacja"));
         if self.sides {
             ui.horizontal(|ui| {
-                ui.label("Strona");
+                ui.label(tr!("Strona"));
                 ui.selectable_value(&mut self.side, cam_ops::Side::A, RichText::new(" A ").strong());
                 ui.selectable_value(&mut self.side, cam_ops::Side::B, RichText::new(" B ").strong())
-                    .on_hover_text("Płyta odwrócona; strona B liczona na pełnym materiale, bez obróbki strony A");
+                    .on_hover_text(tr!("Płyta odwrócona; strona B liczona na pełnym materiale, bez obróbki strony A"));
             });
         }
         if self.worker.is_none() {
-            ui.label(RichText::new("Brak ścieżek do symulacji — dodaj operacje w Projekcie 2D.").weak());
+            ui.label(RichText::new(tr!("Brak ścieżek do symulacji — dodaj operacje w Projekcie 2D.")).weak());
             return;
         }
         if !self.ready {
             ui.add_space(8.0);
-            ui.label(if self.engine == Engine::Solid { "Przeliczanie bryły materiału…" } else { "Przeliczanie symulacji…" });
+            ui.label(if self.engine == Engine::Solid { tr!("Przeliczanie bryły materiału…") } else { tr!("Przeliczanie symulacji…") });
             ui.add(egui::ProgressBar::new(self.progress).show_percentage().animate(true));
-            ui.label(RichText::new("Cały program jest liczony raz — potem przewijanie i odtwarzanie są płynne.").small().weak());
+            ui.label(RichText::new(tr!("Cały program jest liczony raz — potem przewijanie i odtwarzanie są płynne.")).small().weak());
             return;
         }
         let dur = self.duration;
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            if ui.add(egui::Button::new("Początek").min_size(egui::vec2(0.0, 32.0))).clicked() {
+            if ui.add(egui::Button::new(tr!("Początek")).min_size(egui::vec2(0.0, 32.0))).clicked() {
                 self.time = 0.0;
                 self.playing = false;
             }
             let finished = self.time >= dur;
-            let label = if self.playing { "Pauza" } else if finished { "Od nowa" } else { "Odtwórz" };
+            let label = if self.playing { tr!("Pauza") } else if finished { tr!("Od nowa") } else { tr!("Odtwórz") };
             let b = egui::Button::new(RichText::new(label).strong().color(Color32::WHITE))
                 .fill(Color32::from_rgb(61, 127, 224))
                 .min_size(egui::vec2(90.0, 32.0));
@@ -388,7 +389,7 @@ impl SimState {
                 }
                 self.playing = !self.playing;
             }
-            if ui.add(egui::Button::new("Koniec").min_size(egui::vec2(0.0, 32.0))).clicked() {
+            if ui.add(egui::Button::new(tr!("Koniec")).min_size(egui::vec2(0.0, 32.0))).clicked() {
                 self.time = dur;
                 self.playing = false;
             }
@@ -403,52 +404,52 @@ impl SimState {
         let slider = egui::Slider::new(&mut self.time, 0.0..=dur.max(0.001)).show_value(false);
         ui.add_sized([ui.available_width(), 18.0], slider);
         ui.horizontal(|ui| {
-            ui.label("Prędkość");
+            ui.label(tr!("Prędkość"));
             ui.add(egui::Slider::new(&mut self.speed, 1.0..=500.0).logarithmic(true).suffix("×").max_decimals(0));
         });
 
         ui.separator();
-        ui.strong("Pokaż");
-        ui.checkbox(&mut self.show_material, "Materiał (usuwanie)");
-        ui.checkbox(&mut self.show_paths, "Ścieżki narzędzia");
-        ui.checkbox(&mut self.show_rapids, "Ruchy szybkie (G0)");
-        ui.checkbox(&mut self.show_tool, "Narzędzie");
+        ui.strong(tr!("Pokaż"));
+        ui.checkbox(&mut self.show_material, tr!("Materiał (usuwanie)"));
+        ui.checkbox(&mut self.show_paths, tr!("Ścieżki narzędzia"));
+        ui.checkbox(&mut self.show_rapids, tr!("Ruchy szybkie (G0)"));
+        ui.checkbox(&mut self.show_tool, tr!("Narzędzie"));
         ui.horizontal(|ui| {
-            ui.label("Silnik");
-            ui.selectable_value(&mut self.engine, Engine::Solid, "Bryła")
-                .on_hover_text("Dokładna bryła (operacje boolowskie) — czyste ściany, fazy i zaokrąglenia; dłuższe przeliczenie");
-            ui.selectable_value(&mut self.engine, Engine::Fast, "Szybki")
-                .on_hover_text("Mapa wysokości — natychmiastowe przeliczenie, dla bardzo dużych programów");
+            ui.label(tr!("Silnik"));
+            ui.selectable_value(&mut self.engine, Engine::Solid, tr!("Bryła"))
+                .on_hover_text(tr!("Dokładna bryła (operacje boolowskie) — czyste ściany, fazy i zaokrąglenia; dłuższe przeliczenie"));
+            ui.selectable_value(&mut self.engine, Engine::Fast, tr!("Szybki"))
+                .on_hover_text(tr!("Mapa wysokości — natychmiastowe przeliczenie, dla bardzo dużych programów"));
         });
         ui.add_enabled_ui(self.engine == Engine::Fast, |ui| ui.horizontal(|ui| {
-            ui.label("Dokładność");
+            ui.label(tr!("Dokładność"));
             let label = |n: usize| match n {
-                200 => "zgrubna",
-                400 => "normalna",
-                _ => "wysoka",
+                200 => tr!("zgrubna"),
+                400 => tr!("normalna"),
+                _ => tr!("wysoka"),
             };
             egui::ComboBox::from_id_salt("sim_res").selected_text(label(self.resolution)).show_ui(ui, |ui| {
                 for n in [200, 400, 800] {
-                    ui.selectable_value(&mut self.resolution, n, format!("{} ({n} kom.)", label(n)));
+                    ui.selectable_value(&mut self.resolution, n, tr!("{} ({} kom.)", label(n), n));
                 }
             });
         }));
         let frame_ms = self.frame.as_ref().map_or(0, |f| f.millis);
         ui.label(
-            RichText::new(format!("komórka {:.2} mm · przeliczenie {} ms · klatka {} ms", self.cell, self.millis, frame_ms))
+            RichText::new(tr!("komórka {:.2} mm · przeliczenie {} ms · klatka {} ms", self.cell, self.millis, frame_ms))
                 .small()
                 .weak(),
         );
 
         ui.separator();
-        ui.strong("Operacje");
+        ui.strong(tr!("Operacje"));
         let cur_op = self.op_start.partition_point(|&s| s <= self.time).saturating_sub(1);
         let mut jump = None;
         for (k, (doc_i, name)) in self.ops.iter().enumerate() {
             let start = self.op_start[k];
             let end = self.op_start.get(k + 1).copied().unwrap_or(dur);
             let state = if self.time >= end && end > start {
-                "gotowe".to_string()
+                tr!("gotowe").to_string()
             } else if k == cur_op && self.time > start {
                 format!("{:.0}%", (self.time - start) / (end - start).max(1e-9) * 100.0)
             } else {
@@ -457,7 +458,7 @@ impl SimState {
             ui.horizontal(|ui| {
                 let (r, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
                 ui.painter().rect_filled(r, 2.0, op_color(*doc_i));
-                if ui.selectable_label(k == cur_op, name).on_hover_text("Przewiń do początku operacji").clicked() {
+                if ui.selectable_label(k == cur_op, name).on_hover_text(tr!("Przewiń do początku operacji")).clicked() {
                     jump = Some(start);
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -472,17 +473,17 @@ impl SimState {
 
         ui.separator();
         if self.collisions.is_empty() {
-            ui.label(RichText::new("Kolizje ruchów szybkich: brak").color(Color32::from_rgb(120, 220, 140)));
+            ui.label(RichText::new(tr!("Kolizje ruchów szybkich: brak")).color(Color32::from_rgb(120, 220, 140)));
         } else {
             ui.label(
-                RichText::new(format!("Kolizje: {} — ruch szybki (G0) w materiale!", self.collisions.len()))
+                RichText::new(tr!("Kolizje: {} — ruch szybki (G0) w materiale!", self.collisions.len()))
                     .strong()
                     .color(Color32::from_rgb(255, 110, 100)),
             );
             for c in self.collisions.iter().take(8) {
                 let name = self.ops.get(c.op).map_or("?", |o| o.1.as_str());
                 ui.label(
-                    RichText::new(format!("{name}: X {:.2} Y {:.2} Z {:.2} (głęb. {:.2})", c.at.x, c.at.y, c.at.z, c.depth))
+                    RichText::new(tr!("{}: X {:.2} Y {:.2} Z {:.2} (głęb. {:.2})", name, c.at.x, c.at.y, c.at.z, c.depth))
                         .small()
                         .color(Color32::from_rgb(255, 150, 140)),
                 );
@@ -494,7 +495,7 @@ impl SimState {
             ui.add_space(6.0);
             if let Some((p, _)) = self.frame.as_ref().and_then(|f| f.pos) {
                 ui.label(RichText::new(format!("X {:.3}  Y {:.3}  Z {:.3}", p.x, p.y, p.z)).monospace());
-                ui.label(RichText::new("Pozycja narzędzia").small().weak());
+                ui.label(RichText::new(tr!("Pozycja narzędzia")).small().weak());
             }
         });
     }

@@ -1,6 +1,7 @@
 //! Widok 3D: półfabrykat, kontury, siatka i osie. Później ścieżki narzędzia
 //! i symulacja usuwania materiału.
 
+use cam_i18n::tr;
 mod camera;
 mod renderer;
 
@@ -60,7 +61,7 @@ impl View3D {
             ui.painter_at(rect).text(
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
-                "Brak wgpu — widok 3D niedostępny",
+                tr!("Brak wgpu — widok 3D niedostępny"),
                 egui::FontId::proportional(14.0),
                 Color32::LIGHT_RED,
             );
@@ -198,7 +199,7 @@ impl View3D {
         ui.scope_builder(egui::UiBuilder::new().max_rect(bar), |ui| {
             ui.horizontal(|ui| {
                 let b = egui::Button::new(
-                    egui::RichText::new("Zamknij symulację  (Esc)").strong().color(Color32::WHITE).size(14.0),
+                    egui::RichText::new(tr!("Zamknij symulację  (Esc)")).strong().color(Color32::WHITE).size(14.0),
                 )
                 .fill(Color32::from_rgb(61, 127, 224))
                 .min_size(egui::vec2(0.0, 38.0))
@@ -207,22 +208,22 @@ impl View3D {
                     close = true;
                 }
                 ui.add_space(10.0);
-                if ui.small_button("Izo").clicked() {
+                if ui.small_button(tr!("Izo")).clicked() {
                     self.camera.set_iso();
                 }
-                if ui.small_button("Góra").clicked() {
+                if ui.small_button(tr!("Góra")).clicked() {
                     self.camera.set_top();
                 }
-                if ui.small_button("Przód").clicked() {
+                if ui.small_button(tr!("Przód")).clicked() {
                     self.camera.set_front();
                 }
-                if ui.small_button("Spód").clicked() {
+                if ui.small_button(tr!("Spód")).clicked() {
                     self.camera.set_bottom();
                 }
-                if ui.small_button("Dopasuj").clicked() {
+                if ui.small_button(tr!("Dopasuj")).clicked() {
                     self.fit_requested = true;
                 }
-                ui.checkbox(&mut self.camera.orthographic, "Ortho");
+                ui.checkbox(&mut self.camera.orthographic, tr!("Ortho"));
             });
         });
         close

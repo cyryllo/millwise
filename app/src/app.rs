@@ -1,3 +1,4 @@
+use cam_i18n::tr;
 use crate::doc::{AlignMode, Document};
 use crate::history::History;
 use crate::sim_panel::SimState;
@@ -142,7 +143,7 @@ impl CamApp {
         let (tools, tools_warning) = storage::load_tools();
         let (machines, machines_warning) = storage::load_machines();
         let doc = Document::default();
-        let history = History::new(&doc, "Nowy projekt");
+        let history = History::new(&doc, tr!("Nowy projekt"));
         let mut app = Self {
             doc,
             tools,
@@ -250,7 +251,7 @@ impl CamApp {
             Ok((doc, lib_changed)) => {
                 if lib_changed {
                     self.save_tools();
-                    self.info = Some("Do biblioteki dodano narzędzia z projektu.".into());
+                    self.info = Some(tr!("Do biblioteki dodano narzędzia z projektu.").into());
                 }
                 self.set_doc(doc);
             }
@@ -265,7 +266,7 @@ impl CamApp {
         // ustawienie przy wczytaniu (np. zero w 0,0) nie jest krokiem historii
         self.doc.edit_label = None;
         self.doc.step_param = None;
-        self.history.reset(&self.doc, format!("Otwarto {}", self.doc.file_name()));
+        self.history.reset(&self.doc, tr!("Otwarto {}", self.doc.file_name()));
         self.stop_mode();
         self.gcode_preview = None;
         self.view2d.fit_requested = true;
@@ -274,13 +275,13 @@ impl CamApp {
 
     fn save_tools(&mut self) {
         if let Err(e) = storage::save_tools(&self.tools) {
-            self.error = Some(format!("Nie można zapisać biblioteki narzędzi: {e:#}"));
+            self.error = Some(tr!("Nie można zapisać biblioteki narzędzi: {:#}", e));
         }
     }
 
     fn save_machines(&mut self) {
         if let Err(e) = storage::save_machines(&self.machines) {
-            self.error = Some(format!("Nie można zapisać maszyn: {e:#}"));
+            self.error = Some(tr!("Nie można zapisać maszyn: {:#}", e));
         }
     }
 
@@ -300,7 +301,7 @@ impl CamApp {
     /// Plik → Dodaj: dokłada wybrane pliki DXF i projekty do bieżącego projektu.
     fn add_dialog(&mut self) {
         let mut dlg = rfd::FileDialog::new()
-            .set_title("Dodaj do projektu")
+            .set_title(tr!("Dodaj do projektu"))
             .add_filter("DXF i projekty", &["dxf", "DXF", "millwise", "camsoft"])
             .add_filter("DXF", &["dxf", "DXF"])
             .add_filter("Projekt Millwise", &["millwise", "camsoft"]);
@@ -338,7 +339,7 @@ impl CamApp {
                     let machine = self.machine();
                     let width = machine.travel_x - 2.0 * self.doc.stock.margin;
                     let (n, ops) = self.doc.merge(other, Some(width));
-                    added.push(if ops > 0 { format!("{name}: {n} krzywych, {ops} operacji") } else { format!("{name}: {n} krzywych") });
+                    added.push(if ops > 0 { tr!("{}: {} krzywych, {} operacji", name, n, ops) } else { tr!("{}: {} krzywych", name, n) });
                 }
                 Err(e) => self.error = Some(format!("{}: {e:#}", path.display())),
             }
@@ -347,8 +348,7 @@ impl CamApp {
             self.open_source = self.doc.sources.len().checked_sub(1);
             self.stop_mode();
             self.view2d.fit_requested = true;
-            self.info = Some(format!(
-                "Dodano do projektu:\n{}\n\nNowe elementy stoją obok dotychczasowych i są zaznaczone — można je od razu przesunąć.",
+            self.info = Some(tr!("Dodano do projektu:\n{}\n\nNowe elementy stoją obok dotychczasowych i są zaznaczone — można je od razu przesunąć.",
                 added.join("\n")
             ));
         }
@@ -384,7 +384,7 @@ impl CamApp {
         match storage::save_project(&self.doc, &self.tools, &path) {
             Ok(()) => {
                 self.doc.project_path = Some(path.clone());
-                self.info = Some(format!("Zapisano projekt {}", path.display()));
+                self.info = Some(tr!("Zapisano projekt {}", path.display()));
             }
             Err(e) => self.error = Some(format!("{e:#}")),
         }
@@ -417,12 +417,12 @@ impl CamApp {
                 p.with_file_name(format!("{stem}_{suffix}.{ext}"))
             };
             if let Err(e) = std::fs::write(&path, text) {
-                self.error = Some(format!("Nie można zapisać {}: {e}", path.display()));
+                self.error = Some(tr!("Nie można zapisać {}: {}", path.display(), e));
                 return;
             }
             written.push(path.display().to_string());
         }
-        self.info = Some(format!("Zapisano G-code:\n{}", written.join("\n")));
+        self.info = Some(tr!("Zapisano G-code:\n{}", written.join("\n")));
     }
 
     fn ensure_generated(&mut self) {
@@ -440,7 +440,7 @@ impl CamApp {
         let mut lines = Vec::new();
         for (suffix, text) in files {
             if !suffix.is_empty() {
-                lines.push(format!("(===== plik {suffix} =====)"));
+                lines.push(tr!("(===== plik {} =====)", suffix));
             }
             lines.extend(text.lines().map(String::from));
         }
@@ -475,14 +475,14 @@ impl CamApp {
                             };
                             self.doc.set_zero(p);
                             self.view2d.fit_requested = true;
-                            self.view2d.flash(format!("Zero programu: {}", sub.label().to_lowercase()), Self::now(ctx));
+                            self.view2d.flash(tr!("Zero programu: {}", sub.label().to_lowercase()), Self::now(ctx));
                         }
                         true
                     }
                     _ => true,
                 };
                 if !ok {
-                    self.view2d.flash("Najpierw zaznacz krzywe", Self::now(ctx));
+                    self.view2d.flash(tr!("Najpierw zaznacz krzywe"), Self::now(ctx));
                 }
             }
         }
@@ -497,14 +497,14 @@ impl CamApp {
                 let first_line = t.text.lines().next().unwrap_or("").to_string();
                 let items: Vec<crate::doc::ClipItem> = cs
                     .into_iter()
-                    .map(|contour| crate::doc::ClipItem { contour, layer: "TEKST".into(), source: format!("Tekst: {first_line}") })
+                    .map(|contour| crate::doc::ClipItem { contour, layer: "TEKST".into(), source: tr!("Tekst: {}", first_line) })
                     .collect();
                 let n = items.len();
                 self.doc.add_contours(&items, p);
-                self.doc.label(crate::history::Mark::new(crate::icons::Icon::Text).badge(crate::history::Badge::Add), format!("Napis: {first_line}"));
-                self.view2d.flash(format!("Wstawiono napis ({n} krzywych, zaznaczone) — teraz np. Grawer albo Kieszeń"), now);
+                self.doc.label(crate::history::Mark::new(crate::icons::Icon::Text).badge(crate::history::Badge::Add), tr!("Napis: {}", first_line));
+                self.view2d.flash(tr!("Wstawiono napis ({} krzywych, zaznaczone) — teraz np. Grawer albo Kieszeń", n), now);
             }
-            Ok(_) => self.view2d.flash("Wpisz tekst", now),
+            Ok(_) => self.view2d.flash(tr!("Wpisz tekst"), now),
             Err(e) => self.error = Some(e),
         }
     }
@@ -523,7 +523,7 @@ impl CamApp {
             })
             .collect();
         let Some(&first) = ops.first() else {
-            self.view2d.flash("Ta krzywa nie należy do profilu wewnętrznego ani kieszeni", now);
+            self.view2d.flash(tr!("Ta krzywa nie należy do profilu wewnętrznego ani kieszeni"), now);
             return;
         };
         let on = match &self.doc.ops[first].kind {
@@ -540,10 +540,10 @@ impl CamApp {
         }
         self.doc.ops_dirty = true;
         let names: Vec<String> = ops.iter().map(|&k| self.doc.ops[k].name.clone()).collect();
-        let state = if on { "włączone" } else { "wyłączone" };
+        let state = if on { tr!("włączone") } else { tr!("wyłączone") };
         let mark = crate::history::Mark::op(first, &self.doc.ops[first], crate::history::Badge::Edit);
-        self.doc.label(mark, format!("Uszka w narożnikach {state}: {}", names.join(", ")));
-        self.view2d.flash(format!("Uszka w narożnikach {state}: {}", names.join(", ")), now);
+        self.doc.label(mark, tr!("Uszka w narożnikach {}: {}", state, names.join(", ")));
+        self.view2d.flash(tr!("Uszka w narożnikach {}: {}", state, names.join(", ")), now);
     }
 
     /// Kliknięcie obok (w puste miejsce rysunku): koniec dodawania krzywych i
@@ -561,7 +561,7 @@ impl CamApp {
         }
         self.doc.selected_op = None;
         self.doc.revision += 1;
-        self.view2d.flash(format!("Zapisano: {name}"), Self::now(ctx));
+        self.view2d.flash(tr!("Zapisano: {}", name), Self::now(ctx));
     }
 
     /// Edycja zmiany wybranej w historii (szyk, skala, obrót): nowe wartości od razu ją przebudowują.
@@ -591,32 +591,32 @@ impl CamApp {
                         ui.style_mut().wrap_mode = Some(egui::TextWrapMode::Extend);
                         ui.horizontal(|ui| match info {
                             ParamEdit::Array { .. } => {
-                                ui.strong("Edycja szyku");
-                                ui.label("kolumny");
+                                ui.strong(tr!("Edycja szyku"));
+                                ui.label(tr!("kolumny"));
                                 changed |= ui.add(egui::DragValue::new(&mut e.cols).range(1..=100)).changed();
-                                ui.label("wiersze");
+                                ui.label(tr!("wiersze"));
                                 changed |= ui.add(egui::DragValue::new(&mut e.rows).range(1..=100)).changed();
-                                ui.label("odstęp X");
+                                ui.label(tr!("odstęp X"));
                                 changed |= ui.add(egui::DragValue::new(&mut e.gap_x).speed(0.1).suffix(" mm")).changed();
                                 ui.label("Y");
                                 changed |= ui.add(egui::DragValue::new(&mut e.gap_y).speed(0.1).suffix(" mm")).changed();
-                                close = ui.button("Gotowe").clicked();
+                                close = ui.button(tr!("Gotowe")).clicked();
                             }
                             ParamEdit::Scale { .. } => {
-                                ui.strong("Edycja skalowania");
+                                ui.strong(tr!("Edycja skalowania"));
                                 changed |= ui.add(egui::DragValue::new(&mut e.scale_pct).range(1.0..=10000.0).speed(0.5).suffix(" %")).changed();
-                                close = ui.button("Gotowe").clicked();
+                                close = ui.button(tr!("Gotowe")).clicked();
                             }
                             ParamEdit::Rotate { .. } => {
-                                ui.strong("Edycja obrotu");
+                                ui.strong(tr!("Edycja obrotu"));
                                 changed |= ui.add(egui::DragValue::new(&mut e.angle).speed(0.5).suffix("°")).changed();
-                                close = ui.button("Gotowe").clicked();
+                                close = ui.button(tr!("Gotowe")).clicked();
                             }
                         });
                         let note = if later > 0 {
-                            format!("Uwaga: zmiana usunie {later} późniejszych kroków historii (jak cofnięcie i zrobienie od nowa).")
+                            tr!("Uwaga: zmiana usunie {} późniejszych kroków historii (jak cofnięcie i zrobienie od nowa).", later)
                         } else {
-                            "Nowe wartości od razu przebudowują zmianę; w historii zostaje jeden krok.".to_string()
+                            tr!("Nowe wartości od razu przebudowują zmianę; w historii zostaje jeden krok.").to_string()
                         };
                         ui.label(RichText::new(note).small().color(if later > 0 { Color32::from_rgb(230, 180, 80) } else { ui_kit::LABEL }));
                     });
@@ -634,7 +634,7 @@ impl CamApp {
                 ParamEdit::Array { .. } => {
                     if self.doc.array_with_gaps(e.cols, e.rows, e.gap_x, e.gap_y) {
                         let (c, r) = (e.cols, e.rows);
-                        self.doc.label(crate::history::Mark::new(crate::icons::Icon::Array), format!("Szyk {c} × {r}"));
+                        self.doc.label(crate::history::Mark::new(crate::icons::Icon::Array), tr!("Szyk {} × {}", c, r));
                     }
                 }
                 ParamEdit::Scale { .. } => {
@@ -684,7 +684,7 @@ impl CamApp {
                             self.view2d.flash(e, Self::now(ctx));
                         }
                     } else {
-                        self.error = Some("Biblioteka narzędzi jest pusta — dodaj narzędzie.".into());
+                        self.error = Some(tr!("Biblioteka narzędzi jest pusta — dodaj narzędzie.").into());
                     }
                 }
                 ViewEvent::Box(found) => {
@@ -703,7 +703,7 @@ impl CamApp {
                     if self.toolbar.current() == Sub::ZeroPick {
                         self.doc.set_zero(p);
                         self.view2d.fit_requested = true;
-                        self.view2d.flash(format!("Nowe zero w punkcie X {:.3} Y {:.3}", p.x, p.y), Self::now(ctx));
+                        self.view2d.flash(tr!("Nowe zero w punkcie X {:.3} Y {:.3}", p.x, p.y), Self::now(ctx));
                         self.stop_mode();
                     }
                 }
@@ -760,13 +760,13 @@ impl CamApp {
                         match sub {
                             Sub::Move => {
                                 ui.horizontal(|ui| {
-                                    ui.strong("Przesuń");
-                                    ui.label(RichText::new("przeciągnij zaznaczone myszą lub:").weak());
+                                    ui.strong(tr!("Przesuń"));
+                                    ui.label(RichText::new(tr!("przeciągnij zaznaczone myszą lub:")).weak());
                                     ui.label("ΔX");
                                     ui.add(egui::DragValue::new(&mut e.dx).speed(0.1).suffix(" mm"));
                                     ui.label("ΔY");
                                     ui.add(egui::DragValue::new(&mut e.dy).speed(0.1).suffix(" mm"));
-                                    if ui.button("Przesuń").clicked() {
+                                    if ui.button(tr!("Przesuń")).clicked() {
                                         apply(doc.move_selected(Vec2::new(e.dx, e.dy)));
                                     }
                                 });
@@ -774,18 +774,18 @@ impl CamApp {
                             Sub::Text => {
                                 let tt = &mut self.text_tool;
                                 ui.horizontal(|ui| {
-                                    ui.strong("Tekst");
+                                    ui.strong(tr!("Tekst"));
                                     ui.add(egui::TextEdit::multiline(&mut tt.text).desired_rows(1).desired_width(220.0))
-                                        .on_hover_text("Nowy wiersz: Enter");
-                                    ui.label("wysokość");
+                                        .on_hover_text(tr!("Nowy wiersz: Enter"));
+                                    ui.label(tr!("wysokość"));
                                     ui.add(egui::DragValue::new(&mut tt.height).range(0.5..=1000.0).speed(0.1).suffix(" mm"))
-                                        .on_hover_text("Wysokość wielkich liter");
-                                    ui.label("odstęp");
+                                        .on_hover_text(tr!("Wysokość wielkich liter"));
+                                    ui.label(tr!("odstęp"));
                                     ui.add(egui::DragValue::new(&mut tt.spacing).range(-50.0..=200.0).speed(0.05).suffix(" mm"));
                                     egui::ComboBox::from_id_salt("text_font").selected_text(tt.font.label()).show_ui(ui, |ui| {
                                         ui.selectable_value(&mut tt.font, crate::text::FontChoice::Ubuntu, "Ubuntu");
-                                        ui.selectable_value(&mut tt.font, crate::text::FontChoice::Hack, "Hack (stała szerokość)");
-                                        if ui.selectable_label(matches!(tt.font, crate::text::FontChoice::File(_)), "Z pliku…").clicked() {
+                                        ui.selectable_value(&mut tt.font, crate::text::FontChoice::Hack, tr!("Hack (stała szerokość)"));
+                                        if ui.selectable_label(matches!(tt.font, crate::text::FontChoice::File(_)), tr!("Z pliku…")).clicked() {
                                             if let Some(p) = rfd::FileDialog::new().add_filter("Czcionka", &["ttf", "otf", "TTF", "OTF"]).pick_file() {
                                                 tt.font = crate::text::FontChoice::File(p);
                                             }
@@ -795,47 +795,47 @@ impl CamApp {
                                 tt.refresh();
                                 let hint = match &tt.error {
                                     Some(e) => RichText::new(e.clone()).small().color(Color32::LIGHT_RED),
-                                    None => RichText::new("Kliknij na rysunku, aby wstawić napis (lewy dolny róg w punkcie kliknięcia, przyciąga do wierzchołków).").small().weak(),
+                                    None => RichText::new(tr!("Kliknij na rysunku, aby wstawić napis (lewy dolny róg w punkcie kliknięcia, przyciąga do wierzchołków).")).small().weak(),
                                 };
                                 ui.label(hint);
                             }
                             Sub::Measure => {
                                 let m = self.measure;
                                 ui.horizontal(|ui| {
-                                    ui.strong("Zmierz");
+                                    ui.strong(tr!("Zmierz"));
                                     match m {
                                         (Some(a), Some(b)) => {
                                             let d = b - a;
                                             let ang = d.y.atan2(d.x).to_degrees();
                                             ui.label(RichText::new(format!("{:.3} mm", d.length())).strong().color(Color32::from_rgb(250, 200, 70)));
-                                            ui.label(format!("ΔX {:.3}   ΔY {:.3}   kąt {:.2}°", d.x, d.y, ang));
-                                            ui.label(RichText::new("klik — nowy pomiar").weak());
+                                            ui.label(tr!("ΔX {:.3}   ΔY {:.3}   kąt {:.2}°", d.x, d.y, ang));
+                                            ui.label(RichText::new(tr!("klik — nowy pomiar")).weak());
                                         }
                                         (Some(_), None) => {
-                                            ui.label("kliknij drugi punkt");
+                                            ui.label(tr!("kliknij drugi punkt"));
                                         }
                                         _ => {
-                                            ui.label("kliknij pierwszy punkt (przyciąga do wierzchołków i środków okręgów)");
+                                            ui.label(tr!("kliknij pierwszy punkt (przyciąga do wierzchołków i środków okręgów)"));
                                         }
                                     }
                                 });
                             }
                             Sub::Corners => {
                                 ui.horizontal(|ui| {
-                                    ui.strong("Narożniki");
-                                    ui.label("kliknij krzywą profilu wewnętrznego albo kieszeni — uszka w jej narożnikach włączą się lub wyłączą");
+                                    ui.strong(tr!("Narożniki"));
+                                    ui.label(tr!("kliknij krzywą profilu wewnętrznego albo kieszeni — uszka w jej narożnikach włączą się lub wyłączą"));
                                 });
                                 ui.label(
-                                    RichText::new("Frez dojeżdża do samego rogu (okrągłe wybranie), więc kwadratowy element wchodzi do końca.")
+                                    RichText::new(tr!("Frez dojeżdża do samego rogu (okrągłe wybranie), więc kwadratowy element wchodzi do końca."))
                                         .small()
                                         .weak(),
                                 );
                             }
                             Sub::Rotate => {
                                 ui.horizontal(|ui| {
-                                    ui.strong("Obróć zaznaczone wokół ich środka");
+                                    ui.strong(tr!("Obróć zaznaczone wokół ich środka"));
                                     ui.add(egui::DragValue::new(&mut e.angle).speed(0.5).suffix("°"));
-                                    if ui.button("Obróć").clicked() {
+                                    if ui.button(tr!("Obróć")).clicked() {
                                         apply(doc.rotate_selected(e.angle));
                                     }
                                     for a in [-90.0, 90.0, 180.0] {
@@ -847,23 +847,23 @@ impl CamApp {
                             }
                             Sub::Scale => {
                                 ui.horizontal(|ui| {
-                                    ui.strong("Skaluj zaznaczone");
+                                    ui.strong(tr!("Skaluj zaznaczone"));
                                     ui.add(egui::DragValue::new(&mut e.scale_pct).range(0.1..=10000.0).speed(0.5).suffix(" %"));
-                                    if ui.button("Skaluj").clicked() {
+                                    if ui.button(tr!("Skaluj")).clicked() {
                                         apply(doc.scale_selected(e.scale_pct / 100.0));
                                     }
                                 });
                             }
                             Sub::Align => {
                                 ui.horizontal(|ui| {
-                                    ui.strong("Wyrównaj zaznaczone");
+                                    ui.strong(tr!("Wyrównaj zaznaczone"));
                                     for (m, l) in [
-                                        (AlignMode::Left, "Do lewej"),
-                                        (AlignMode::CenterX, "Środek X"),
-                                        (AlignMode::Right, "Do prawej"),
-                                        (AlignMode::Top, "Do góry"),
-                                        (AlignMode::CenterY, "Środek Y"),
-                                        (AlignMode::Bottom, "Do dołu"),
+                                        (AlignMode::Left, tr!("Do lewej")),
+                                        (AlignMode::CenterX, tr!("Środek X")),
+                                        (AlignMode::Right, tr!("Do prawej")),
+                                        (AlignMode::Top, tr!("Do góry")),
+                                        (AlignMode::CenterY, tr!("Środek Y")),
+                                        (AlignMode::Bottom, tr!("Do dołu")),
                                     ] {
                                         if ui.button(l).clicked() {
                                             apply(doc.align_selected(m));
@@ -873,26 +873,26 @@ impl CamApp {
                             }
                             Sub::Array => {
                                 ui.horizontal(|ui| {
-                                    ui.strong("Szyk");
-                                    ui.label("kolumny");
+                                    ui.strong(tr!("Szyk"));
+                                    ui.label(tr!("kolumny"));
                                     ui.add(egui::DragValue::new(&mut e.cols).range(1..=100));
-                                    ui.label("wiersze");
+                                    ui.label(tr!("wiersze"));
                                     ui.add(egui::DragValue::new(&mut e.rows).range(1..=100));
-                                    ui.label("odstęp X");
+                                    ui.label(tr!("odstęp X"));
                                     ui.add(egui::DragValue::new(&mut e.gap_x).speed(0.1).suffix(" mm"));
                                     ui.label("Y");
                                     ui.add(egui::DragValue::new(&mut e.gap_y).speed(0.1).suffix(" mm"));
-                                    if ui.button("Utwórz szyk").clicked() && !doc.array_with_gaps(e.cols, e.rows, e.gap_x, e.gap_y) {
+                                    if ui.button(tr!("Utwórz szyk")).clicked() && !doc.array_with_gaps(e.cols, e.rows, e.gap_x, e.gap_y) {
                                         nothing_selected = doc.selected_count() == 0;
                                     }
                                 });
-                                ui.label(RichText::new("Odstęp liczony między krawędziami kopii; kopie trafiają też do operacji oryginału.").small().weak());
+                                ui.label(RichText::new(tr!("Odstęp liczony między krawędziami kopii; kopie trafiają też do operacji oryginału.")).small().weak());
                             }
                             Sub::ZeroPick => {
                                 ui.horizontal(|ui| {
-                                    ui.strong("Zero programu:");
-                                    ui.label("kliknij punkt (przyciąga do środków okręgów i wierzchołków)");
-                                    if ui.button("Anuluj").clicked() {
+                                    ui.strong(tr!("Zero programu:"));
+                                    ui.label(tr!("kliknij punkt (przyciąga do środków okręgów i wierzchołków)"));
+                                    if ui.button(tr!("Anuluj")).clicked() {
                                         close = true;
                                     }
                                 });
@@ -901,12 +901,12 @@ impl CamApp {
                                 let target = self.pick_target.filter(|&t| t < doc.ops.len());
                                 ui.horizontal(|ui| {
                                     let title = match target {
-                                        Some(t) => format!("Dodawanie do: {}", doc.ops[t].name),
-                                        None => format!("{} › {} — kliknij krzywą, aby utworzyć operację", s.group().label(), s.label()),
+                                        Some(t) => tr!("Dodawanie do: {}", doc.ops[t].name),
+                                        None => tr!("{} › {} — kliknij krzywą, aby utworzyć operację", s.group().label(), s.label()),
                                     };
                                     ui.label(RichText::new(title).strong().color(Color32::WHITE));
-                                    ui.label(RichText::new("klik = dodaj/usuń · ramka = wiele").weak());
-                                    if ui.button("Zakończ (Enter)").clicked() {
+                                    ui.label(RichText::new(tr!("klik = dodaj/usuń · ramka = wiele")).weak());
+                                    if ui.button(tr!("Zakończ (Enter)")).clicked() {
                                         close = true;
                                     }
                                 });
@@ -916,7 +916,7 @@ impl CamApp {
                     });
             });
         if nothing_selected {
-            self.view2d.flash("Najpierw zaznacz krzywe", now);
+            self.view2d.flash(tr!("Najpierw zaznacz krzywe"), now);
         }
         if close {
             self.stop_mode();
@@ -1013,9 +1013,9 @@ impl CamApp {
         match self.history.undo(&mut self.doc) {
             Some(label) => {
                 self.stop_mode();
-                self.view2d.flash(format!("Cofnięto: {label}"), now);
+                self.view2d.flash(tr!("Cofnięto: {}", label), now);
             }
-            None => self.view2d.flash("Nie ma czego cofnąć", now),
+            None => self.view2d.flash(tr!("Nie ma czego cofnąć"), now),
         }
     }
 
@@ -1023,9 +1023,9 @@ impl CamApp {
         match self.history.redo(&mut self.doc) {
             Some(label) => {
                 self.stop_mode();
-                self.view2d.flash(format!("Ponowiono: {label}"), now);
+                self.view2d.flash(tr!("Ponowiono: {}", label), now);
             }
-            None => self.view2d.flash("Nie ma czego ponowić", now),
+            None => self.view2d.flash(tr!("Nie ma czego ponowić"), now),
         }
     }
 
@@ -1040,10 +1040,10 @@ impl CamApp {
     fn copy(&mut self, now: f64) -> bool {
         let items = self.doc.copy_selected();
         if items.is_empty() {
-            self.view2d.flash("Najpierw zaznacz krzywe", now);
+            self.view2d.flash(tr!("Najpierw zaznacz krzywe"), now);
             return false;
         }
-        self.view2d.flash(format!("Skopiowano krzywe: {}", items.len()), now);
+        self.view2d.flash(tr!("Skopiowano krzywe: {}", items.len()), now);
         self.clipboard = items;
         true
     }
@@ -1051,16 +1051,16 @@ impl CamApp {
     fn cut(&mut self, now: f64) {
         if self.copy(now) {
             let n = self.doc.delete_selected();
-            self.doc.label(crate::history::Mark::new(crate::icons::Icon::Cut), format!("Wycięto krzywe ({n})"));
+            self.doc.label(crate::history::Mark::new(crate::icons::Icon::Cut), tr!("Wycięto krzywe ({})", n));
             self.stop_mode();
-            self.view2d.flash(format!("Wycięto krzywe: {n}"), now);
+            self.view2d.flash(tr!("Wycięto krzywe: {}", n), now);
         }
     }
 
     /// Wkleja schowek: środkiem w miejsce kursora, gdy jest nad rysunkiem, inaczej w to samo miejsce.
     fn paste(&mut self, now: f64) {
         if self.clipboard.is_empty() {
-            self.view2d.flash("Schowek jest pusty", now);
+            self.view2d.flash(tr!("Schowek jest pusty"), now);
             return;
         }
         let d = match (self.view2d.cursor_world, self.clipboard.iter().map(|c| c.contour.bbox()).reduce(|a, b| a.union(&b))) {
@@ -1069,7 +1069,7 @@ impl CamApp {
         };
         self.stop_mode();
         self.doc.add_contours(&self.clipboard, d);
-        self.view2d.flash(format!("Wklejono krzywe: {}", self.clipboard.len()), now);
+        self.view2d.flash(tr!("Wklejono krzywe: {}", self.clipboard.len()), now);
     }
 
     /// Delete: zaznaczone krzywe, a gdy żadnej nie ma — zaznaczona operacja.
@@ -1077,7 +1077,7 @@ impl CamApp {
         if self.doc.selected_count() > 0 {
             let n = self.doc.delete_selected();
             self.stop_mode();
-            self.view2d.flash(format!("Usunięto krzywe: {n}"), now);
+            self.view2d.flash(tr!("Usunięto krzywe: {}", n), now);
         } else if let Some(i) = self.doc.selected_op {
             self.doc.remove_op(i);
             self.stop_mode();
@@ -1090,11 +1090,11 @@ impl CamApp {
         let serial = self.history.serial;
         let mut jump = None;
         ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-            ui.label(RichText::new("HISTORIA").small().strong().color(Color32::from_gray(150)));
-            if ui.add_enabled(self.history.can_undo(), egui::Button::new("Cofnij")).on_hover_text("Ctrl+Z").clicked() {
+            ui.label(RichText::new(tr!("HISTORIA")).small().strong().color(Color32::from_gray(150)));
+            if ui.add_enabled(self.history.can_undo(), egui::Button::new(tr!("Cofnij"))).on_hover_text("Ctrl+Z").clicked() {
                 self.undo(now);
             }
-            if ui.add_enabled(self.history.can_redo(), egui::Button::new("Ponów")).on_hover_text("Ctrl+Y").clicked() {
+            if ui.add_enabled(self.history.can_redo(), egui::Button::new(tr!("Ponów"))).on_hover_text("Ctrl+Y").clicked() {
                 self.redo(now);
             }
             ui.separator();
@@ -1149,18 +1149,18 @@ impl CamApp {
                                 tip.push_str(&format!("{}.{}  {label}", gi + 1, k + 1));
                             }
                             if n > pos {
-                                tip.push_str("  (cofnięte)");
+                                tip.push_str(tr!("  (cofnięte)"));
                             }
                             tip.push('\n');
                         }
                         let open = g.mark.op.is_some() && g.mark.badge != crate::history::Badge::Remove;
                         let param = self.history.param_edit(g.last).is_some();
                         tip.push_str(match (pos == g.last, undone || current, open || param) {
-                            (_, _, true) if param => "kliknij, aby zmienić parametry",
-                            (true, _, true) => "(stan obecny) — kliknij, aby edytować operację",
-                            (true, _, false) => "(stan obecny)",
-                            (false, true, _) => "kliknij, aby przywrócić",
-                            (false, false, _) => "kliknij, aby wrócić do tego stanu",
+                            (_, _, true) if param => tr!("kliknij, aby zmienić parametry"),
+                            (true, _, true) => tr!("(stan obecny) — kliknij, aby edytować operację"),
+                            (true, _, false) => tr!("(stan obecny)"),
+                            (false, true, _) => tr!("kliknij, aby przywrócić"),
+                            (false, false, _) => tr!("kliknij, aby wrócić do tego stanu"),
                         });
                         let resp = resp.on_hover_text(tip);
                         if current && self.history_seen != serial {
@@ -1201,85 +1201,96 @@ impl CamApp {
 
     fn menu(&mut self, ui: &mut egui::Ui) {
         egui::MenuBar::new().ui(ui, |ui| {
-            ui.menu_button("Plik", |ui| {
-                if ui.button("Otwórz DXF / projekt…  (Ctrl+O)").clicked() {
+            ui.menu_button(tr!("Plik"), |ui| {
+                if ui.button(tr!("Otwórz DXF / projekt…  (Ctrl+O)")).clicked() {
                     self.open_dialog();
                 }
                 if ui
-                    .button("Dodaj DXF / projekt…  (Ctrl+I)")
-                    .on_hover_text("Dołóż kolejne pliki do bieżącego projektu (można wybrać kilka naraz)")
+                    .button(tr!("Dodaj DXF / projekt…  (Ctrl+I)"))
+                    .on_hover_text(tr!("Dołóż kolejne pliki do bieżącego projektu (można wybrać kilka naraz)"))
                     .clicked()
                 {
                     self.add_dialog();
                 }
                 ui.separator();
-                if ui.button("Zapisz projekt  (Ctrl+S)").clicked() {
+                if ui.button(tr!("Zapisz projekt  (Ctrl+S)")).clicked() {
                     self.save_project(false);
                 }
-                if ui.button("Zapisz projekt jako…  (Ctrl+Shift+S)").clicked() {
+                if ui.button(tr!("Zapisz projekt jako…  (Ctrl+Shift+S)")).clicked() {
                     self.save_project(true);
                 }
                 ui.separator();
-                if ui.button("Eksportuj G-code…  (Ctrl+E)").clicked() {
+                if ui.button(tr!("Eksportuj G-code…  (Ctrl+E)")).clicked() {
                     self.export_gcode();
                 }
                 ui.separator();
-                if ui.button("Zakończ").clicked() {
+                if ui.button(tr!("Zakończ")).clicked() {
                     ui.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             });
-            ui.menu_button("Edycja", |ui| {
+            ui.menu_button(tr!("Edycja"), |ui| {
                 let now = Self::now(ui.ctx());
                 let sel = self.doc.selected_count() > 0;
                 let project = self.mode == ViewMode::Project;
-                if ui.add_enabled(self.history.can_undo(), egui::Button::new("Cofnij  (Ctrl+Z)")).clicked() {
+                if ui.add_enabled(self.history.can_undo(), egui::Button::new(tr!("Cofnij  (Ctrl+Z)"))).clicked() {
                     self.undo(now);
                 }
-                if ui.add_enabled(self.history.can_redo(), egui::Button::new("Ponów  (Ctrl+Y)")).clicked() {
+                if ui.add_enabled(self.history.can_redo(), egui::Button::new(tr!("Ponów  (Ctrl+Y)"))).clicked() {
                     self.redo(now);
                 }
                 ui.separator();
-                if ui.add_enabled(project && sel, egui::Button::new("Wytnij  (Ctrl+X)")).clicked() {
+                if ui.add_enabled(project && sel, egui::Button::new(tr!("Wytnij  (Ctrl+X)"))).clicked() {
                     self.cut(now);
                 }
-                if ui.add_enabled(project && sel, egui::Button::new("Kopiuj  (Ctrl+C)")).clicked() {
+                if ui.add_enabled(project && sel, egui::Button::new(tr!("Kopiuj  (Ctrl+C)"))).clicked() {
                     self.copy(now);
                 }
-                if ui.add_enabled(project && !self.clipboard.is_empty(), egui::Button::new("Wklej  (Ctrl+V)")).clicked() {
+                if ui.add_enabled(project && !self.clipboard.is_empty(), egui::Button::new(tr!("Wklej  (Ctrl+V)"))).clicked() {
                     self.paste(now);
                 }
-                if ui.add_enabled(project && sel, egui::Button::new("Usuń krzywe  (Delete)")).clicked() {
+                if ui.add_enabled(project && sel, egui::Button::new(tr!("Usuń krzywe  (Delete)"))).clicked() {
                     self.delete(now);
                 }
                 ui.separator();
-                if ui.add_enabled(project, egui::Button::new("Zaznacz wszystko  (Ctrl+A)")).clicked() {
+                if ui.add_enabled(project, egui::Button::new(tr!("Zaznacz wszystko  (Ctrl+A)"))).clicked() {
                     self.select_all();
                 }
-                if ui.add_enabled(project && sel, egui::Button::new("Odznacz  (Esc)")).clicked() {
+                if ui.add_enabled(project && sel, egui::Button::new(tr!("Odznacz  (Esc)"))).clicked() {
                     self.doc.clear_selection();
                 }
             });
-            ui.menu_button("Widok", |ui| {
-                ui.radio_value(&mut self.mode, ViewMode::Project, "Projekt 2D  (Tab)");
-                ui.radio_value(&mut self.mode, ViewMode::Visual, "Symulacja  (Tab)");
+            ui.menu_button(tr!("Widok"), |ui| {
+                ui.radio_value(&mut self.mode, ViewMode::Project, tr!("Projekt 2D  (Tab)"));
+                ui.radio_value(&mut self.mode, ViewMode::Visual, tr!("Symulacja  (Tab)"));
                 ui.separator();
-                if ui.button("Dopasuj  (F)").clicked() {
+                if ui.button(tr!("Dopasuj  (F)")).clicked() {
                     self.view2d.fit_requested = true;
                     self.view3d.fit_requested = true;
                 }
                 ui.separator();
-                ui.checkbox(&mut self.show_history, "Historia zmian");
+                ui.checkbox(&mut self.show_history, tr!("Historia zmian"));
+                ui.separator();
+                ui.menu_button("Język / Language", |ui| {
+                    for l in cam_i18n::Lang::ALL {
+                        if ui.radio(cam_i18n::lang() == l, l.name()).clicked() {
+                            cam_i18n::set_lang(l);
+                            storage::save_language(l);
+                            self.doc.ops_dirty = true; // ostrzeżenia operacji w nowym języku
+                            ui.close();
+                        }
+                    }
+                });
             });
-            ui.menu_button("Narzędzia", |ui| {
-                if ui.button("Biblioteka narzędzi…").clicked() {
+            ui.menu_button(tr!("Narzędzia"), |ui| {
+                if ui.button(tr!("Biblioteka narzędzi…")).clicked() {
                     self.tools_window.open = true;
                 }
-                if ui.button("Automatyzacja…").clicked() {
+                if ui.button(tr!("Automatyzacja…")).clicked() {
                     self.open_automation();
                 }
             });
-            ui.menu_button("Maszyny", |ui| {
-                if ui.button("Maszyny…").clicked() {
+            ui.menu_button(tr!("Maszyny"), |ui| {
+                if ui.button(tr!("Maszyny…")).clicked() {
                     self.machines_window.open = true;
                 }
                 ui.separator();
@@ -1292,17 +1303,17 @@ impl CamApp {
                     }
                 }
             });
-            ui.menu_button("Pomoc", |ui| {
-                if ui.button("Skróty klawiszowe").clicked() {
+            ui.menu_button(tr!("Pomoc"), |ui| {
+                if ui.button(tr!("Skróty klawiszowe")).clicked() {
                     self.shortcuts_open = true;
                 }
-                if ui.button("O programie").clicked() {
+                if ui.button(tr!("O programie")).clicked() {
                     self.about_open = true;
                 }
             });
             ui.separator();
-            ui.selectable_value(&mut self.mode, ViewMode::Project, RichText::new("  Projekt 2D  ").strong());
-            ui.selectable_value(&mut self.mode, ViewMode::Visual, RichText::new("  Symulacja  ").strong());
+            ui.selectable_value(&mut self.mode, ViewMode::Project, RichText::new(tr!("  Projekt 2D  ")).strong());
+            ui.selectable_value(&mut self.mode, ViewMode::Visual, RichText::new(tr!("  Symulacja  ")).strong());
         });
     }
 
@@ -1310,8 +1321,8 @@ impl CamApp {
     fn machine_card(&mut self, ui: &mut egui::Ui) {
         let Some(m) = self.machines.active().cloned() else {
             ui_kit::card(ui, |ui| {
-                ui_kit::title(ui, "Maszyna");
-                if ui.button("Dodaj maszynę…").clicked() {
+                ui_kit::title(ui, tr!("Maszyna"));
+                if ui.button(tr!("Dodaj maszynę…")).clicked() {
                     self.machines_window.open = true;
                 }
             });
@@ -1322,9 +1333,9 @@ impl CamApp {
         let mut open = false;
         ui_kit::accent_card(ui, accent, |ui| {
             ui.horizontal(|ui| {
-                ui_kit::title(ui, "Maszyna");
+                ui_kit::title(ui, tr!("Maszyna"));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    open = ui.small_button("Ustawienia…").on_hover_text("Pole robocze, posuwy, sterownik, zmiana narzędzia").clicked();
+                    open = ui.small_button(tr!("Ustawienia…")).on_hover_text(tr!("Pole robocze, posuwy, sterownik, zmiana narzędzia")).clicked();
                 });
             });
             let others: Vec<(u32, String)> = self.machines.machines.iter().map(|m| (m.id, m.name.clone())).collect();
@@ -1387,16 +1398,16 @@ impl CamApp {
         let mut delete_src = None;
         ui_kit::card(ui, |ui| {
             ui.horizontal(|ui| {
-                ui_kit::title(ui, "Elementy");
+                ui_kit::title(ui, tr!("Elementy"));
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     add = ui
-                        .small_button("+ Dodaj…")
-                        .on_hover_text("Dodaj DXF lub projekt (Ctrl+I); pliki można też upuścić na okno")
+                        .small_button(tr!("+ Dodaj…"))
+                        .on_hover_text(tr!("Dodaj DXF lub projekt (Ctrl+I); pliki można też upuścić na okno"))
                         .clicked();
                 });
             });
             if shown.is_empty() {
-                ui.label(RichText::new("Otwórz albo dodaj plik DXF lub projekt.").small().color(ui_kit::LABEL));
+                ui.label(RichText::new(tr!("Otwórz albo dodaj plik DXF lub projekt.")).small().color(ui_kit::LABEL));
             }
             for &i in &shown {
                 let open = self.open_source == Some(i);
@@ -1421,7 +1432,7 @@ impl CamApp {
                 painter.text(
                     egui::pos2(rect.right() - 6.0, rect.center().y),
                     egui::Align2::RIGHT_CENTER,
-                    format!("{} krz.", counts[i]),
+                    tr!("{} krz.", counts[i]),
                     egui::FontId::proportional(11.0),
                     ui_kit::LABEL,
                 );
@@ -1459,17 +1470,17 @@ impl CamApp {
                         };
                         if let Some(b) = bb {
                             let sz = b.size();
-                            line(ui, "Wymiary", format!("{:.1} × {:.1} mm", sz.x, sz.y));
+                            line(ui, tr!("Wymiary"), format!("{:.1} × {:.1} mm", sz.x, sz.y));
                         }
                         if !layers.is_empty() {
-                            line(ui, "Warstwy", layers.join(", "));
+                            line(ui, tr!("Warstwy"), layers.join(", "));
                         }
-                        line(ui, "Operacje", if ops.is_empty() { "brak".into() } else { ops.join(", ") });
+                        line(ui, tr!("Operacje"), if ops.is_empty() { tr!("brak").into() } else { ops.join(", ") });
                         ui.horizontal(|ui| {
-                            if ui.small_button("Zaznacz").on_hover_text("Zaznacz krzywe elementu, np. żeby go przesunąć").clicked() {
+                            if ui.small_button(tr!("Zaznacz")).on_hover_text(tr!("Zaznacz krzywe elementu, np. żeby go przesunąć")).clicked() {
                                 select_src = Some(i);
                             }
-                            if shown.len() > 1 && ui.small_button("Usuń").on_hover_text("Usuń krzywe tego elementu z projektu").clicked() {
+                            if shown.len() > 1 && ui.small_button(tr!("Usuń")).on_hover_text(tr!("Usuń krzywe tego elementu z projektu")).clicked() {
                                 delete_src = Some(i);
                             }
                         });
@@ -1479,10 +1490,10 @@ impl CamApp {
             if doc.path.is_some() || !doc.warnings.is_empty() {
                 ui.add_space(2.0);
                 if doc.path.is_some() {
-                    ui.label(RichText::new(format!("Jednostki DXF: {}", doc.unit_name)).small().color(ui_kit::LABEL));
+                    ui.label(RichText::new(tr!("Jednostki DXF: {}", doc.unit_name)).small().color(ui_kit::LABEL));
                 }
                 for w in &doc.warnings {
-                    ui.label(RichText::new(format!("Uwaga: {w}")).small().color(Color32::from_rgb(230, 180, 80)));
+                    ui.label(RichText::new(tr!("Uwaga: {}", w)).small().color(Color32::from_rgb(230, 180, 80)));
                 }
             }
         });
@@ -1496,7 +1507,7 @@ impl CamApp {
             self.doc.select_source(i);
             self.doc.delete_selected();
             let name = self.doc.sources[i].clone();
-            self.doc.label(crate::history::Mark::new(crate::icons::Icon::Delete), format!("Usunięto element: {name}"));
+            self.doc.label(crate::history::Mark::new(crate::icons::Icon::Delete), tr!("Usunięto element: {}", name));
             self.open_source = None;
             self.stop_mode();
         }
@@ -1513,8 +1524,8 @@ impl CamApp {
         ui_kit::card(ui, |ui| {
             let mut on = self.doc.stock.two_sided.is_some();
             if ui
-                .checkbox(&mut on, RichText::new("OBRÓBKA DWUSTRONNA").small().strong().color(ui_kit::LABEL))
-                .on_hover_text("Operacje strony B są odbijane względem osi odwracania; płytę ustawia się na kołkach")
+                .checkbox(&mut on, RichText::new(tr!("OBRÓBKA DWUSTRONNA")).small().strong().color(ui_kit::LABEL))
+                .on_hover_text(tr!("Operacje strony B są odbijane względem osi odwracania; płytę ustawia się na kołkach"))
                 .changed()
             {
                 self.doc.stock.two_sided = on.then(|| {
@@ -1527,10 +1538,10 @@ impl CamApp {
             let Some(t) = self.doc.stock.two_sided.as_mut() else { return };
             let mut changed = false;
             egui::Grid::new("two_sided").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
-                ui_kit::label(ui, "Odwracanie");
+                ui_kit::label(ui, tr!("Odwracanie"));
                 ui.horizontal(|ui| {
-                    if ui.radio_value(&mut t.axis, FlipAxis::Y, "lewo / prawo").on_hover_text("Wokół osi Y").changed()
-                        | ui.radio_value(&mut t.axis, FlipAxis::X, "przód / tył").on_hover_text("Wokół osi X").changed()
+                    if ui.radio_value(&mut t.axis, FlipAxis::Y, tr!("lewo / prawo")).on_hover_text(tr!("Wokół osi Y")).changed()
+                        | ui.radio_value(&mut t.axis, FlipAxis::X, tr!("przód / tył")).on_hover_text(tr!("Wokół osi X")).changed()
                     {
                         if let Some(b) = sb {
                             t.pos = if t.axis == FlipAxis::Y { b.center().x } else { b.center().y };
@@ -1539,10 +1550,10 @@ impl CamApp {
                     }
                 });
                 ui.end_row();
-                ui_kit::label(ui, if t.axis == FlipAxis::Y { "Oś na X" } else { "Oś na Y" });
+                ui_kit::label(ui, if t.axis == FlipAxis::Y { tr!("Oś na X") } else { tr!("Oś na Y") });
                 ui.horizontal(|ui| {
                     changed |= ui.add(egui::DragValue::new(&mut t.pos).speed(0.1).suffix(" mm")).changed();
-                    if ui.small_button("środek").on_hover_text("Oś przez środek półfabrykatu").clicked() {
+                    if ui.small_button(tr!("środek")).on_hover_text(tr!("Oś przez środek półfabrykatu")).clicked() {
                         if let Some(b) = sb {
                             t.pos = if t.axis == FlipAxis::Y { b.center().x } else { b.center().y };
                             changed = true;
@@ -1550,16 +1561,16 @@ impl CamApp {
                     }
                 });
                 ui.end_row();
-                changed |= ui_kit::num(ui, "Kołki Ø", &mut t.pin_diameter, 1.0..=30.0, 0.1, " mm");
-                changed |= ui_kit::num(ui, "W stół ofiarny", &mut t.pin_extra, 0.0..=30.0, 0.1, " mm");
-                changed |= ui_kit::num(ui, "Odstęp od detalu", &mut t.pin_gap, 0.0..=100.0, 0.1, " mm");
+                changed |= ui_kit::num(ui, tr!("Kołki Ø"), &mut t.pin_diameter, 1.0..=30.0, 0.1, " mm");
+                changed |= ui_kit::num(ui, tr!("W stół ofiarny"), &mut t.pin_extra, 0.0..=30.0, 0.1, " mm");
+                changed |= ui_kit::num(ui, tr!("Odstęp od detalu"), &mut t.pin_gap, 0.0..=100.0, 0.1, " mm");
             });
             add_pins = ui
-                .button("Dodaj otwory na kołki")
-                .on_hover_text("Dwa otwory na osi odwracania, poza detalem, przez materiał i w stół — operacja na początku strony A")
+                .button(tr!("Dodaj otwory na kołki"))
+                .on_hover_text(tr!("Dwa otwory na osi odwracania, poza detalem, przez materiał i w stół — operacja na początku strony A"))
                 .clicked();
             ui.label(
-                RichText::new("Strona B: w ustawieniach operacji. Po odwróceniu płyty na kołki ustaw Z0 na nowej górze.")
+                RichText::new(tr!("Strona B: w ustawieniach operacji. Po odwróceniu płyty na kołki ustaw Z0 na nowej górze."))
                     .small()
                     .color(ui_kit::LABEL),
             );
@@ -1579,7 +1590,7 @@ impl CamApp {
         let Some(t) = self.doc.stock.two_sided.clone() else { return };
         let pins_layer = "KOŁKI";
         if self.doc.contours.iter().any(|c| self.doc.layers.get(c.layer).is_some_and(|l| l.name == pins_layer)) {
-            self.view2d.flash("Otwory na kołki już są (warstwa KOŁKI)", now);
+            self.view2d.flash(tr!("Otwory na kołki już są (warstwa KOŁKI)"), now);
             return;
         }
         let Some([a, b]) = self.doc.pin_centers() else { return };
@@ -1596,8 +1607,7 @@ impl CamApp {
             (Some(d), _) => (d, Sub::DrillPeck),
             (None, Some(m)) if t.pin_diameter > m.diameter * 1.05 => (m, Sub::DrillHelix),
             _ => {
-                self.error = Some(format!(
-                    "Brak wiertła Ø{} w bibliotece, a frez jest za duży na taki otwór. Dodaj wiertło albo zmień średnicę kołków.",
+                self.error = Some(tr!("Brak wiertła Ø{} w bibliotece, a frez jest za duży na taki otwór. Dodaj wiertło albo zmień średnicę kołków.",
                     t.pin_diameter
                 ));
                 return;
@@ -1608,7 +1618,7 @@ impl CamApp {
             .map(|c| crate::doc::ClipItem {
                 contour: cam_geom::Contour::circle(c, r),
                 layer: pins_layer.into(),
-                source: "Kołki ustalające".into(),
+                source: tr!("Kołki ustalające").into(),
             })
             .collect();
         let first = self.doc.contours.len();
@@ -1619,7 +1629,7 @@ impl CamApp {
         cut.apply_tool(&tool, &self.doc.stock.material);
         let op = Operation {
             side: cam_ops::Side::A,
-            name: "Kołki ustalające".into(),
+            name: tr!("Kołki ustalające").into(),
             enabled: true,
             kind,
             tool_id: tool.id,
@@ -1630,9 +1640,9 @@ impl CamApp {
         self.doc.move_op_to(i, 0);
         self.doc.label(
             crate::history::Mark::new(crate::icons::Icon::DrillPeck).badge(crate::history::Badge::Add),
-            format!("Otwory na kołki Ø{}", t.pin_diameter),
+            tr!("Otwory na kołki Ø{}", t.pin_diameter),
         );
-        self.view2d.flash(format!("Dodano otwory na kołki Ø{} (głębokość {} mm)", t.pin_diameter, depth), now);
+        self.view2d.flash(tr!("Dodano otwory na kołki Ø{} (głębokość {} mm)", t.pin_diameter, depth), now);
     }
 
     fn stock_card(&mut self, ui: &mut egui::Ui) {
@@ -1649,21 +1659,21 @@ impl CamApp {
             materials.push(doc.stock.material.clone());
         }
         ui_kit::card(ui, |ui| {
-            ui_kit::title(ui, "Półfabrykat");
+            ui_kit::title(ui, tr!("Półfabrykat"));
             egui::Grid::new("stock").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
-                let a = ui_kit::big_num(ui, "Grubość", &mut doc.stock.thickness, 0.1..=500.0, 0.1, " mm");
-                let b = ui_kit::num(ui, "Naddatek XY", &mut doc.stock.margin, 0.0..=500.0, 0.1, " mm");
-                ui_kit::label(ui, "Materiał");
+                let a = ui_kit::big_num(ui, tr!("Grubość"), &mut doc.stock.thickness, 0.1..=500.0, 0.1, " mm");
+                let b = ui_kit::num(ui, tr!("Naddatek XY"), &mut doc.stock.margin, 0.0..=500.0, 0.1, " mm");
+                ui_kit::label(ui, tr!("Materiał"));
                 ui.horizontal(|ui| {
-                    egui::ComboBox::from_id_salt("material").selected_text(doc.stock.material.clone()).show_ui(ui, |ui| {
+                    egui::ComboBox::from_id_salt("material").selected_text(cam_i18n::tr_dyn(&doc.stock.material)).show_ui(ui, |ui| {
                         for m in &materials {
-                            ui.selectable_value(&mut doc.stock.material, m.clone(), m);
+                            ui.selectable_value(&mut doc.stock.material, m.clone(), cam_i18n::tr_dyn(m));
                         }
                     });
                     if !doc.ops.is_empty()
                         && ui
-                            .small_button("Do operacji")
-                            .on_hover_text("Zastosuj obroty, posuwy i krok w dół z biblioteki narzędzi dla tego materiału we wszystkich operacjach")
+                            .small_button(tr!("Do operacji"))
+                            .on_hover_text(tr!("Zastosuj obroty, posuwy i krok w dół z biblioteki narzędzi dla tego materiału we wszystkich operacjach"))
                             .clicked()
                     {
                         let m = doc.stock.material.clone();
@@ -1684,12 +1694,11 @@ impl CamApp {
                 let s = sb.size();
                 let m = self.machines.active();
                 let fits = m.is_none_or(|m| s.x <= m.travel_x && s.y <= m.travel_y);
-                let text = format!(
-                    "{:.1} × {:.1} × {:.1} mm, Z0 = góra{}",
+                let text = tr!("{:.1} × {:.1} × {:.1} mm, Z0 = góra{}",
                     s.x,
                     s.y,
                     doc.stock.thickness,
-                    if fits { "" } else { " — WIĘKSZY NIŻ POLE ROBOCZE" }
+                    if fits { "" } else { tr!(" — WIĘKSZY NIŻ POLE ROBOCZE") }
                 );
                 ui.label(RichText::new(text).small().color(if fits { ui_kit::LABEL } else { Color32::LIGHT_RED }));
             }
@@ -1703,7 +1712,7 @@ impl CamApp {
         ui_kit::card(ui, |ui| {
             if !doc.layers.is_empty() {
                 let visible = doc.layers.iter().filter(|l| l.visible).count();
-                let head = RichText::new(format!("WARSTWY  {visible} / {}", doc.layers.len())).small().strong().color(ui_kit::LABEL);
+                let head = RichText::new(tr!("WARSTWY  {} / {}", visible, doc.layers.len())).small().strong().color(ui_kit::LABEL);
                 egui::CollapsingHeader::new(head).id_salt("layers").default_open(false).show(ui, |ui| {
                     let mut changed = false;
                     ui.horizontal_wrapped(|ui| {
@@ -1716,31 +1725,31 @@ impl CamApp {
                     }
                 });
             }
-            let head = RichText::new(format!("KRZYWE  {}  ·  zaznaczone {}", doc.contours.len(), doc.selected_count()))
+            let head = RichText::new(tr!("KRZYWE  {}  ·  zaznaczone {}", doc.contours.len(), doc.selected_count()))
                 .small()
                 .strong()
                 .color(ui_kit::LABEL);
             egui::CollapsingHeader::new(head).id_salt("curves").default_open(false).show(ui, |ui| {
                 ui.horizontal_wrapped(|ui| {
-                    if ui.small_button("Zamknięte").on_hover_text("Zaznacz wszystkie zamknięte krzywe").clicked() {
+                    if ui.small_button(tr!("Zamknięte")).on_hover_text(tr!("Zaznacz wszystkie zamknięte krzywe")).clicked() {
                         for i in 0..doc.contours.len() {
                             let v = doc.is_visible(i) && doc.contours[i].contour.closed;
                             doc.set_selected(i, v);
                         }
                     }
-                    if ui.small_button("Okręgi").on_hover_text("Zaznacz wszystkie okręgi (do wiercenia)").clicked() {
+                    if ui.small_button(tr!("Okręgi")).on_hover_text(tr!("Zaznacz wszystkie okręgi (do wiercenia)")).clicked() {
                         for i in 0..doc.contours.len() {
                             let v = doc.is_visible(i) && doc.contours[i].contour.as_circle().is_some();
                             doc.set_selected(i, v);
                         }
                     }
-                    if ui.small_button("Wszystkie").clicked() {
+                    if ui.small_button(tr!("Wszystkie")).clicked() {
                         for i in 0..doc.contours.len() {
                             let v = doc.is_visible(i);
                             doc.set_selected(i, v);
                         }
                     }
-                    if ui.small_button("Odznacz").clicked() {
+                    if ui.small_button(tr!("Odznacz")).clicked() {
                         doc.clear_selection();
                     }
                 });
@@ -1789,13 +1798,13 @@ impl CamApp {
             };
             ui.separator();
             let sub = self.toolbar.current();
-            ui.label(format!("Aktywne: {} › {}", sub.group().label(), sub.label()));
+            ui.label(tr!("Aktywne: {} › {}", sub.group().label(), sub.label()));
             ui.separator();
-            ui.label(format!("Zaznaczone: {}", self.doc.selected_count()));
+            ui.label(tr!("Zaznaczone: {}", self.doc.selected_count()));
             ui.separator();
             ui.label(
                 RichText::new(
-                    "Tab = Projekt 2D / Symulacja · Ctrl+Z / Ctrl+Y = cofnij / ponów · Esc/Enter = koniec trybu · PPM = przesuń widok · kółko = zoom · F = dopasuj",
+                    tr!("Tab = Projekt 2D / Symulacja · Ctrl+Z / Ctrl+Y = cofnij / ponów · Esc/Enter = koniec trybu · PPM = przesuń widok · kółko = zoom · F = dopasuj"),
                 )
                 .weak()
                 .small(),
@@ -1822,20 +1831,20 @@ impl CamApp {
         let used: Vec<usize> = self.doc.ops.iter().flat_map(|o| o.contours.iter().copied()).collect();
         let mut keep = true;
         let mut apply_now = false;
-        egui::Window::new("Automatyzacja")
+        egui::Window::new(tr!("Automatyzacja"))
             .collapsible(false)
             .resizable(false)
             .default_width(520.0)
             .show(ctx, |ui| {
-                ui.label(RichText::new("Zaznacz, co program ma zrobić. Całość to jeden krok w historii — Ctrl+Z cofa wszystko.").weak());
+                ui.label(RichText::new(tr!("Zaznacz, co program ma zrobić. Całość to jeden krok w historii — Ctrl+Z cofa wszystko.")).weak());
                 ui.add_space(6.0);
-                ui.checkbox(&mut opts.create_ops, RichText::new("Operacje dla krzywych bez operacji").strong());
+                ui.checkbox(&mut opts.create_ops, RichText::new(tr!("Operacje dla krzywych bez operacji")).strong());
                 if opts.create_ops {
                     egui::Frame::new().inner_margin(egui::Margin { left: 24, right: 0, top: 2, bottom: 4 }).show(ui, |ui| {
                         egui::Grid::new("auto_layers").num_columns(3).spacing([12.0, 4.0]).show(ui, |ui| {
-                            ui_kit::label(ui, "Warstwa");
-                            ui_kit::label(ui, "Wolne krzywe");
-                            ui_kit::label(ui, "Co zrobić");
+                            ui_kit::label(ui, tr!("Warstwa"));
+                            ui_kit::label(ui, tr!("Wolne krzywe"));
+                            ui_kit::label(ui, tr!("Co zrobić"));
                             ui.end_row();
                             for (li, l) in self.doc.layers.iter().enumerate() {
                                 let free = (0..self.doc.contours.len())
@@ -1853,33 +1862,33 @@ impl CamApp {
                             }
                         });
                         ui.label(
-                            RichText::new("„z kształtu”: okrąg w rozmiarze wiertła to wiercenie (większy niż frez: frezowanie otworu), kontur zewnętrzny to profil zewnętrzny, kontur w środku detalu to profil wewnętrzny, linia otwarta to grawer. Wybory dla warstw są zapamiętywane.")
+                            RichText::new(tr!("„z kształtu”: okrąg w rozmiarze wiertła to wiercenie (większy niż frez: frezowanie otworu), kontur zewnętrzny to profil zewnętrzny, kontur w środku detalu to profil wewnętrzny, linia otwarta to grawer. Wybory dla warstw są zapamiętywane."))
                                 .small()
                                 .weak(),
                         );
                     });
                 }
-                ui.checkbox(&mut opts.corners, RichText::new("Uszka w narożnikach").strong())
-                    .on_hover_text("We wszystkich profilach wewnętrznych i kieszeniach");
-                ui.checkbox(&mut opts.tabs, RichText::new("Mostki według obwodu").strong())
-                    .on_hover_text("Profile zewnętrzne: około jeden mostek na 150 mm obwodu, od 2 do 12");
-                ui.checkbox(&mut opts.order, RichText::new("Kolejność według narzędzi").strong())
-                    .on_hover_text("Operacje tym samym frezem po sobie, wycinanie detalu na końcu");
+                ui.checkbox(&mut opts.corners, RichText::new(tr!("Uszka w narożnikach")).strong())
+                    .on_hover_text(tr!("We wszystkich profilach wewnętrznych i kieszeniach"));
+                ui.checkbox(&mut opts.tabs, RichText::new(tr!("Mostki według obwodu")).strong())
+                    .on_hover_text(tr!("Profile zewnętrzne: około jeden mostek na 150 mm obwodu, od 2 do 12"));
+                ui.checkbox(&mut opts.order, RichText::new(tr!("Kolejność według narzędzi")).strong())
+                    .on_hover_text(tr!("Operacje tym samym frezem po sobie, wycinanie detalu na końcu"));
                 ui.separator();
-                ui_kit::title(ui, "Podsumowanie");
+                ui_kit::title(ui, tr!("Podsumowanie"));
                 for line in p.summary(&opts) {
                     ui.label(line);
                 }
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
                     let green = Color32::from_rgb(70, 190, 110);
-                    let b = egui::Button::new(RichText::new("Zastosuj").strong().color(Color32::WHITE))
+                    let b = egui::Button::new(RichText::new(tr!("Zastosuj")).strong().color(Color32::WHITE))
                         .fill(green.gamma_multiply(0.3))
                         .stroke(egui::Stroke::new(1.0, green));
                     if ui.add(b).clicked() {
                         apply_now = true;
                     }
-                    if ui.button("Anuluj").clicked() {
+                    if ui.button(tr!("Anuluj")).clicked() {
                         keep = false;
                     }
                 });
@@ -1893,7 +1902,7 @@ impl CamApp {
             let n = p.new_ops.len();
             apply(&mut self.doc, p, &opts);
             self.stop_mode();
-            self.view2d.flash(format!("Automatyzacja: {n} nowych operacji"), Self::now(ctx));
+            self.view2d.flash(tr!("Automatyzacja: {} nowych operacji", n), Self::now(ctx));
             keep = false;
         }
         if keep {
@@ -1902,37 +1911,37 @@ impl CamApp {
     }
 
     fn shortcuts_window(&mut self, ctx: &egui::Context) {
-        const KEYS: &[(&str, &str)] = &[
-            ("Ctrl+O", "otwórz DXF lub projekt"),
-            ("Ctrl+I", "dodaj DXF lub projekt do bieżącego"),
-            ("Ctrl+S", "zapisz projekt"),
-            ("Ctrl+Shift+S", "zapisz projekt jako…"),
-            ("Ctrl+E", "eksportuj G-code"),
+        let keys: Vec<(&str, &str)> = vec![
+            ("Ctrl+O", tr!("otwórz DXF lub projekt")),
+            ("Ctrl+I", tr!("dodaj DXF lub projekt do bieżącego")),
+            ("Ctrl+S", tr!("zapisz projekt")),
+            ("Ctrl+Shift+S", tr!("zapisz projekt jako…")),
+            ("Ctrl+E", tr!("eksportuj G-code")),
             ("", ""),
-            ("Ctrl+Z", "cofnij"),
-            ("Ctrl+Y, Ctrl+Shift+Z", "ponów"),
-            ("Ctrl+X", "wytnij zaznaczone krzywe"),
-            ("Ctrl+C", "kopiuj zaznaczone krzywe"),
-            ("Ctrl+V", "wklej (w miejsce kursora)"),
-            ("Delete", "usuń zaznaczone krzywe, a bez nich — zaznaczoną operację"),
-            ("Ctrl+A", "zaznacz wszystkie krzywe"),
-            ("Esc", "zakończ tryb / odznacz"),
-            ("Enter", "zakończ tryb"),
+            ("Ctrl+Z", tr!("cofnij")),
+            (tr!("Ctrl+Y, Ctrl+Shift+Z"), tr!("ponów")),
+            ("Ctrl+X", tr!("wytnij zaznaczone krzywe")),
+            ("Ctrl+C", tr!("kopiuj zaznaczone krzywe")),
+            ("Ctrl+V", tr!("wklej (w miejsce kursora)")),
+            ("Delete", tr!("usuń zaznaczone krzywe, a bez nich — zaznaczoną operację")),
+            ("Ctrl+A", tr!("zaznacz wszystkie krzywe")),
+            ("Esc", tr!("zakończ tryb / odznacz")),
+            ("Enter", tr!("zakończ tryb")),
             ("", ""),
-            ("Tab", "przełącz Projekt 2D / Symulacja"),
-            ("F", "dopasuj widok"),
-            ("Spacja", "odtwarzanie symulacji"),
-            ("kółko myszy", "powiększenie"),
-            ("prawy / środkowy przycisk", "przesuwanie widoku"),
-            ("Shift / Ctrl + klik", "dodaj do zaznaczenia"),
+            ("Tab", tr!("przełącz Projekt 2D / Symulacja")),
+            ("F", tr!("dopasuj widok")),
+            (tr!("Spacja"), tr!("odtwarzanie symulacji")),
+            (tr!("kółko myszy"), tr!("powiększenie")),
+            (tr!("prawy / środkowy przycisk"), tr!("przesuwanie widoku")),
+            (tr!("Shift / Ctrl + klik"), tr!("dodaj do zaznaczenia")),
         ];
-        egui::Window::new("Skróty klawiszowe")
+        egui::Window::new(tr!("Skróty klawiszowe"))
             .open(&mut self.shortcuts_open)
             .collapsible(false)
             .resizable(false)
             .show(ctx, |ui| {
                 egui::Grid::new("keys").num_columns(2).spacing([24.0, 4.0]).show(ui, |ui| {
-                    for (k, what) in KEYS {
+                    for (k, what) in &keys {
                         if k.is_empty() {
                             ui.end_row();
                             continue;
@@ -1960,28 +1969,28 @@ impl CamApp {
             })
             .clone();
         let mut open = true;
-        egui::Window::new("O programie").open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
+        egui::Window::new(tr!("O programie")).open(&mut open).collapsible(false).resizable(false).show(ctx, |ui| {
             ui.image((logo.id(), egui::vec2(490.0, 140.0)));
             ui.add_space(6.0);
-            ui.label(format!("Wersja {}", env!("CARGO_PKG_VERSION")));
-            ui.label(RichText::new(format!("Grafika: {}", self.graphics)).small().weak())
-                .on_hover_text("Gdy okno się nie otwiera, uruchom z opcją --gl (OpenGL)");
-            ui.label("Ścieżki narzędzia i G-code dla frezarek CNC 3-osiowych (GRBL, FluidNC, LinuxCNC).");
+            ui.label(tr!("Wersja {}", env!("CARGO_PKG_VERSION")));
+            ui.label(RichText::new(tr!("Grafika: {}", self.graphics)).small().weak())
+                .on_hover_text(tr!("Gdy okno się nie otwiera, uruchom z opcją --gl (OpenGL)"));
+            ui.label(tr!("Ścieżki narzędzia i G-code dla frezarek CNC 3-osiowych (GRBL, FluidNC, LinuxCNC)."));
             ui.add_space(6.0);
             ui.label(format!("Copyright © 2026 {}", COPYRIGHT_HOLDER));
             ui.label(
                 RichText::new(
-                    "Ten program jest wolnym oprogramowaniem: możesz go rozpowszechniać i/lub modyfikować \
+                    tr!("Ten program jest wolnym oprogramowaniem: możesz go rozpowszechniać i/lub modyfikować \
                      na warunkach Powszechnej Licencji Publicznej GNU (GPL) w wersji 3 lub (według \
                      Twojego wyboru) dowolnej późniejszej.\n\
                      Program jest rozpowszechniany BEZ JAKIEJKOLWIEK GWARANCJI. Sprawdzaj G-code \
-                     przed uruchomieniem na maszynie.",
+                     przed uruchomieniem na maszynie."),
                 )
                 .small(),
             );
             ui.horizontal(|ui| {
-                ui.hyperlink_to("Tekst licencji GPL-3.0", "https://www.gnu.org/licenses/gpl-3.0.html");
-                ui.label(RichText::new("· biblioteki zewnętrzne: THIRD-PARTY.md").small().weak());
+                ui.hyperlink_to(tr!("Tekst licencji GPL-3.0"), "https://www.gnu.org/licenses/gpl-3.0.html");
+                ui.label(RichText::new(tr!("· biblioteki zewnętrzne: THIRD-PARTY.md")).small().weak());
             });
         });
         if !open {
@@ -1998,11 +2007,11 @@ impl CamApp {
             .default_size([520.0, 600.0])
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(format!("{} linii", lines.len()));
-                    if ui.button("Kopiuj").clicked() {
+                    ui.label(tr!("{} linii", lines.len()));
+                    if ui.button(tr!("Kopiuj")).clicked() {
                         ui.ctx().copy_text(lines.join("\n"));
                     }
-                    if ui.button("Eksportuj…").clicked() {
+                    if ui.button(tr!("Eksportuj…")).clicked() {
                         export = true;
                     }
                 });
@@ -2047,7 +2056,7 @@ fn dev_screenshot(ctx: &egui::Context) {
         let c = ctx.clone();
         let cb = egui::ScreenshotCallback::new(move |img| {
             let [w, h] = img.size;
-            let mut data = format!("P6\n{w} {h}\n255\n").into_bytes();
+            let mut data = format!("P6\n{} {}\n255\n", w, h).into_bytes();
             for p in &img.pixels {
                 data.extend_from_slice(&[p.r(), p.g(), p.b()]);
             }
@@ -2224,7 +2233,7 @@ impl eframe::App for CamApp {
         let settled = !ctx.input(|i| i.pointer.any_down()) && !ctx.egui_wants_keyboard_input();
         self.history.track(&mut self.doc, settled);
 
-        for (title, msg, color) in [("Błąd", &mut self.error, Color32::LIGHT_RED), ("Informacja", &mut self.info, Color32::LIGHT_GREEN)] {
+        for (title, msg, color) in [(tr!("Błąd"), &mut self.error, Color32::LIGHT_RED), (tr!("Informacja"), &mut self.info, Color32::LIGHT_GREEN)] {
             if let Some(text) = msg.clone() {
                 egui::Window::new(title)
                     .collapsible(false)

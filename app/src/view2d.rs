@@ -1,6 +1,7 @@
 //! Widok 2D: rysowanie konturów, zoom/pan, zaznaczanie kliknięciem i ramką.
 
 /// Co robi lewy przycisk myszy w widoku.
+use cam_i18n::tr;
 pub enum Interaction<'a> {
     Select,
     /// Przeciąganie przesuwa zaznaczone krzywe.
@@ -181,10 +182,10 @@ impl View2D {
                         events.push(ViewEvent::Contour(i));
                     } else {
                         let msg = match kind {
-                            cam_ops::OpKind::Pocket(_) => "Kieszeń wymaga krzywej zamkniętej",
-                            cam_ops::OpKind::VCarve(_) => "V-carving wymaga krzywej zamkniętej",
-                            cam_ops::OpKind::Drill(_) => "Wiercenie wymaga okręgu",
-                            _ => "Krzywa nie pasuje do operacji",
+                            cam_ops::OpKind::Pocket(_) => tr!("Kieszeń wymaga krzywej zamkniętej"),
+                            cam_ops::OpKind::VCarve(_) => tr!("V-carving wymaga krzywej zamkniętej"),
+                            cam_ops::OpKind::Drill(_) => tr!("Wiercenie wymaga okręgu"),
+                            _ => tr!("Krzywa nie pasuje do operacji"),
                         };
                         self.flash = Some((msg.into(), now));
                     }
@@ -284,7 +285,7 @@ impl View2D {
                 painter.text(
                     Pos2::new(a.x + 4.0, b.y + 4.0),
                     egui::Align2::LEFT_TOP,
-                    format!("pole robocze {wx:.0} × {wy:.0}"),
+                    tr!("pole robocze {:.0} × {:.0}", wx, wy),
                     egui::FontId::proportional(11.0),
                     col,
                 );
@@ -352,7 +353,7 @@ impl View2D {
                 crate::doc::FlipAxis::X => (Pos2::new(rect.left(), self.to_screen(rect, Vec2::new(0.0, t.pos)).y), Pos2::new(rect.right(), self.to_screen(rect, Vec2::new(0.0, t.pos)).y)),
             };
             painter.extend(egui::Shape::dashed_line(&[a, b], Stroke::new(1.2, col), 10.0, 6.0));
-            painter.text(a + egui::vec2(6.0, 18.0), egui::Align2::LEFT_TOP, "oś odwracania", egui::FontId::proportional(11.0), col);
+            painter.text(a + egui::vec2(6.0, 18.0), egui::Align2::LEFT_TOP, tr!("oś odwracania"), egui::FontId::proportional(11.0), col);
         }
 
         if let Some((a, b)) = box_rect {
@@ -427,7 +428,7 @@ impl View2D {
             let text = format!(
                 "{} · {} · L = {:.2} mm{}",
                 doc.layers[c.layer].name,
-                if c.contour.closed { "zamknięty" } else { "otwarty" },
+                if c.contour.closed { tr!("zamknięty") } else { tr!("otwarty") },
                 c.length,
                 if c.contour.closed { format!(" · A = {:.1} mm²", c.area) } else { String::new() }
             );
@@ -622,7 +623,7 @@ impl View2D {
         painter.text(
             rect.left_bottom() + egui::vec2(8.0, -8.0),
             egui::Align2::LEFT_BOTTOM,
-            format!("siatka {} mm", fmt_step(step)),
+            tr!("siatka {} mm", fmt_step(step)),
             egui::FontId::proportional(11.0),
             Color32::from_gray(140),
         );

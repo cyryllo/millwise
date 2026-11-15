@@ -1,5 +1,6 @@
 //! Profile maszyn: pole robocze, dynamika, wrzeciono, zmiana narzędzia, ustawienia G-code.
 
+use cam_i18n::tr;
 use crate::{Dialect, PostSettings, ToolChange};
 use serde::{Deserialize, Serialize};
 
@@ -49,19 +50,19 @@ impl MachineKind {
 
     pub fn label(&self) -> &'static str {
         match self {
-            MachineKind::Gantry => "Portalowa",
-            MachineKind::MovingTable => "Ruchomy stół",
-            MachineKind::BenchMill => "Kolumnowa",
-            MachineKind::SheetRouter => "Do płyt (ploter)",
+            MachineKind::Gantry => tr!("Portalowa"),
+            MachineKind::MovingTable => tr!("Ruchomy stół"),
+            MachineKind::BenchMill => tr!("Kolumnowa"),
+            MachineKind::SheetRouter => tr!("Do płyt (ploter)"),
         }
     }
 
     pub fn hint(&self) -> &'static str {
         match self {
-            MachineKind::Gantry => "Brama jeździ nad stołem, np. 6040",
-            MachineKind::MovingTable => "Stół jeździ pod bramą, np. 3018",
-            MachineKind::BenchMill => "Wrzeciennik na kolumnie, frezarka do metalu",
-            MachineKind::SheetRouter => "Duży stół na całe płyty",
+            MachineKind::Gantry => tr!("Brama jeździ nad stołem, np. 6040"),
+            MachineKind::MovingTable => tr!("Stół jeździ pod bramą, np. 3018"),
+            MachineKind::BenchMill => tr!("Wrzeciennik na kolumnie, frezarka do metalu"),
+            MachineKind::SheetRouter => tr!("Duży stół na całe płyty"),
         }
     }
 }
@@ -81,10 +82,10 @@ impl HomeCorner {
 
     pub fn label(&self) -> &'static str {
         match self {
-            HomeCorner::FrontLeft => "Lewy przód",
-            HomeCorner::FrontRight => "Prawy przód",
-            HomeCorner::BackLeft => "Lewy tył",
-            HomeCorner::BackRight => "Prawy tył",
+            HomeCorner::FrontLeft => tr!("Lewy przód"),
+            HomeCorner::FrontRight => tr!("Prawy przód"),
+            HomeCorner::BackLeft => tr!("Lewy tył"),
+            HomeCorner::BackRight => tr!("Prawy tył"),
         }
     }
 }
@@ -102,9 +103,9 @@ pub enum SpindleKind {
 impl SpindleKind {
     pub fn label(&self) -> &'static str {
         match self {
-            SpindleKind::Manual => "Ręczne (frezarka)",
+            SpindleKind::Manual => tr!("Ręczne (frezarka)"),
             SpindleKind::Pwm => "PWM",
-            SpindleKind::Vfd => "Falownik (VFD)",
+            SpindleKind::Vfd => tr!("Falownik (VFD)"),
         }
     }
 }
@@ -160,7 +161,7 @@ impl Default for Machine {
     fn default() -> Self {
         Machine {
             id: 0,
-            name: "Frezarka 6040".into(),
+            name: tr!("Frezarka 6040").into(),
             kind: MachineKind::Gantry,
             controller: Controller::Grbl,
             travel_x: 600.0,

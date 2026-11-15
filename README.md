@@ -11,7 +11,7 @@
 Millwise is a free CAM program for 3-axis CNC routers and mills. It turns DXF
 drawings into toolpaths and writes G-code for **GRBL / FluidNC** and
 **LinuxCNC**. It is written in Rust and runs on Linux (a Windows version is
-not planned for now). The user interface is in Polish for now.
+not planned for now). The user interface is in Polish and English.
 
 ![Millwise main window](docs/screenshot.png)
 

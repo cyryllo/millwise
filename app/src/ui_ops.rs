@@ -1,5 +1,6 @@
 //! Panel operacji: frez dla nowych operacji, lista operacji, edytor parametrów, eksport G-code.
 
+use cam_i18n::tr;
 use crate::doc::Document;
 use crate::icons;
 use crate::toolbar::Sub;
@@ -52,10 +53,10 @@ pub fn ops_panel(
     let mut action = OpsAction::None;
     ui.add_space(4.0);
     ui.horizontal(|ui| {
-        ui.heading("Operacje");
+        ui.heading(tr!("Operacje"));
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if !doc.ops.is_empty() {
-                ui.label(RichText::new(format!("czas ≈ {}", fmt_time(doc.total_minutes()))).weak());
+                ui.label(RichText::new(tr!("czas ≈ {}", fmt_time(doc.total_minutes()))).weak());
             }
         });
     });
@@ -77,12 +78,12 @@ pub fn ops_panel(
                     icons::draw_tool(ui.painter(), r.shrink(3.0), &t.kind);
                 }
                 ui.vertical(|ui| {
-                    ui.label(RichText::new("Frez dla nowych operacji").small().weak());
+                    ui.label(RichText::new(tr!("Frez dla nowych operacji")).small().weak());
                     let current = state
                         .palette_tool
                         .and_then(|id| lib.get(id))
                         .map(|t| t.display_name())
-                        .unwrap_or_else(|| "— brak —".into());
+                        .unwrap_or_else(|| tr!("— brak —").into());
                     egui::ComboBox::from_id_salt("palette_tool")
                         .width(ui.available_width() - 4.0)
                         .selected_text(current)
@@ -94,8 +95,7 @@ pub fn ops_panel(
                     if let Some(t) = state.palette_tool.and_then(|id| lib.get(id)) {
                         let c = t.cutting_for(&doc.stock.material);
                         ui.label(
-                            RichText::new(format!(
-                                "{} · {} ostrza · {} obr/min · {} mm/min",
+                            RichText::new(tr!("{} · {} ostrza · {} obr/min · {} mm/min",
                                 t.kind.label(),
                                 t.flutes,
                                 c.rpm,
@@ -109,11 +109,11 @@ pub fn ops_panel(
             });
         });
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Wybierz operację po lewej i klikaj krzywe.").small().weak());
+        ui.label(RichText::new(tr!("Wybierz operację po lewej i klikaj krzywe.")).small().weak());
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if ui
-                .small_button("Automatyzacja…")
-                .on_hover_text("Operacje dla krzywych bez operacji (według warstw), uszka, mostki, kolejność")
+                .small_button(tr!("Automatyzacja…"))
+                .on_hover_text(tr!("Operacje dla krzywych bez operacji (według warstw), uszka, mostki, kolejność"))
                 .clicked()
             {
                 action = OpsAction::Automation;
@@ -123,13 +123,13 @@ pub fn ops_panel(
 
     ui.add_space(6.0);
     ui.horizontal(|ui| {
-        ui_kit::title(ui, "Kolejność obróbki");
+        ui_kit::title(ui, tr!("Kolejność obróbki"));
         if doc.ops.len() > 1 {
-            ui.label(RichText::new("przeciągnij, aby zmienić").small().color(ui_kit::LABEL));
+            ui.label(RichText::new(tr!("przeciągnij, aby zmienić")).small().color(ui_kit::LABEL));
         }
     });
     if doc.ops.is_empty() {
-        ui.label(RichText::new("Brak operacji.").weak());
+        ui.label(RichText::new(tr!("Brak operacji.")).weak());
     }
 
     // --- lista: nazwa operacji na górze, krótko narzędzie i głębokość pod spodem ---
@@ -140,7 +140,7 @@ pub fn ops_panel(
         ui.spacing_mut().item_spacing.y = 4.0;
         for i in 0..doc.ops.len() {
             ui.horizontal(|ui| {
-                changed |= ui.checkbox(&mut doc.ops[i].enabled, "").on_hover_text("Włącz / wyłącz operację").changed();
+                changed |= ui.checkbox(&mut doc.ops[i].enabled, "").on_hover_text(tr!("Włącz / wyłącz operację")).changed();
                 if let Some(r) = op_row(ui, doc, lib, i) {
                     if r.clicked() {
                         select = Some(i);
@@ -189,20 +189,20 @@ pub fn ops_panel(
 
     if let Some(i) = doc.selected_op {
         ui.horizontal(|ui| {
-            if ui.small_button("W górę").clicked() {
+            if ui.small_button(tr!("W górę")).clicked() {
                 doc.move_op(i, true);
                 action = OpsAction::StopPicking;
             }
-            if ui.small_button("W dół").clicked() {
+            if ui.small_button(tr!("W dół")).clicked() {
                 doc.move_op(i, false);
                 action = OpsAction::StopPicking;
             }
-            if ui.small_button("Duplikuj").clicked() {
+            if ui.small_button(tr!("Duplikuj")).clicked() {
                 let mut op = doc.ops[i].clone();
-                op.name.push_str(" (kopia)");
+                op.name.push_str(tr!(" (kopia)"));
                 doc.add_op(op);
             }
-            if ui.small_button("Usuń").clicked() {
+            if ui.small_button(tr!("Usuń")).clicked() {
                 doc.remove_op(i);
                 action = OpsAction::StopPicking;
             }
@@ -214,13 +214,13 @@ pub fn ops_panel(
     if changes > 0 {
         let grouped = doc.tool_changes_if_grouped();
         ui.horizontal(|ui| {
-            ui.label(RichText::new(format!("Zmian narzędzia: {changes}")).small().color(ui_kit::LABEL));
+            ui.label(RichText::new(tr!("Zmian narzędzia: {}", changes)).small().color(ui_kit::LABEL));
             if grouped < changes
                 && ui
-                    .small_button(format!("Ułóż według narzędzi (będzie {grouped})"))
+                    .small_button(tr!("Ułóż według narzędzi (będzie {})", grouped))
                     .on_hover_text(
-                        "Operacje tym samym frezem po sobie, w kolejności pierwszego użycia narzędzia. \
-                         Profile zewnętrzne (wycinanie detalu) zostają na końcu.",
+                        tr!("Operacje tym samym frezem po sobie, w kolejności pierwszego użycia narzędzia. \
+                         Profile zewnętrzne (wycinanie detalu) zostają na końcu."),
                     )
                     .clicked()
             {
@@ -260,8 +260,8 @@ pub fn ops_panel(
         }
         // kolejny krok po operacjach: symulacja, potem eksport
         ui.add_space(2.0);
-        if icons::wide_view_button(ui, icons::Icon::Preview3D, "Symulacja obróbki  (Tab)", Color32::from_rgb(70, 190, 110))
-            .on_hover_text("Sprawdź ścieżki na symulacji 3D przed eksportem G-code")
+        if icons::wide_view_button(ui, icons::Icon::Preview3D, tr!("Symulacja obróbki  (Tab)"), Color32::from_rgb(70, 190, 110))
+            .on_hover_text(tr!("Sprawdź ścieżki na symulacji 3D przed eksportem G-code"))
             .clicked()
         {
             action = OpsAction::Simulate;
@@ -276,20 +276,20 @@ pub fn ops_panel(
 pub fn gcode_buttons(ui: &mut egui::Ui, machine_label: &str) -> Option<OpsAction> {
     let mut action = None;
     ui.add_space(4.0);
-    ui.label(RichText::new(format!("Postprocesor z maszyny: {machine_label}")).small().weak());
+    ui.label(RichText::new(tr!("Postprocesor z maszyny: {}", machine_label)).small().weak());
     // dwa przyciski G-code, każdy na pół szerokości przycisku symulacji
     let row = egui::vec2(ui.available_width(), 32.0);
     ui.allocate_ui_with_layout(row, egui::Layout::left_to_right(egui::Align::Center), |ui| {
         let gap = ui.spacing().item_spacing.x;
         let size = egui::vec2((row.x - gap) / 2.0, 32.0);
         let amber = Color32::from_rgb(230, 170, 70);
-        let preview = egui::Button::new(RichText::new("Podgląd G-code").color(Color32::WHITE))
+        let preview = egui::Button::new(RichText::new(tr!("Podgląd G-code")).color(Color32::WHITE))
             .fill(amber.gamma_multiply(0.2))
             .stroke(egui::Stroke::new(1.0, amber));
         if ui.add_sized(size, preview).clicked() {
             action = Some(OpsAction::PreviewGcode);
         }
-        let export = egui::Button::new(RichText::new("Eksportuj G-code…").color(Color32::WHITE))
+        let export = egui::Button::new(RichText::new(tr!("Eksportuj G-code…")).color(Color32::WHITE))
             .fill(Color32::from_rgb(31, 51, 80))
             .stroke(egui::Stroke::new(1.0, Color32::from_rgb(61, 127, 224)));
         if ui.add_sized(size, export).clicked() {
@@ -302,11 +302,11 @@ pub fn gcode_buttons(ui: &mut egui::Ui, machine_label: &str) -> Option<OpsAction
 /// Przejście wykańczające: włącznik i naddatek zostawiany przez obróbkę zgrubną.
 fn finish_ui(ui: &mut egui::Ui, finish: &mut Option<f64>, feed_pct: &mut f64, feed: f64) -> bool {
     let mut changed = false;
-    ui_kit::label(ui, "Przejście wykańczające");
+    ui_kit::label(ui, tr!("Przejście wykańczające"));
     let mut on = finish.is_some();
     if ui
         .checkbox(&mut on, "")
-        .on_hover_text("Zgrubnie zostaje mały naddatek, a na końcu jedno przejście na pełnej głębokości zbiera go do wymiaru — gładsza ścianka")
+        .on_hover_text(tr!("Zgrubnie zostaje mały naddatek, a na końcu jedno przejście na pełnej głębokości zbiera go do wymiaru — gładsza ścianka"))
         .changed()
     {
         *finish = on.then_some(0.3);
@@ -314,12 +314,12 @@ fn finish_ui(ui: &mut egui::Ui, finish: &mut Option<f64>, feed_pct: &mut f64, fe
     }
     ui.end_row();
     if let Some(a) = finish {
-        changed |= num(ui, "   zostaw do wykończenia", a, 0.05..=5.0, 0.01, " mm");
-        ui_kit::label(ui, "   posuw wykańczania");
+        changed |= num(ui, tr!("   zostaw do wykończenia"), a, 0.05..=5.0, 0.01, " mm");
+        ui_kit::label(ui, tr!("   posuw wykańczania"));
         ui.horizontal(|ui| {
             changed |= ui
                 .add(egui::DragValue::new(feed_pct).range(5.0..=200.0).speed(1.0).suffix(" %"))
-                .on_hover_text("Procent posuwu zgrubnego; wolniej = gładsza ścianka")
+                .on_hover_text(tr!("Procent posuwu zgrubnego; wolniej = gładsza ścianka"))
                 .changed();
             ui.label(RichText::new(format!("= {:.0} mm/min", feed * *feed_pct / 100.0)).small().color(ui_kit::LABEL));
         });
@@ -330,14 +330,14 @@ fn finish_ui(ui: &mut egui::Ui, finish: &mut Option<f64>, feed_pct: &mut f64, fe
 
 fn entry_ui(ui: &mut egui::Ui, entry: &mut Entry) -> bool {
     let mut changed = false;
-    ui_kit::label(ui, "Wejście");
+    ui_kit::label(ui, tr!("Wejście"));
     ui.horizontal(|ui| {
         let is_ramp = matches!(entry, Entry::Ramp { .. });
-        if ui.selectable_label(!is_ramp, "Pionowe").clicked() && is_ramp {
+        if ui.selectable_label(!is_ramp, tr!("Pionowe")).clicked() && is_ramp {
             *entry = Entry::Plunge;
             changed = true;
         }
-        if ui.selectable_label(is_ramp, "Rampa").clicked() && !is_ramp {
+        if ui.selectable_label(is_ramp, tr!("Rampa")).clicked() && !is_ramp {
             *entry = Entry::Ramp { angle: 3.0 };
             changed = true;
         }
@@ -351,10 +351,10 @@ fn entry_ui(ui: &mut egui::Ui, entry: &mut Entry) -> bool {
 
 fn direction_ui(ui: &mut egui::Ui, d: &mut Direction) -> bool {
     let mut changed = false;
-    ui_kit::label(ui, "Kierunek");
+    ui_kit::label(ui, tr!("Kierunek"));
     ui.horizontal(|ui| {
-        changed |= ui.radio_value(d, Direction::Climb, "Współbieżny").changed();
-        changed |= ui.radio_value(d, Direction::Conventional, "Przeciwbieżny").changed();
+        changed |= ui.radio_value(d, Direction::Climb, tr!("Współbieżny")).changed();
+        changed |= ui.radio_value(d, Direction::Conventional, tr!("Przeciwbieżny")).changed();
     });
     ui.end_row();
     changed
@@ -398,8 +398,8 @@ fn op_row(ui: &mut egui::Ui, doc: &Document, lib: &ToolLibrary, i: usize) -> Opt
         name_color,
     );
     let tool = lib.get(op.tool_id).map(|t| format!("T{} Ø{}", t.number, t.diameter)).unwrap_or_else(|| "T?".into());
-    let side = if doc.stock.two_sided.is_some() && op.side == cam_ops::Side::B { "strona B  ·  " } else { "" };
-    let detail = format!("{side}{tool}  ·  gł. {} mm  ·  {} krz.", fmt_mm(op.cut.depth), op.contours.len());
+    let side = if doc.stock.two_sided.is_some() && op.side == cam_ops::Side::B { tr!("strona B  ·  ") } else { "" };
+    let detail = tr!("{}{}  ·  gł. {} mm  ·  {} krz.", side, tool, fmt_mm(op.cut.depth), op.contours.len());
     painter.text(egui::pos2(x, rect.top() + 29.0), egui::Align2::LEFT_CENTER, detail, egui::FontId::proportional(11.0), Color32::from_gray(150));
     if let Some(c) = cache {
         painter.text(
@@ -414,11 +414,11 @@ fn op_row(ui: &mut egui::Ui, doc: &Document, lib: &ToolLibrary, i: usize) -> Opt
         painter.text(
             egui::pos2(rect.right() - 8.0, rect.top() + 29.0),
             egui::Align2::RIGHT_CENTER,
-            "uwaga",
+            tr!("uwaga"),
             egui::FontId::proportional(11.0),
             Color32::from_rgb(230, 180, 80),
         );
-        let text = if warnings.is_empty() { "Brak ścieżki".to_string() } else { warnings.join("\n") };
+        let text = if warnings.is_empty() { tr!("Brak ścieżki").to_string() } else { warnings.join("\n") };
         resp.on_hover_text(text)
     } else {
         resp
@@ -457,16 +457,16 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
     // --- krzywe ---
     ui.add_space(4.0);
     let (text, fill) = if picking {
-        ("Dodawanie krzywych: WŁ.  —  Enter kończy", color.gamma_multiply(0.35))
+        (tr!("Dodawanie krzywych: WŁ.  —  Enter kończy"), color.gamma_multiply(0.35))
     } else {
-        ("Dodaj / usuń krzywe kliknięciem", ui.visuals().widgets.inactive.weak_bg_fill)
+        (tr!("Dodaj / usuń krzywe kliknięciem"), ui.visuals().widgets.inactive.weak_bg_fill)
     };
     if ui.add(egui::Button::new(text).fill(fill).min_size(egui::vec2(ui.available_width(), 26.0))).clicked() {
         *action = if picking { OpsAction::StopPicking } else { OpsAction::EditCurves(i) };
     }
     ui.horizontal(|ui| {
-        ui_kit::label(ui, &format!("Krzywe: {n_contours}"));
-        if ui.small_button("Pokaż").on_hover_text("Zaznacz krzywe tej operacji").clicked() {
+        ui_kit::label(ui, &tr!("Krzywe: {}", n_contours));
+        if ui.small_button(tr!("Pokaż")).on_hover_text(tr!("Zaznacz krzywe tej operacji")).clicked() {
             doc.clear_selection();
             for k in doc.ops[i].contours.clone() {
                 if k < doc.contours.len() {
@@ -475,8 +475,8 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
             }
         }
         if ui
-            .add_enabled(!sel.is_empty(), egui::Button::new("Ustaw z zaznaczenia").small())
-            .on_hover_text("Zastąp krzywe operacji aktualnie zaznaczonymi")
+            .add_enabled(!sel.is_empty(), egui::Button::new(tr!("Ustaw z zaznaczenia")).small())
+            .on_hover_text(tr!("Zastąp krzywe operacji aktualnie zaznaczonymi"))
             .clicked()
         {
             let kind = doc.ops[i].kind.clone();
@@ -489,11 +489,11 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
     if doc.stock.two_sided.is_some() {
         let op = &mut doc.ops[i];
         ui.horizontal(|ui| {
-            ui_kit::label(ui, "Strona płyty");
+            ui_kit::label(ui, tr!("Strona płyty"));
             changed |= ui.radio_value(&mut op.side, cam_ops::Side::A, "A").changed();
             changed |= ui
-                .radio_value(&mut op.side, cam_ops::Side::B, "B — po odwróceniu")
-                .on_hover_text("Geometria odbita względem osi odwracania; osobny plik G-code")
+                .radio_value(&mut op.side, cam_ops::Side::B, tr!("B — po odwróceniu"))
+                .on_hover_text(tr!("Geometria odbita względem osi odwracania; osobny plik G-code"))
                 .changed();
         });
     }
@@ -504,13 +504,13 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
     ui_kit::accent_card(ui, color, |ui| {
         egui::Grid::new("op_key").num_columns(2).spacing([12.0, 6.0]).show(ui, |ui| {
             let c = &mut op.cut;
-            changed |= big_num(ui, "Głębokość", &mut c.depth, 0.01..=500.0, 0.05, " mm");
+            changed |= big_num(ui, tr!("Głębokość"), &mut c.depth, 0.01..=500.0, 0.05, " mm");
             match &mut op.kind {
                 OpKind::Drill(d) if !d.helix => {
-                    ui.label(RichText::new("Wycofanie").size(15.0).strong().color(Color32::WHITE));
+                    ui.label(RichText::new(tr!("Wycofanie")).size(15.0).strong().color(Color32::WHITE));
                     ui.horizontal(|ui| {
                         let mut on = d.peck.is_some();
-                        if ui.checkbox(&mut on, "").on_hover_text("Wiercenie z wycofaniem co zadaną głębokość").changed() {
+                        if ui.checkbox(&mut on, "").on_hover_text(tr!("Wiercenie z wycofaniem co zadaną głębokość")).changed() {
                             d.peck = if on { Some(3.0) } else { None };
                             changed = true;
                         }
@@ -526,7 +526,7 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
                     ui.end_row();
                 }
                 _ => {
-                    changed |= big_num(ui, "Krok w dół", &mut c.step_down, 0.01..=100.0, 0.05, " mm");
+                    changed |= big_num(ui, tr!("Krok w dół"), &mut c.step_down, 0.01..=100.0, 0.05, " mm");
                 }
             }
         });
@@ -536,11 +536,11 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
         };
         if let Some(n) = passes.filter(|&n| n > 0) {
             let word = match n {
-                1 => "przejście",
-                n if (2..=4).contains(&(n % 10)) && !(12..=14).contains(&(n % 100)) => "przejścia",
-                _ => "przejść",
+                1 => tr!("przejście"),
+                n if (2..=4).contains(&(n % 10)) && !(12..=14).contains(&(n % 100)) => tr!("przejścia"),
+                _ => tr!("przejść"),
             };
-            ui.label(RichText::new(format!("{n} {word} w Z")).small().color(ui_kit::LABEL));
+            ui.label(RichText::new(tr!("{} {} w Z", n, word)).small().color(ui_kit::LABEL));
         }
     });
 
@@ -550,22 +550,22 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
     ui_kit::subtitle(ui, op.kind.label());
     egui::Grid::new("op_kind").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| match &mut op.kind {
         OpKind::Profile(p) => {
-            ui_kit::label(ui, "Strona");
+            ui_kit::label(ui, tr!("Strona"));
             ui.horizontal(|ui| {
-                changed |= ui.radio_value(&mut p.side, ProfileSide::Outside, "Zewn.").changed();
-                changed |= ui.radio_value(&mut p.side, ProfileSide::Inside, "Wewn.").changed();
-                changed |= ui.radio_value(&mut p.side, ProfileSide::On, "Po linii").changed();
+                changed |= ui.radio_value(&mut p.side, ProfileSide::Outside, tr!("Zewn.")).changed();
+                changed |= ui.radio_value(&mut p.side, ProfileSide::Inside, tr!("Wewn.")).changed();
+                changed |= ui.radio_value(&mut p.side, ProfileSide::On, tr!("Po linii")).changed();
             });
             ui.end_row();
             changed |= direction_ui(ui, &mut p.direction);
             changed |= entry_ui(ui, &mut p.entry);
-            changed |= num(ui, "Naddatek", &mut p.stock_to_leave, -10.0..=50.0, 0.01, " mm");
+            changed |= num(ui, tr!("Naddatek"), &mut p.stock_to_leave, -10.0..=50.0, 0.01, " mm");
             changed |= finish_ui(ui, &mut p.finish, &mut p.finish_feed_pct, feed);
-            ui_kit::label(ui, "Wejście po łuku");
+            ui_kit::label(ui, tr!("Wejście po łuku"));
             let mut on = p.lead.is_some();
             if ui
                 .checkbox(&mut on, "")
-                .on_hover_text("Zejście w odpadzie, obok ścianki; narzędzie dochodzi i odchodzi łukiem stycznym — bez śladu w miejscu wejścia")
+                .on_hover_text(tr!("Zejście w odpadzie, obok ścianki; narzędzie dochodzi i odchodzi łukiem stycznym — bez śladu w miejscu wejścia"))
                 .changed()
             {
                 p.lead = on.then_some(tool_r);
@@ -573,22 +573,22 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
             }
             ui.end_row();
             if let Some(l) = &mut p.lead {
-                changed |= num(ui, "   promień łuku", l, 0.2..=100.0, 0.05, " mm");
+                changed |= num(ui, tr!("   promień łuku"), l, 0.2..=100.0, 0.05, " mm");
                 if matches!(p.entry, Entry::Ramp { .. }) {
                     ui.label("");
-                    ui.label(RichText::new("z łukiem zejście jest pionowe, w odpadzie").small().color(ui_kit::LABEL));
+                    ui.label(RichText::new(tr!("z łukiem zejście jest pionowe, w odpadzie")).small().color(ui_kit::LABEL));
                     ui.end_row();
                 }
             }
             if p.side == ProfileSide::Inside {
-                ui_kit::label(ui, "Uszka w narożnikach");
+                ui_kit::label(ui, tr!("Uszka w narożnikach"));
                 changed |= ui
                     .checkbox(&mut p.corners, "")
-                    .on_hover_text("Frez dojeżdża do samego rogu (dog-bone), żeby wszedł tam kwadratowy element")
+                    .on_hover_text(tr!("Frez dojeżdża do samego rogu (dog-bone), żeby wszedł tam kwadratowy element"))
                     .changed();
                 ui.end_row();
             }
-            ui_kit::label(ui, "Mostki");
+            ui_kit::label(ui, tr!("Mostki"));
             let mut on = p.tabs.is_some();
             if ui.checkbox(&mut on, "").changed() {
                 p.tabs = if on { Some(Tabs { count: 4, width: 6.0, height: 2.0 }) } else { None };
@@ -596,33 +596,33 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
             }
             ui.end_row();
             if let Some(t) = &mut p.tabs {
-                ui_kit::label(ui, "   liczba");
+                ui_kit::label(ui, tr!("   liczba"));
                 let mut cnt = t.count as f64;
                 if ui.add(egui::DragValue::new(&mut cnt).range(1.0..=50.0).speed(0.1)).changed() {
                     t.count = cnt as u32;
                     changed = true;
                 }
                 ui.end_row();
-                changed |= num(ui, "   szerokość", &mut t.width, 0.5..=100.0, 0.1, " mm");
-                changed |= num(ui, "   wysokość", &mut t.height, 0.1..=100.0, 0.05, " mm");
+                changed |= num(ui, tr!("   szerokość"), &mut t.width, 0.5..=100.0, 0.1, " mm");
+                changed |= num(ui, tr!("   wysokość"), &mut t.height, 0.1..=100.0, 0.05, " mm");
             }
         }
         OpKind::Pocket(p) => {
-            ui_kit::label(ui, "Strategia");
+            ui_kit::label(ui, tr!("Strategia"));
             ui.horizontal(|ui| {
-                changed |= ui.radio_value(&mut p.strategy, PocketStrategy::Offset, "Offsetowa").changed();
-                changed |= ui.radio_value(&mut p.strategy, PocketStrategy::Zigzag, "Zygzak").changed();
+                changed |= ui.radio_value(&mut p.strategy, PocketStrategy::Offset, tr!("Offsetowa")).changed();
+                changed |= ui.radio_value(&mut p.strategy, PocketStrategy::Zigzag, tr!("Zygzak")).changed();
                 changed |= ui
                     .radio_value(&mut p.strategy, PocketStrategy::Adaptive, "HSM")
-                    .on_hover_text("Mały, równy krok i zaokrąglone pętle bez ostrych zakrętów; ściany i narożniki na każdej głębokości")
+                    .on_hover_text(tr!("Mały, równy krok i zaokrąglone pętle bez ostrych zakrętów; ściany i narożniki na każdej głębokości"))
                     .changed();
             });
             ui.end_row();
             if p.strategy == PocketStrategy::Zigzag {
-                changed |= num(ui, "Kąt przejść", &mut p.zigzag_angle, -180.0..=180.0, 1.0, "°");
+                changed |= num(ui, tr!("Kąt przejść"), &mut p.zigzag_angle, -180.0..=180.0, 1.0, "°");
             }
             let mut pct = p.stepover * 100.0;
-            ui_kit::label(ui, "Stepover");
+            ui_kit::label(ui, tr!("Stepover"));
             if ui.add(egui::DragValue::new(&mut pct).range(5.0..=100.0).speed(0.5).suffix(" % Ø")).changed() {
                 p.stepover = pct / 100.0;
                 changed = true;
@@ -630,41 +630,41 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
             ui.end_row();
             changed |= direction_ui(ui, &mut p.direction);
             changed |= entry_ui(ui, &mut p.entry);
-            changed |= num(ui, "Naddatek ścian", &mut p.stock_to_leave, 0.0..=50.0, 0.01, " mm");
+            changed |= num(ui, tr!("Naddatek ścian"), &mut p.stock_to_leave, 0.0..=50.0, 0.01, " mm");
             changed |= finish_ui(ui, &mut p.finish, &mut p.finish_feed_pct, feed);
-            ui_kit::label(ui, "Uszka w narożnikach");
+            ui_kit::label(ui, tr!("Uszka w narożnikach"));
             changed |= ui
                 .checkbox(&mut p.corners, "")
-                .on_hover_text("Frez dojeżdża do samego rogu ścian (dog-bone), żeby wszedł tam kwadratowy element")
+                .on_hover_text(tr!("Frez dojeżdża do samego rogu ścian (dog-bone), żeby wszedł tam kwadratowy element"))
                 .changed();
             ui.end_row();
         }
         OpKind::Drill(p) => {
-            ui_kit::label(ui, "Frezowanie po helisie");
-            changed |= ui.checkbox(&mut p.helix, "").on_hover_text("Dla otworów większych niż narzędzie").changed();
+            ui_kit::label(ui, tr!("Frezowanie po helisie"));
+            changed |= ui.checkbox(&mut p.helix, "").on_hover_text(tr!("Dla otworów większych niż narzędzie")).changed();
             ui.end_row();
         }
         OpKind::VCarve(p) => {
-            ui_kit::label(ui, "Dokładność");
+            ui_kit::label(ui, tr!("Dokładność"));
             changed |= ui
                 .add(egui::DragValue::new(&mut p.step).range(0.02..=2.0).speed(0.01).suffix(" mm"))
-                .on_hover_text("Odstęp punktów na brzegu: mniejszy = dokładniej, ale dłużej liczy")
+                .on_hover_text(tr!("Odstęp punktów na brzegu: mniejszy = dokładniej, ale dłużej liczy"))
                 .changed();
             ui.end_row();
             ui.label("");
             ui.label(
-                RichText::new("Głębokość wynika z szerokości kształtu; „Głębokość” wyżej to limit. Potrzebny frez V albo grawerski.")
+                RichText::new(tr!("Głębokość wynika z szerokości kształtu; „Głębokość” wyżej to limit. Potrzebny frez V albo grawerski."))
                     .small()
                     .color(ui_kit::LABEL),
             );
             ui.end_row();
         }
         OpKind::Engrave(p) => {
-            ui_kit::label(ui, "Strona");
+            ui_kit::label(ui, tr!("Strona"));
             ui.horizontal(|ui| {
-                changed |= ui.radio_value(&mut p.side, EngraveSide::Center, "Po ścieżce").changed();
-                changed |= ui.radio_value(&mut p.side, EngraveSide::Left, "Z lewej").changed();
-                changed |= ui.radio_value(&mut p.side, EngraveSide::Right, "Z prawej").changed();
+                changed |= ui.radio_value(&mut p.side, EngraveSide::Center, tr!("Po ścieżce")).changed();
+                changed |= ui.radio_value(&mut p.side, EngraveSide::Left, tr!("Z lewej")).changed();
+                changed |= ui.radio_value(&mut p.side, EngraveSide::Right, tr!("Z prawej")).changed();
             });
             ui.end_row();
             changed |= entry_ui(ui, &mut p.entry);
@@ -672,8 +672,8 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
     });
 
     // --- narzędzie i skrawanie ---
-    ui_kit::subtitle(ui, "Narzędzie i skrawanie");
-    let current = lib.get(op.tool_id).map(|t| t.display_name()).unwrap_or_else(|| "— brak —".into());
+    ui_kit::subtitle(ui, tr!("Narzędzie i skrawanie"));
+    let current = lib.get(op.tool_id).map(|t| t.display_name()).unwrap_or_else(|| tr!("— brak —").into());
     egui::ComboBox::from_id_salt("op_tool").width(ui.available_width() - 8.0).selected_text(current).show_ui(ui, |ui| {
         for t in &lib.tools {
             if ui.selectable_label(t.id == op.tool_id, t.display_name()).clicked() && t.id != op.tool_id {
@@ -686,13 +686,13 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
     if let Some(t) = lib.get(op.tool_id) {
         ui.horizontal_wrapped(|ui| {
             ui.label(
-                RichText::new(format!("{} · Ø{} · ostrza {} mm · korekcja r = {} mm", t.kind.label(), t.diameter, t.flute_length, t.radius()))
+                RichText::new(tr!("{} · Ø{} · ostrza {} mm · korekcja r = {} mm", t.kind.label(), t.diameter, t.flute_length, t.radius()))
                     .small()
                     .color(ui_kit::LABEL),
             );
             if ui
-                .small_button(format!("Parametry: {material}"))
-                .on_hover_text("Wczytaj obroty i posuwy z narzędzia dla materiału półfabrykatu")
+                .small_button(tr!("Parametry: {}", cam_i18n::tr_dyn(&material)))
+                .on_hover_text(tr!("Wczytaj obroty i posuwy z narzędzia dla materiału półfabrykatu"))
                 .clicked()
             {
                 op.cut.apply_tool(t, &material);
@@ -704,39 +704,39 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
     egui::Grid::new("op_cut").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
         let c = &mut op.cut;
         if !is_drill {
-            changed |= num(ui, "Posuw", &mut c.feed, 1.0..=50000.0, 10.0, " mm/min");
+            changed |= num(ui, tr!("Posuw"), &mut c.feed, 1.0..=50000.0, 10.0, " mm/min");
         }
-        let plunge_label = if is_drill { "Posuw wiercenia" } else { "Posuw wgłębny" };
+        let plunge_label = if is_drill { tr!("Posuw wiercenia") } else { tr!("Posuw wgłębny") };
         changed |= num(ui, plunge_label, &mut c.plunge_feed, 1.0..=50000.0, 5.0, " mm/min");
-        changed |= num(ui, "Obroty", &mut c.rpm, 0.0..=100000.0, 100.0, " obr/min");
+        changed |= num(ui, tr!("Obroty"), &mut c.rpm, 0.0..=100000.0, 100.0, tr!(" obr/min"));
     });
 
     // --- wysokości: rzadko zmieniane, zwinięte ---
     ui.add_space(4.0);
     let c = &mut op.cut;
-    let header = format!("Wysokości  (bezpieczna {} mm, góra {} mm)", fmt_mm(c.safe_z), fmt_mm(c.top_z));
+    let header = tr!("Wysokości  (bezpieczna {} mm, góra {} mm)", fmt_mm(c.safe_z), fmt_mm(c.top_z));
     egui::CollapsingHeader::new(RichText::new(header).color(ui_kit::LABEL)).id_salt("op_heights").show(ui, |ui| {
         egui::Grid::new("op_heights_grid").num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
-            changed |= num(ui, "Wys. bezpieczna", &mut c.safe_z, 0.5..=200.0, 0.1, " mm");
-            changed |= num(ui, "Góra (Z)", &mut c.top_z, -500.0..=500.0, 0.05, " mm");
+            changed |= num(ui, tr!("Wys. bezpieczna"), &mut c.safe_z, 0.5..=200.0, 0.1, " mm");
+            changed |= num(ui, tr!("Góra (Z)"), &mut c.top_z, -500.0..=500.0, 0.05, " mm");
         });
     });
 
     if let Some(Some(cache)) = doc.op_cache.get(i) {
         for w in &cache.result.warnings {
-            ui.label(RichText::new(format!("Uwaga: {w}")).color(Color32::from_rgb(230, 180, 80)));
+            ui.label(RichText::new(tr!("Uwaga: {}", w)).color(Color32::from_rgb(230, 180, 80)));
         }
         if cache.result.toolpath.moves.is_empty() {
-            ui.label(RichText::new("Brak ścieżki — dodaj krzywe").color(Color32::LIGHT_RED));
+            ui.label(RichText::new(tr!("Brak ścieżki — dodaj krzywe")).color(Color32::LIGHT_RED));
         } else {
             ui.label(
-                RichText::new(format!("Ruchów: {} · czas ≈ {}", cache.result.toolpath.moves.len(), fmt_time(cache.minutes)))
+                RichText::new(tr!("Ruchów: {} · czas ≈ {}", cache.result.toolpath.moves.len(), fmt_time(cache.minutes)))
                     .small()
                     .color(ui_kit::LABEL),
             );
         }
     } else if lib.get(doc.ops[i].tool_id).is_none() {
-        ui.label(RichText::new("Uwaga: narzędzie nie istnieje w bibliotece").color(Color32::LIGHT_RED));
+        ui.label(RichText::new(tr!("Uwaga: narzędzie nie istnieje w bibliotece")).color(Color32::LIGHT_RED));
     }
     changed
 }

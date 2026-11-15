@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/cam-geom", "crates/cam-io", "crates/cam-ops", "crates/cam-post", "crates/cam-sim", "app"]
+members = ["crates/cam-i18n", "crates/cam-geom", "crates/cam-io", "crates/cam-ops", "crates/cam-post", "crates/cam-sim", "app"]
 
 [workspace.package]
 version = "0.5.0"
@@ -8,6 +8,7 @@ edition = "2024"
 license = "GPL-3.0-or-later"
 
 [workspace.dependencies]
+cam-i18n = { path = "crates/cam-i18n" }
 cam-geom = { path = "crates/cam-geom" }
 cam-io = { path = "crates/cam-io" }
 cam-ops = { path = "crates/cam-ops" }

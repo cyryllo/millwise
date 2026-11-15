@@ -593,11 +593,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cam-i18n"
+version = "0.5.0"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "cam-io"
 version = "0.5.0"
 dependencies = [
  "anyhow",
  "cam-geom",
+ "cam-i18n",
  "dxf",
 ]
 
@@ -606,6 +614,7 @@ name = "cam-ops"
 version = "0.5.0"
 dependencies = [
  "cam-geom",
+ "cam-i18n",
  "cavalier_contours",
  "serde",
 ]
@@ -615,6 +624,7 @@ name = "cam-post"
 version = "0.5.0"
 dependencies = [
  "cam-geom",
+ "cam-i18n",
  "cam-io",
  "cam-ops",
  "serde",
@@ -626,6 +636,7 @@ name = "cam-sim"
 version = "0.5.0"
 dependencies = [
  "cam-geom",
+ "cam-i18n",
  "cam-ops",
  "manifold-rust",
  "rayon",
@@ -1983,6 +1994,7 @@ dependencies = [
  "anyhow",
  "bytemuck",
  "cam-geom",
+ "cam-i18n",
  "cam-io",
  "cam-ops",
  "cam-post",

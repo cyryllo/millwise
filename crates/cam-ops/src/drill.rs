@@ -1,5 +1,6 @@
 //! Wiercenie w środkach okręgów, opcjonalnie z wycofaniem (peck).
 
+use cam_i18n::tr;
 use crate::operation::{CutParams, DrillParams, OpResult};
 use crate::tool::Tool;
 use crate::toolpath::P3;
@@ -23,13 +24,10 @@ pub(crate) fn generate(cut: &CutParams, p: &DrillParams, tool: &Tool, contours: 
         }
     }
     if skipped > 0 {
-        res.warnings.push(format!("Wiercenie: pominięto {skipped} kontur(ów), które nie są okręgami"));
+        res.warnings.push(tr!("Wiercenie: pominięto {} kontur(ów), które nie są okręgami", skipped));
     }
     if too_big > 0 {
-        res.warnings.push(format!(
-            "{too_big} otwór(ów) większych niż narzędzie Ø{} — rozważ kieszeń lub profil wewnętrzny",
-            tool.diameter
-        ));
+        res.warnings.push(tr!("{} otwór(ów) większych niż narzędzie Ø{} — rozważ kieszeń lub profil wewnętrzny", too_big, tool.diameter));
     }
 
     // najbliższy sąsiad
@@ -118,11 +116,10 @@ fn helix_holes(cut: &CutParams, tool: &Tool, holes: &[(Vec2, f64)], res: &mut Op
         tp.rapid(P3::from_xy(c, cut.top_z + cut.retract_clearance));
     }
     if small > 0 {
-        res.warnings.push(format!("{small} otwór(ów) nie większych niż narzędzie — wejście pionowe"));
+        res.warnings.push(tr!("{} otwór(ów) nie większych niż narzędzie — wejście pionowe", small));
     }
     if core > 0 {
-        res.warnings.push(format!(
-            "{core} otwór(ów) ponad 2× większych od narzędzia — w środku zostanie rdzeń (przy przelotowych odpadnie)"
+        res.warnings.push(tr!("{} otwór(ów) ponad 2× większych od narzędzia — w środku zostanie rdzeń (przy przelotowych odpadnie)", core
         ));
     }
 }

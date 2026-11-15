@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+cam-i18n.workspace = true
 cam-geom.workspace = true
 cam-io.workspace = true
 cam-ops.workspace = true

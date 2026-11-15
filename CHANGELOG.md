@@ -7,6 +7,17 @@ Version numbers:
   when a new module is added);
 - the **third number** goes up for releases that only fix bugs.
 
+## Unreleased
+
+### Added
+
+- **English user interface.** Widok → Język / Language switches between
+  Polski and English at once, without a restart; the choice is remembered.
+  On the first start Millwise follows the system language (Polish for a
+  Polish system, English otherwise). Operation warnings and the comments in
+  the G-code follow the chosen language too. Material names saved in tool
+  and project files stay as they are and are only shown translated.
+
 ## 0.5.0 (2026-11-15)
 
 ### Added

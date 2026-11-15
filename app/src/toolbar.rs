@@ -1,5 +1,6 @@
 //! Pasek narzędzi po lewej: grupy (kolumna 1) i ich warianty (kolumna 2).
 
+use cam_i18n::tr;
 use crate::icons::{self, Icon};
 use cam_ops::{
     DrillParams, EngraveParams, EngraveSide, OpKind, PocketParams, PocketStrategy, ProfileParams, ProfileSide, Tabs,
@@ -21,12 +22,12 @@ impl Group {
 
     pub fn label(&self) -> &'static str {
         match self {
-            Group::Select => "Zaznacz",
-            Group::Profile => "Profil",
-            Group::Pocket => "Kieszeń",
-            Group::Drill => "Wiercenie",
-            Group::Engrave => "Grawer",
-            Group::Zero => "Zero",
+            Group::Select => tr!("Zaznacz"),
+            Group::Profile => tr!("Profil"),
+            Group::Pocket => tr!("Kieszeń"),
+            Group::Drill => tr!("Wiercenie"),
+            Group::Engrave => tr!("Grawer"),
+            Group::Zero => tr!("Zero"),
         }
     }
 
@@ -96,33 +97,33 @@ impl Sub {
     pub fn label(&self) -> &'static str {
         use Sub::*;
         match self {
-            Select => "Zaznacz",
-            Move => "Przesuń",
-            Rotate => "Obróć",
-            FlipH => "Odbij poziomo",
-            FlipV => "Odbij pionowo",
-            Scale => "Skaluj",
-            Align => "Wyrównaj",
-            Array => "Szyk",
-            Measure => "Zmierz",
-            ProfileOut => "Zewnętrzny",
-            ProfileIn => "Wewnętrzny",
-            Corners => "Narożniki",
-            PocketOffset => "Offsetowa",
-            PocketZigzag => "Zygzak",
-            PocketAdaptive => "Adaptacyjna",
-            DrillSimple => "Pojedyncze",
-            DrillPeck => "Z wycofaniem",
-            DrillHelix => "Frezowanie otworu",
-            EngCenter => "Po ścieżce",
-            EngLeft => "Z lewej",
-            EngRight => "Z prawej",
+            Select => tr!("Zaznacz"),
+            Move => tr!("Przesuń"),
+            Rotate => tr!("Obróć"),
+            FlipH => tr!("Odbij poziomo"),
+            FlipV => tr!("Odbij pionowo"),
+            Scale => tr!("Skaluj"),
+            Align => tr!("Wyrównaj"),
+            Array => tr!("Szyk"),
+            Measure => tr!("Zmierz"),
+            ProfileOut => tr!("Zewnętrzny"),
+            ProfileIn => tr!("Wewnętrzny"),
+            Corners => tr!("Narożniki"),
+            PocketOffset => tr!("Offsetowa"),
+            PocketZigzag => tr!("Zygzak"),
+            PocketAdaptive => tr!("Adaptacyjna"),
+            DrillSimple => tr!("Pojedyncze"),
+            DrillPeck => tr!("Z wycofaniem"),
+            DrillHelix => tr!("Frezowanie otworu"),
+            EngCenter => tr!("Po ścieżce"),
+            EngLeft => tr!("Z lewej"),
+            EngRight => tr!("Z prawej"),
             EngVcarve => "V-carve",
-            Text => "Tekst",
-            ZeroBL => "Lewy dolny",
-            ZeroCenter => "Środek",
-            ZeroTL => "Lewy górny",
-            ZeroPick => "Wskaż punkt",
+            Text => tr!("Tekst"),
+            ZeroBL => tr!("Lewy dolny"),
+            ZeroCenter => tr!("Środek"),
+            ZeroTL => tr!("Lewy górny"),
+            ZeroPick => tr!("Wskaż punkt"),
         }
     }
 
@@ -185,25 +186,25 @@ impl Sub {
         };
         let engrave = |side| OpKind::Engrave(EngraveParams { side, ..Default::default() });
         Some(match self {
-            ProfileOut => (profile(ProfileSide::Outside), thickness, "Profil zewn."),
-            ProfileIn => (profile(ProfileSide::Inside), thickness, "Profil wewn."),
-            PocketOffset => (OpKind::Pocket(PocketParams::default()), 3.0_f64.min(thickness), "Kieszeń"),
+            ProfileOut => (profile(ProfileSide::Outside), thickness, tr!("Profil zewn.")),
+            ProfileIn => (profile(ProfileSide::Inside), thickness, tr!("Profil wewn.")),
+            PocketOffset => (OpKind::Pocket(PocketParams::default()), 3.0_f64.min(thickness), tr!("Kieszeń")),
             PocketZigzag => (
                 OpKind::Pocket(PocketParams { strategy: PocketStrategy::Zigzag, ..Default::default() }),
                 3.0_f64.min(thickness),
-                "Kieszeń zygzak",
+                tr!("Kieszeń zygzak"),
             ),
             PocketAdaptive => (
                 OpKind::Pocket(PocketParams { strategy: PocketStrategy::Adaptive, stepover: 0.15, ..Default::default() }),
                 3.0_f64.min(thickness),
-                "Kieszeń HSM",
+                tr!("Kieszeń HSM"),
             ),
-            DrillSimple => (OpKind::Drill(DrillParams { peck: None, helix: false }), thickness, "Wiercenie"),
-            DrillPeck => (OpKind::Drill(DrillParams { peck: Some(3.0), helix: false }), thickness, "Wiercenie z wycofaniem"),
-            DrillHelix => (OpKind::Drill(DrillParams { peck: None, helix: true }), thickness, "Frezowanie otworów"),
-            EngCenter => (engrave(EngraveSide::Center), 0.5_f64.min(thickness), "Grawer"),
-            EngLeft => (engrave(EngraveSide::Left), 0.5_f64.min(thickness), "Grawer z lewej"),
-            EngRight => (engrave(EngraveSide::Right), 0.5_f64.min(thickness), "Grawer z prawej"),
+            DrillSimple => (OpKind::Drill(DrillParams { peck: None, helix: false }), thickness, tr!("Wiercenie")),
+            DrillPeck => (OpKind::Drill(DrillParams { peck: Some(3.0), helix: false }), thickness, tr!("Wiercenie z wycofaniem")),
+            DrillHelix => (OpKind::Drill(DrillParams { peck: None, helix: true }), thickness, tr!("Frezowanie otworów")),
+            EngCenter => (engrave(EngraveSide::Center), 0.5_f64.min(thickness), tr!("Grawer")),
+            EngLeft => (engrave(EngraveSide::Left), 0.5_f64.min(thickness), tr!("Grawer z lewej")),
+            EngRight => (engrave(EngraveSide::Right), 0.5_f64.min(thickness), tr!("Grawer z prawej")),
             EngVcarve => (OpKind::VCarve(Default::default()), 3.0_f64.min(thickness), "V-carving"),
             _ => return None,
         })

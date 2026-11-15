@@ -8,6 +8,7 @@
 //! = promień / tg(połowy kąta) (minus czubek freza), ograniczona głębokością
 //! operacji. Ścieżka idzie przez środki kół w kolejności punktów brzegu.
 
+use cam_i18n::tr;
 use crate::operation::{CutParams, OpResult, VCarveParams};
 use crate::path::z_levels;
 use crate::tool::{Tool, ToolKind};
@@ -99,13 +100,13 @@ pub(crate) fn generate(cut: &CutParams, p: &VCarveParams, tool: &Tool, contours:
     let (angle, tip) = match tool.kind {
         ToolKind::VBit { angle, tip_diameter } | ToolKind::Engraver { angle, tip_diameter } => (angle, tip_diameter),
         _ => {
-            res.warnings.push("V-carving wymaga freza V albo grawerskiego (stożkowego)".into());
+            res.warnings.push(tr!("V-carving wymaga freza V albo grawerskiego (stożkowego)").into());
             return;
         }
     };
     let closed: Vec<&Contour> = contours.iter().filter(|c| c.closed && c.verts.len() >= 2).collect();
     if closed.len() < contours.len() {
-        res.warnings.push("V-carving: pominięto kontury otwarte".into());
+        res.warnings.push(tr!("V-carving: pominięto kontury otwarte").into());
     }
     if closed.is_empty() {
         return;
@@ -135,8 +136,7 @@ pub(crate) fn generate(cut: &CutParams, p: &VCarveParams, tool: &Tool, contours:
         })
         .collect();
     if flat && p.warn_flat {
-        res.warnings.push(format!(
-            "Kształt szerszy niż frez na głębokości {} mm — środek zostaje płaski (do wybrania kieszenią)",
+        res.warnings.push(tr!("Kształt szerszy niż frez na głębokości {} mm — środek zostaje płaski (do wybrania kieszenią)",
             cut.depth
         ));
     }

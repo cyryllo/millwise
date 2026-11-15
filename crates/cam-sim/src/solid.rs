@@ -2,6 +2,7 @@
 //! jako bryła przejścia (otoczka wypukła narzędzia w punkcie początkowym i
 //! końcowym — narzędzia są wypukłe), usuwanie materiału = różnica brył.
 
+use cam_i18n::tr;
 use crate::ToolShape;
 use cam_ops::P3;
 use manifold_rust::linalg::Vec3;
@@ -96,7 +97,7 @@ pub struct SolidSim {
 
 impl SolidSim {
     pub fn stats(&self) -> String {
-        format!("otoczki {:.2} s, sumy {:.2} s, różnice {:.2} s", self.t_hull, self.t_union, self.t_diff)
+        tr!("otoczki {:.2} s, sumy {:.2} s, różnice {:.2} s", self.t_hull, self.t_union, self.t_diff)
     }
 
     /// Buduje z ścieżki symulatora mapy wysokości (te same czasy i narzędzia).

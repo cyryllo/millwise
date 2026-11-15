@@ -1,6 +1,7 @@
 //! Profil: obróbka po obrysie z korekcją promienia narzędzia (na zewnątrz,
 //! wewnątrz lub po linii), wiele przejść w Z, rampa, mostki.
 
+use cam_i18n::tr;
 use crate::operation::{
     dogbones, order_inside_first, ramp_length, start_near, CutParams, Direction, Entry, OpResult, ProfileParams, ProfileSide,
     Tabs,
@@ -26,7 +27,7 @@ pub(crate) fn generate(cut: &CutParams, p: &ProfileParams, tool: &Tool, contours
         }
         if !c.closed || p.side == ProfileSide::On {
             if !c.closed && p.side != ProfileSide::On && !open_warned {
-                res.warnings.push("Kontury otwarte obrabiane po linii (bez korekcji promienia)".into());
+                res.warnings.push(tr!("Kontury otwarte obrabiane po linii (bez korekcji promienia)").into());
                 open_warned = true;
             }
             let mut lp = c.clone();
@@ -54,7 +55,7 @@ pub(crate) fn generate(cut: &CutParams, p: &ProfileParams, tool: &Tool, contours
         let rough = offset(finish.unwrap_or(0.0));
         let finishing = if finish.is_some() { offset(0.0) } else { Vec::new() };
         if rough.is_empty() && finishing.is_empty() {
-            res.warnings.push(format!("Kontur #{}: narzędzie Ø{} nie mieści się w środku", i + 1, tool.diameter));
+            res.warnings.push(tr!("Kontur #{}: narzędzie Ø{} nie mieści się w środku", i + 1, tool.diameter));
             continue;
         }
 
@@ -108,7 +109,7 @@ fn tab_ranges(walk: &PathWalk, cut: &CutParams, tabs: Option<(&Tabs, f64)>, warn
         let n = t.count as f64;
         let w = t.width + dia;
         if walk.total < n * w * 1.5 {
-            warnings.push(format!("Kontur za krótki na {} mostki — pominięto", t.count));
+            warnings.push(tr!("Kontur za krótki na {} mostki — pominięto", t.count));
         } else {
             for k in 0..t.count {
                 let c = walk.total * (k as f64 + 0.5) / n;
@@ -196,7 +197,7 @@ fn cut_closed_lead(
         rr *= 0.5;
     }
     if rr <= 0.1 {
-        warnings.push("Za mało miejsca na wejście po łuku — wejście pionowe".into());
+        warnings.push(tr!("Za mało miejsca na wejście po łuku — wejście pionowe").into());
         cut_closed(tp, lp, levels, cut, Entry::Plunge, tabs, warnings);
         return;
     }

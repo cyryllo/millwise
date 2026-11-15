@@ -6,6 +6,7 @@
 //! historia łapie każdą edycję bez wpisywania jej w każdym miejscu programu.
 //! Krzywe są współdzielone między krokami, w których się nie zmieniły.
 
+use cam_i18n::tr;
 use crate::doc::{DocContour, Document, ParamEdit, Stock};
 use crate::icons::Icon;
 use crate::toolbar::Sub;
@@ -262,49 +263,49 @@ fn step(doc: &Document, (mark, label): (Mark, String), contours: Rc<Vec<DocConto
 /// Nazwa i ikona zmiany, gdy kod, który ją zrobił, nie podał opisu.
 fn describe(prev: &Step, doc: &Document) -> (Mark, String) {
     if doc.geom_revision != prev.geom {
-        return (Mark::new(Icon::Curve).badge(Badge::Edit), "Zmiana krzywych".into());
+        return (Mark::new(Icon::Curve).badge(Badge::Edit), tr!("Zmiana krzywych").into());
     }
     // dodana / usunięta: pierwsze miejsce, w którym listy się różnią (kopia operacji też się liczy)
     if doc.ops.len() > prev.ops.len() {
         let i = (0..doc.ops.len()).find(|&i| prev.ops.get(i) != Some(&doc.ops[i])).unwrap_or(doc.ops.len() - 1);
         let op = &doc.ops[i];
-        return (Mark::op(i, op, Badge::Add), format!("Nowa operacja: {}", op.name));
+        return (Mark::op(i, op, Badge::Add), tr!("Nowa operacja: {}", op.name));
     }
     if doc.ops.len() < prev.ops.len() {
         let i = (0..prev.ops.len()).find(|&i| doc.ops.get(i) != Some(&prev.ops[i])).unwrap_or(prev.ops.len() - 1);
         let op = &prev.ops[i];
-        return (Mark::op(i, op, Badge::Remove), format!("Usunięto operację: {}", op.name));
+        return (Mark::op(i, op, Badge::Remove), tr!("Usunięto operację: {}", op.name));
     }
     if doc.ops.len() == prev.ops.len() && doc.ops != prev.ops {
         let changed: Vec<usize> = (0..doc.ops.len()).filter(|&i| doc.ops[i] != prev.ops[i]).collect();
         if changed.len() == 2 && doc.ops[changed[0]] == prev.ops[changed[1]] && doc.ops[changed[1]] == prev.ops[changed[0]] {
             let i = changed[0];
-            return (Mark::op(i, &doc.ops[i], Badge::Order), "Kolejność operacji".into());
+            return (Mark::op(i, &doc.ops[i], Badge::Order), tr!("Kolejność operacji").into());
         }
         if let [i] = changed[..] {
             let (a, b) = (&prev.ops[i], &doc.ops[i]);
             let (badge, what) = if a.contours != b.contours {
-                (Badge::Curves, "krzywe")
+                (Badge::Curves, tr!("krzywe"))
             } else if a.name != b.name {
-                return (Mark::op(i, b, Badge::Edit), format!("Nazwa operacji: {}", b.name));
+                return (Mark::op(i, b, Badge::Edit), tr!("Nazwa operacji: {}", b.name));
             } else if a.enabled != b.enabled {
-                if b.enabled { (Badge::On, "włączona") } else { (Badge::Off, "wyłączona") }
+                if b.enabled { (Badge::On, tr!("włączona")) } else { (Badge::Off, tr!("wyłączona")) }
             } else if a.tool_id != b.tool_id {
-                (Badge::Edit, "narzędzie")
+                (Badge::Edit, tr!("narzędzie"))
             } else {
-                (Badge::Edit, "parametry")
+                (Badge::Edit, tr!("parametry"))
             };
-            return (Mark::op(i, b, badge), format!("{}: {what}", b.name));
+            return (Mark::op(i, b, badge), tr!("{}: {}", b.name, what));
         }
-        return (Mark::new(Icon::Document).badge(Badge::Edit), "Zmiana operacji".into());
+        return (Mark::new(Icon::Document).badge(Badge::Edit), tr!("Zmiana operacji").into());
     }
     if doc.stock != prev.stock {
-        return (Mark::new(Icon::Stock).badge(Badge::Edit), "Półfabrykat".into());
+        return (Mark::new(Icon::Stock).badge(Badge::Edit), tr!("Półfabrykat").into());
     }
     if doc.post != prev.post {
-        return (Mark::new(Icon::Document).badge(Badge::Edit), "Ustawienia G-code".into());
+        return (Mark::new(Icon::Document).badge(Badge::Edit), tr!("Ustawienia G-code").into());
     }
-    (Mark::new(Icon::Document), "Zmiana".into())
+    (Mark::new(Icon::Document), tr!("Zmiana").into())
 }
 
 #[cfg(test)]

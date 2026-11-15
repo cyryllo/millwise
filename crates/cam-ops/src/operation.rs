@@ -1,5 +1,6 @@
 //! Definicje operacji i generowanie ścieżek.
 
+use cam_i18n::tr;
 use crate::tool::Tool;
 use crate::toolpath::Toolpath;
 use cam_geom::Contour;
@@ -247,10 +248,10 @@ pub enum OpKind {
 impl OpKind {
     pub fn label(&self) -> &'static str {
         match self {
-            OpKind::Profile(_) => "Profil",
-            OpKind::Pocket(_) => "Kieszeń",
-            OpKind::Drill(_) => "Wiercenie",
-            OpKind::Engrave(_) => "Grawer",
+            OpKind::Profile(_) => tr!("Profil"),
+            OpKind::Pocket(_) => tr!("Kieszeń"),
+            OpKind::Drill(_) => tr!("Wiercenie"),
+            OpKind::Engrave(_) => tr!("Grawer"),
             OpKind::VCarve(_) => "V-carving",
         }
     }
@@ -291,16 +292,15 @@ pub struct OpResult {
 pub fn generate(op: &Operation, tool: &Tool, contours: &[Contour]) -> OpResult {
     let mut res = OpResult::default();
     if tool.diameter <= 0.0 {
-        res.warnings.push("Średnica narzędzia musi być > 0".into());
+        res.warnings.push(tr!("Średnica narzędzia musi być > 0").into());
         return res;
     }
     if op.cut.depth <= 0.0 {
-        res.warnings.push("Głębokość musi być > 0".into());
+        res.warnings.push(tr!("Głębokość musi być > 0").into());
         return res;
     }
     if op.cut.depth > tool.flute_length + 1e-9 && tool.flute_length > 0.0 {
-        res.warnings.push(format!(
-            "Głębokość {:.2} mm większa niż długość ostrzy narzędzia ({:.2} mm)",
+        res.warnings.push(tr!("Głębokość {:.2} mm większa niż długość ostrzy narzędzia ({:.2} mm)",
             op.cut.depth, tool.flute_length
         ));
     }

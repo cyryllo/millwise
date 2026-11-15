@@ -2,6 +2,7 @@
 //! kształtu), uszka w narożnikach, mostki według obwodu, kolejność według
 //! narzędzi. Najpierw plan z podsumowaniem, potem zastosowanie jednym krokiem.
 
+use cam_i18n::tr;
 use crate::doc::{count_tool_changes, grouped_order, Document};
 use crate::toolbar::Sub;
 use cam_ops::{CutParams, OpKind, Operation, ProfileSide, Tabs, ToolKind, ToolLibrary};
@@ -36,13 +37,13 @@ impl Category {
 
     pub fn label(&self) -> &'static str {
         match self {
-            Category::Auto => "z kształtu",
-            Category::Drill => "wiercenie",
-            Category::Pocket => "kieszeń",
-            Category::ProfileOut => "profil zewnętrzny",
-            Category::ProfileIn => "profil wewnętrzny",
-            Category::Engrave => "grawer",
-            Category::Skip => "pomiń",
+            Category::Auto => tr!("z kształtu"),
+            Category::Drill => tr!("wiercenie"),
+            Category::Pocket => tr!("kieszeń"),
+            Category::ProfileOut => tr!("profil zewnętrzny"),
+            Category::ProfileIn => tr!("profil wewnętrzny"),
+            Category::Engrave => tr!("grawer"),
+            Category::Skip => tr!("pomiń"),
         }
     }
 
@@ -122,40 +123,36 @@ impl Plan {
         let mut out = Vec::new();
         if opts.create_ops {
             if self.new_ops.is_empty() {
-                out.push("Nowe operacje: brak (wszystkie krzywe mają już operacje albo są pominięte)".into());
+                out.push(tr!("Nowe operacje: brak (wszystkie krzywe mają już operacje albo są pominięte)").into());
             }
             for op in &self.new_ops {
-                out.push(format!(
-                    "Nowa operacja: {} — {}, gł. {} mm",
+                out.push(tr!("Nowa operacja: {} — {}, gł. {} mm",
                     op.name,
-                    pl(op.contours.len(), "krzywa", "krzywe", "krzywych"),
+                    pl(op.contours.len(), tr!("krzywa"), tr!("krzywe"), tr!("krzywych")),
                     op.cut.depth
                 ));
             }
             if self.unmatched > 0 {
-                out.push(format!(
-                    "Bez operacji zostaje {} (brak pasującego narzędzia)",
-                    pl(self.unmatched, "krzywa", "krzywe", "krzywych")
+                out.push(tr!("Bez operacji zostaje {} (brak pasującego narzędzia)",
+                    pl(self.unmatched, tr!("krzywa"), tr!("krzywe"), tr!("krzywych"))
                 ));
             }
         }
         if opts.corners {
-            out.push(format!("Uszka w narożnikach: {}", pl(self.corners, "operacja", "operacje", "operacji")));
+            out.push(tr!("Uszka w narożnikach: {}", pl(self.corners, tr!("operacja"), tr!("operacje"), tr!("operacji"))));
         }
         if opts.tabs {
-            out.push(format!("Mostki według obwodu: {}", pl(self.tabs, "operacja", "operacje", "operacji")));
+            out.push(tr!("Mostki według obwodu: {}", pl(self.tabs, tr!("operacja"), tr!("operacje"), tr!("operacji"))));
         }
         if opts.order {
             if self.changes_after < self.changes_before {
-                out.push(format!(
-                    "Kolejność według narzędzi: {} zamiast {}",
-                    pl(self.changes_after, "zmiana narzędzia", "zmiany narzędzia", "zmian narzędzia"),
+                out.push(tr!("Kolejność według narzędzi: {} zamiast {}",
+                    pl(self.changes_after, tr!("zmiana narzędzia"), tr!("zmiany narzędzia"), tr!("zmian narzędzia")),
                     self.changes_before
                 ));
             } else {
-                out.push(format!(
-                    "Kolejność: bez zmian ({})",
-                    pl(self.changes_before, "zmiana narzędzia", "zmiany narzędzia", "zmian narzędzia")
+                out.push(tr!("Kolejność: bez zmian ({})",
+                    pl(self.changes_before, tr!("zmiana narzędzia"), tr!("zmiany narzędzia"), tr!("zmian narzędzia"))
                 ));
             }
         }
@@ -172,7 +169,7 @@ fn pl(n: usize, one: &str, few: &str, many: &str) -> String {
     } else {
         many
     };
-    format!("{n} {w}")
+    tr!("{} {}", n, w)
 }
 
 /// Wiertło z biblioteki o średnicy okręgu (±0,1 mm).
@@ -313,7 +310,7 @@ pub fn apply(doc: &mut Document, plan: Plan, opts: &AutoOptions) {
     doc.revision += 1;
     doc.label(
         crate::history::Mark::new(crate::icons::Icon::Document).badge(crate::history::Badge::Add),
-        format!("Automatyzacja ({added} nowych operacji)"),
+        tr!("Automatyzacja ({} nowych operacji)", added),
     );
 }
 

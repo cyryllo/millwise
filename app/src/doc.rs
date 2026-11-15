@@ -1,5 +1,6 @@
 //! Model dokumentu: geometria, warstwy, zaznaczenie, półfabrykat, operacje.
 
+use cam_i18n::tr;
 use cam_geom::{Aabb2, Contour, Vec2};
 use cam_io::{DxfImport, ImportOptions};
 use cam_ops::{OpResult, Operation, ToolLibrary, P3};
@@ -269,7 +270,7 @@ impl Document {
             .or(self.path.as_ref())
             .and_then(|p| p.file_name())
             .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_else(|| "bez nazwy".into())
+            .unwrap_or_else(|| tr!("bez nazwy").into())
     }
 
     pub fn is_visible(&self, i: usize) -> bool {
@@ -347,10 +348,10 @@ impl Document {
     pub fn toggle_op_contour(&mut self, op: usize, i: usize) -> Result<(), &'static str> {
         if !self.contour_fits(&self.ops[op].kind, i) {
             return Err(match self.ops[op].kind {
-                cam_ops::OpKind::Pocket(_) => "Kieszeń wymaga krzywej zamkniętej",
-                cam_ops::OpKind::VCarve(_) => "V-carving wymaga krzywej zamkniętej",
-                cam_ops::OpKind::Drill(_) => "Wiercenie wymaga okręgu",
-                _ => "Krzywa nie pasuje do operacji",
+                cam_ops::OpKind::Pocket(_) => tr!("Kieszeń wymaga krzywej zamkniętej"),
+                cam_ops::OpKind::VCarve(_) => tr!("V-carving wymaga krzywej zamkniętej"),
+                cam_ops::OpKind::Drill(_) => tr!("Wiercenie wymaga okręgu"),
+                _ => tr!("Krzywa nie pasuje do operacji"),
             });
         }
         let list = &mut self.ops[op].contours;
@@ -445,7 +446,7 @@ impl Document {
         self.ops_dirty = true;
         self.revision += 1;
         let after = self.tool_changes();
-        self.label(Mark::new(Icon::Document).badge(Badge::Order), format!("Kolejność według narzędzi (zmian narzędzia: {before}, teraz {after})"));
+        self.label(Mark::new(Icon::Document).badge(Badge::Order), tr!("Kolejność według narzędzi (zmian narzędzia: {}, teraz {})", before, after));
     }
 
     /// Zmiana kolejności obróbki: operacja `from` trafia na miejsce `to` (numer na liście po zmianie).
@@ -466,7 +467,7 @@ impl Document {
         self.ops_dirty = true;
         self.revision += 1;
         let mark = Mark::op(to, &self.ops[to], Badge::Order);
-        self.label(mark, format!("Kolejność obróbki: {name} na {}. miejsce", to + 1));
+        self.label(mark, tr!("Kolejność obróbki: {} na {}. miejsce", name, to + 1));
     }
 
     /// Przelicza ścieżki wszystkich operacji.
@@ -485,10 +486,10 @@ impl Document {
                 }
                 let mut result = cam_ops::generate(op, tool, &geom);
                 if op.side == cam_ops::Side::B && self.stock.two_sided.is_none() {
-                    result.warnings.push("Strona B bez włączonej obróbki dwustronnej — liczona jak strona A".into());
+                    result.warnings.push(tr!("Strona B bez włączonej obróbki dwustronnej — liczona jak strona A").into());
                 }
                 if geom.len() < op.contours.len() {
-                    result.warnings.push("Część konturów operacji nie istnieje".into());
+                    result.warnings.push(tr!("Część konturów operacji nie istnieje").into());
                 }
                 if let Some(m) = machine {
                     check_machine(op, &result.toolpath, m, &mut result.warnings);
@@ -555,7 +556,7 @@ impl Document {
             op.contours = op.contours.iter().filter_map(|&i| map.get(i).copied().flatten()).collect();
         }
         self.geometry_changed();
-        self.label(Mark::new(Icon::Delete), format!("Usunięto krzywe ({})", sel.len()));
+        self.label(Mark::new(Icon::Delete), tr!("Usunięto krzywe ({})", sel.len()));
         sel.len()
     }
 
@@ -581,7 +582,7 @@ impl Document {
             self.selected.push(true);
         }
         self.geometry_changed();
-        self.label(Mark::new(Icon::Paste).badge(Badge::Add), format!("Wklejono krzywe ({})", items.len()));
+        self.label(Mark::new(Icon::Paste).badge(Badge::Add), tr!("Wklejono krzywe ({})", items.len()));
     }
 
     /// Kopia zaznaczonych krzywych do schowka: kontur i nazwa warstwy.
@@ -739,7 +740,7 @@ impl Document {
         self.selected_op = None;
         let n = self.contours.len() - base;
         self.geometry_changed();
-        self.label(Mark::new(Icon::Open).badge(Badge::Add), format!("Dodano element: {name}"));
+        self.label(Mark::new(Icon::Open).badge(Badge::Add), tr!("Dodano element: {}", name));
         (n, n_ops)
     }
 
@@ -787,7 +788,7 @@ impl Document {
     pub fn move_selected(&mut self, d: Vec2) -> bool {
         let ok = self.transform_selected(|c| c.translate(d));
         if ok {
-            self.label(Mark::new(Icon::Move), "Przesunięcie");
+            self.label(Mark::new(Icon::Move), tr!("Przesunięcie"));
         }
         ok
     }
@@ -795,7 +796,7 @@ impl Document {
     pub fn rotate_selected(&mut self, deg: f64) -> bool {
         let Some(bb) = self.selection_bbox() else { return false };
         let c = bb.center();
-        self.label(Mark::new(Icon::Rotate), format!("Obrót {deg}°"));
+        self.label(Mark::new(Icon::Rotate), tr!("Obrót {}°", deg));
         self.step_param = Some(ParamEdit::Rotate { selection: self.selected_indices(), deg });
         self.transform_selected(|k| k.rotate(c, deg.to_radians()))
     }
@@ -804,7 +805,7 @@ impl Document {
         let Some(bb) = self.selection_bbox() else { return false };
         let c = bb.center();
         let pct = (factor * 1e4).round() / 1e2;
-        self.label(Mark::new(Icon::Scale), format!("Skalowanie {pct}%"));
+        self.label(Mark::new(Icon::Scale), tr!("Skalowanie {}%", pct));
         self.step_param = Some(ParamEdit::Scale { selection: self.selected_indices(), pct });
         self.transform_selected(|k| k.scale(c, factor))
     }
@@ -813,9 +814,9 @@ impl Document {
         let Some(bb) = self.selection_bbox() else { return false };
         let c = bb.center();
         if horizontal {
-            self.label(Mark::new(Icon::FlipH), "Odbicie w poziomie");
+            self.label(Mark::new(Icon::FlipH), tr!("Odbicie w poziomie"));
         } else {
-            self.label(Mark::new(Icon::FlipV), "Odbicie w pionie");
+            self.label(Mark::new(Icon::FlipV), tr!("Odbicie w pionie"));
         }
         if horizontal {
             self.transform_selected(|k| k.mirror_x(c.x))
@@ -827,7 +828,7 @@ impl Document {
     /// Wyrównuje każdą zaznaczoną krzywą do krawędzi/środka całego zaznaczenia.
     pub fn align_selected(&mut self, mode: AlignMode) -> bool {
         let Some(all) = self.selection_bbox() else { return false };
-        self.label(Mark::new(Icon::Align), "Wyrównanie");
+        self.label(Mark::new(Icon::Align), tr!("Wyrównanie"));
         for i in self.selected_indices() {
             let bb = self.contours[i].bbox;
             let d = match mode {
@@ -886,7 +887,7 @@ impl Document {
             }
         }
         self.geometry_changed();
-        self.label(Mark::new(Icon::Array), format!("Szyk {cols} × {rows}"));
+        self.label(Mark::new(Icon::Array), tr!("Szyk {} × {}", cols, rows));
         true
     }
 
@@ -897,7 +898,7 @@ impl Document {
             self.rebuild(i);
         }
         self.geometry_changed();
-        self.label(Mark::new(Icon::ZeroPick), "Zero programu");
+        self.label(Mark::new(Icon::ZeroPick), tr!("Zero programu"));
     }
 
     /// Punkt przyciągania do wskazywania: środek okręgu lub wierzchołek w promieniu `tol`.
@@ -937,7 +938,11 @@ impl Document {
         // obróbka dwustronna: osobne pliki dla strony A i B
         let two = self.stock.two_sided.is_some() && self.ops.iter().any(|o| o.enabled && o.side == cam_ops::Side::B);
         if !two {
-            return self.gcode_side(lib, machine, None);
+            let files = self.gcode_side(lib, machine, None)?;
+            if files.is_empty() {
+                return Err(tr!("Brak włączonych operacji ze ścieżkami").into());
+            }
+            return Ok(files);
         }
         let mut out = Vec::new();
         for (side, name) in [(cam_ops::Side::A, "strona_A"), (cam_ops::Side::B, "strona_B")] {
@@ -948,12 +953,11 @@ impl Document {
                         out.push((s, text));
                     }
                 }
-                Err(e) if e.starts_with("Brak włączonych") => {}
                 Err(e) => return Err(e),
             }
         }
         if out.is_empty() {
-            return Err("Brak włączonych operacji ze ścieżkami".into());
+            return Err(tr!("Brak włączonych operacji ze ścieżkami").into());
         }
         Ok(out)
     }
@@ -964,9 +968,9 @@ impl Document {
             if !op.enabled || side.is_some_and(|s| s != op.side) {
                 continue;
             }
-            let tool = lib.get(op.tool_id).ok_or_else(|| format!("Operacja „{}”: brak narzędzia w bibliotece", op.name))?;
+            let tool = lib.get(op.tool_id).ok_or_else(|| tr!("Operacja „{}”: brak narzędzia w bibliotece", op.name))?;
             let Some(cache) = self.op_cache.get(i).and_then(|c| c.as_ref()) else {
-                return Err(format!("Operacja „{}” nie ma wygenerowanej ścieżki", op.name));
+                return Err(tr!("Operacja „{}” nie ma wygenerowanej ścieżki", op.name));
             };
             if cache.result.toolpath.moves.is_empty() {
                 continue;
@@ -980,7 +984,7 @@ impl Document {
             });
         }
         if prog.is_empty() {
-            return Err("Brak włączonych operacji ze ścieżkami".into());
+            return Ok(Vec::new()); // brak operacji tej strony
         }
         let mut title = self
             .path
@@ -989,7 +993,7 @@ impl Document {
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_else(|| "program".into());
         if let Some(s) = side {
-            title.push_str(if s == cam_ops::Side::A { " - strona A" } else { " - strona B (po odwróceniu, Z0 na nowej górze)" });
+            title.push_str(if s == cam_ops::Side::A { tr!(" - strona A") } else { tr!(" - strona B (po odwróceniu, Z0 na nowej górze)") });
         }
         let post = machine.post_settings();
         if post.tool_change == cam_post::ToolChange::SeparateFiles {
@@ -1003,16 +1007,16 @@ impl Document {
 /// Ostrzeżenia wynikające z możliwości maszyny.
 fn check_machine(op: &Operation, tp: &cam_ops::Toolpath, m: &Machine, warnings: &mut Vec<String>) {
     if op.cut.feed > m.max_feed_xy + 1e-6 {
-        warnings.push(format!("Posuw {} mm/min większy niż maks. maszyny ({})", op.cut.feed, m.max_feed_xy));
+        warnings.push(tr!("Posuw {} mm/min większy niż maks. maszyny ({})", op.cut.feed, m.max_feed_xy));
     }
     if op.cut.plunge_feed > m.max_feed_z + 1e-6 {
-        warnings.push(format!("Posuw wgłębny {} mm/min większy niż maks. Z maszyny ({})", op.cut.plunge_feed, m.max_feed_z));
+        warnings.push(tr!("Posuw wgłębny {} mm/min większy niż maks. Z maszyny ({})", op.cut.plunge_feed, m.max_feed_z));
     }
     if m.spindle != cam_post::SpindleKind::Manual && m.rpm_max > 0.0 && op.cut.rpm > m.rpm_max + 0.5 {
-        warnings.push(format!("Obroty {} większe niż maks. wrzeciona ({}) — zostaną ograniczone", op.cut.rpm, m.rpm_max));
+        warnings.push(tr!("Obroty {} większe niż maks. wrzeciona ({}) — zostaną ograniczone", op.cut.rpm, m.rpm_max));
     }
     if op.cut.depth > m.travel_z {
-        warnings.push(format!("Głębokość większa niż zakres Z maszyny ({} mm)", m.travel_z));
+        warnings.push(tr!("Głębokość większa niż zakres Z maszyny ({} mm)", m.travel_z));
     }
     let mut bb = Aabb2::EMPTY;
     for mv in &tp.moves {
@@ -1022,8 +1026,7 @@ fn check_machine(op: &Operation, tp: &cam_ops::Toolpath, m: &Machine, warnings: 
     if !bb.is_empty() {
         let s = bb.size();
         if s.x > m.travel_x + 1e-6 || s.y > m.travel_y + 1e-6 {
-            warnings.push(format!(
-                "Ścieżka {:.0} × {:.0} mm większa niż pole robocze {:.0} × {:.0} mm",
+            warnings.push(tr!("Ścieżka {:.0} × {:.0} mm większa niż pole robocze {:.0} × {:.0} mm",
                 s.x, s.y, m.travel_x, m.travel_y
             ));
         }
