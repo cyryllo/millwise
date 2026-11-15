@@ -36,7 +36,7 @@ pub(crate) fn generate(cut: &CutParams, p: &ProfileParams, tool: &Tool, contours
                 orient(&mut lp, p);
                 cut_closed(&mut res.toolpath, &lp, &levels, cut, p.entry, tabs.map(|t| (t, tool.diameter)), &mut res.warnings);
             } else {
-                cut_open(&mut res.toolpath, &lp, &levels, cut);
+                cut_open(&mut res.toolpath, &lp, &levels, cut, p.entry);
             }
             continue;
         }
@@ -235,29 +235,63 @@ fn cut_closed_lead(
 }
 
 /// Przejścia po otwartym konturze: kolejne poziomy na zmianę w przód i w tył.
-pub(crate) fn cut_open(tp: &mut Toolpath, lp: &Contour, levels: &[f64], cut: &CutParams) {
-    let walk = PathWalk::new(lp);
-    if walk.is_empty() {
+/// Z rampą: zejście ukośne wzdłuż linii pod zadanym kątem (na krótkiej linii
+/// tam i z powrotem, aż do głębokości), powrót na początek na pełnej
+/// głębokości — żeby nie został klin materiału — i całe przejście.
+pub(crate) fn cut_open(tp: &mut Toolpath, lp: &Contour, levels: &[f64], cut: &CutParams, entry: Entry) {
+    let mut rev = lp.clone();
+    rev.reverse();
+    let (wf, wr) = (PathWalk::new(lp), PathWalk::new(&rev));
+    if wf.is_empty() {
         return;
     }
-    let start = walk.point_at(0.0);
-    tp.travel_to(P3::from_xy(start, cut.top_z + cut.retract_clearance), cut.safe_z);
-    for (k, &z) in levels.iter().enumerate() {
-        let z_of = move |_t: f64| z;
-        walk.emit(
+    let pass = |tp: &mut Toolpath, w: &PathWalk, s_start: f64, travel: f64, z_of: &dyn Fn(f64) -> f64, ramp_end: f64| {
+        w.emit(
             tp,
             &WalkSpec {
-                s_start: 0.0,
-                travel: walk.total,
-                z_of: &z_of,
+                s_start,
+                travel,
+                z_of,
                 tabs: &[],
                 tab_z: f64::NEG_INFINITY,
                 feed: cut.feed,
                 plunge_feed: cut.plunge_feed,
-                ramp_end: 0.0,
-                reverse: k % 2 == 1,
+                ramp_end,
+                reverse: false,
             },
         );
+    };
+    tp.travel_to(P3::from_xy(wf.point_at(0.0), cut.top_z + cut.retract_clearance), cut.safe_z);
+    let mut prev = cut.top_z;
+    for (k, &z) in levels.iter().enumerate() {
+        // ten poziom w kierunku `wa`, `wb` — w przeciwnym
+        let (wa, wb) = if k % 2 == 0 { (&wf, &wr) } else { (&wr, &wf) };
+        if let Some(l) = ramp_length(entry, prev - z).filter(|l| *l > 1e-6) {
+            let span = l.min(wa.total);
+            let slope = (prev - z) / l;
+            let mut cur = prev;
+            let mut forward = true;
+            let mut guard = 0;
+            while cur > z + 1e-9 && guard < 10_000 {
+                guard += 1;
+                let nz = (cur - span * slope).max(z);
+                let z0 = cur;
+                let z_of = move |t: f64| z0 - (z0 - nz) * (t / span).min(1.0);
+                if forward {
+                    pass(tp, wa, 0.0, span, &z_of, span);
+                } else {
+                    pass(tp, wb, wb.total - span, span, &z_of, span);
+                }
+                cur = nz;
+                forward = !forward;
+            }
+            if !forward {
+                // koniec rampy daleko od początku — powrót na pełnej głębokości
+                pass(tp, wb, wb.total - span, span, &move |_t: f64| z, 0.0);
+            }
+        }
+        pass(tp, wa, 0.0, wa.total, &move |_t: f64| z, 0.0);
+        prev = z;
     }
 }
 
@@ -475,6 +509,32 @@ mod tests {
         let first_cut = res.toolpath.moves.iter().position(|m| m.end().z < 0.0).unwrap();
         let last_cut = res.toolpath.moves.iter().rposition(|m| m.end().z < 0.0).unwrap();
         assert!(res.toolpath.moves[first_cut..=last_cut].iter().all(|m| !matches!(m, Move::Rapid(_))));
+    }
+
+    #[test]
+    fn open_contour_ramps_in_at_the_set_angle() {
+        let tool = Tool { diameter: 6.0, ..Default::default() };
+        for len in [50.0, 5.0] {
+            let line = Contour { verts: vec![Vertex::new(0.0, 0.0, 0.0), Vertex::new(len, 0.0, 0.0)], closed: false };
+            let o = with(ProfileSide::On, |p| p.entry = Entry::Ramp { angle: 10.0 });
+            let res = generate(&o, &tool, &[line]);
+            let tan = 10f64.to_radians().tan();
+            let mut prev: Option<crate::toolpath::P3> = None;
+            for m in &res.toolpath.moves {
+                let e = m.end();
+                if let (Some(p), false) = (prev, matches!(m, Move::Rapid(_))) {
+                    let dz = p.z - e.z;
+                    if dz > 1e-9 && e.z < -1e-9 {
+                        let run = p.xy().distance(e.xy());
+                        assert!(run * tan >= dz - 1e-6, "linia {len}: zejście {dz} na {run} mm — za stromo");
+                    }
+                }
+                prev = Some(e);
+            }
+            // cała linia na pełnej głębokości, od końca do końca
+            let bottom: Vec<_> = cutting(&res.toolpath).into_iter().filter(|p| (p.z + 4.0).abs() < 1e-9).collect();
+            assert!(bottom.iter().any(|p| p.x.abs() < 1e-9) && bottom.iter().any(|p| (p.x - len).abs() < 1e-9), "linia {len}");
+        }
     }
 
     #[test]

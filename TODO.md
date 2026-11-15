@@ -38,7 +38,6 @@ Plan ustalony, start dopiero po dopracowaniu 2D. Szczegóły w
 - [ ] Kieszeń adaptacyjna (HSM): stałe obciążenie freza, szybsze i
       bezpieczniejsze wybieranie dużych kieszeni, zwłaszcza w aluminium.
 - [ ] Obróbka dwustronna: odwracanie detalu z bazowaniem.
-- [ ] Rampa dla linii otwartych (teraz zawsze wejście pionowe).
 - [ ] **Automatyzacja** — przycisk z oknem „co zrobić automatycznie”; każda
       opcja do zaznaczenia, przed zastosowaniem podsumowanie (co i dla ilu
       krzywych), całość jako jeden krok w historii (Ctrl+Z cofa wszystko):

@@ -31,7 +31,7 @@ pub(crate) fn generate(cut: &CutParams, p: &EngraveParams, tool: &Tool, contours
             if path.closed {
                 cut_closed(&mut res.toolpath, &path, &levels, cut, p.entry, None, &mut res.warnings);
             } else {
-                cut_open(&mut res.toolpath, &path, &levels, cut);
+                cut_open(&mut res.toolpath, &path, &levels, cut, p.entry);
             }
         }
     }

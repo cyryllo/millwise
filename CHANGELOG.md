@@ -18,6 +18,10 @@ Version numbers:
   („Uszka w narożnikach”) or with the new tool Profil → Narożniki: click a
   curve of an inside profile or a pocket to switch the corners on or off.
   Rounded corners and corners of the part itself are left as they are.
+- **Ramp entry on open lines** (profile on a line, engraving): the cutter goes
+  down along the line at the set angle instead of plunging — back and forth
+  on a short line — then returns to the start at full depth so no wedge of
+  material is left, and cuts the whole line.
 
 ## 0.4.0 (2026-11-14)
 
