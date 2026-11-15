@@ -23,12 +23,17 @@ use std::time::Instant;
 const KEYFRAME_BUDGET: usize = 160 * 1024 * 1024;
 
 enum Cmd {
+    /// Dokładna klatka (bryła, gdy silnik bryłowy).
     Seek(f64),
+    /// Szybki podgląd z mapy wysokości — podczas przeciągania suwaka.
+    Preview(f64),
 }
 
 /// Gotowa klatka symulacji.
 pub struct Frame {
     time: f64,
+    /// Klatka dokładna (false = szybki podgląd w trakcie przewijania).
+    exact: bool,
     mesh: SimMesh,
     pos: Option<(P3, usize)>,
     serial: u64,
@@ -122,17 +127,18 @@ fn spawn_worker(
 
             // --- klatki na żądanie ---
             let mut serial = 0u64;
-            let mut target = Some(0.0);
+            let mut target = Some((0.0, true));
             loop {
-                if let Some(t) = target.take() {
+                if let Some((t, exact)) = target.take() {
                     let t0 = Instant::now();
                     sim.seek_with(t, &keys);
                     serial += 1;
                     let mesh = match &mut solid {
-                        Some(s) => s.mesh_at(t),
-                        None => sim.mesh(),
+                        Some(s) if exact => s.mesh_at(t),
+                        _ => sim.mesh(),
                     };
-                    let frame = Frame { time: t, mesh, pos: sim.position(), serial, millis: t0.elapsed().as_millis() };
+                    let exact = exact || solid.is_none();
+                    let frame = Frame { time: t, exact, mesh, pos: sim.position(), serial, millis: t0.elapsed().as_millis() };
                     if tx_msg.send(Msg::Frame(Box::new(frame))).is_err() {
                         return;
                     }
@@ -148,7 +154,8 @@ fn spawn_worker(
                     }
                 }
                 match cmd {
-                    Cmd::Seek(t) => target = Some(t),
+                    Cmd::Seek(t) => target = Some((t, true)),
+                    Cmd::Preview(t) => target = Some((t, false)),
                 }
             }
         })
@@ -191,7 +198,16 @@ pub struct SimState {
     /// Po przeliczeniu przewiń do ułamka programu (dla programisty).
     pub jump_to_fraction: Option<f64>,
     empty_mesh: SimMesh,
+    /// Suwak czasu jest przeciągany — wtedy szybki podgląd zamiast bryły.
+    scrubbing: bool,
+    /// Silnik wybierany automatycznie (dopóki użytkownik nie wybierze sam).
+    engine_auto: bool,
+    /// Automatycznie wybrano silnik „Szybki”, bo program jest bardzo gęsty (liczba ruchów).
+    dense: Option<usize>,
 }
+
+/// Od tylu ruchów silnik bryłowy liczyłby za długo — automatycznie „Szybki”.
+const DENSE_MOVES: usize = 40_000;
 
 impl Default for SimState {
     fn default() -> Self {
@@ -224,6 +240,9 @@ impl Default for SimState {
             jump_to_end: false,
             jump_to_fraction: None,
             empty_mesh: SimMesh::default(),
+            scrubbing: false,
+            engine_auto: true,
+            dense: None,
         }
     }
 }
@@ -233,6 +252,28 @@ impl SimState {
     pub fn sync(&mut self, ctx: &egui::Context, doc: &Document, lib: &ToolLibrary, machine: &Machine) {
         self.sides = doc.stock.two_sided.is_some() && doc.ops.iter().any(|o| o.enabled && o.side == cam_ops::Side::B);
         let side_b = self.sides && self.side == cam_ops::Side::B;
+        if self.engine_auto {
+            let moves: usize = doc
+                .ops
+                .iter()
+                .zip(&doc.op_cache)
+                .filter(|(op, _)| op.enabled && (!self.sides || op.side == self.side))
+                .filter_map(|(_, c)| c.as_ref())
+                .map(|c| c.result.toolpath.moves.len())
+                .sum();
+            if moves > DENSE_MOVES {
+                if self.dense.is_none() {
+                    self.engine = Engine::Fast;
+                    self.resolution = self.resolution.max(800);
+                }
+                self.dense = Some(moves);
+            } else {
+                if self.dense.is_some() {
+                    self.engine = Engine::Solid;
+                }
+                self.dense = None;
+            }
+        }
         let key = (
             doc.paths_revision,
             doc.stock.thickness.to_bits(),
@@ -314,13 +355,19 @@ impl SimState {
             }
             ctx.request_repaint();
         }
-        let shown = self.frame.as_ref().map(|f| f.time);
-        if !self.pending && shown.is_none_or(|t| (t - self.time).abs() > 1e-9) {
+        let shown = self.frame.as_ref().map(|f| (f.time, f.exact));
+        // nowa klatka: inny czas, albo po przewijaniu (był szybki podgląd) — dokładna
+        let stale = shown.is_none_or(|(t, exact)| (t - self.time).abs() > 1e-9 || (!exact && !self.scrubbing));
+        if !self.pending && stale {
             if let Some(w) = &self.worker {
-                if w.tx.send(Cmd::Seek(self.time)).is_ok() {
+                let cmd = if self.scrubbing { Cmd::Preview(self.time) } else { Cmd::Seek(self.time) };
+                if w.tx.send(cmd).is_ok() {
                     self.pending = true;
                 }
             }
+        }
+        if self.scrubbing || shown.is_some_and(|(_, exact)| !exact) {
+            ctx.request_repaint();
         }
     }
 
@@ -403,7 +450,9 @@ impl SimState {
             }
         });
         let slider = egui::Slider::new(&mut self.time, 0.0..=dur.max(0.001)).show_value(false);
-        ui.add_sized([ui.available_width(), 18.0], slider);
+        let r = ui.add_sized([ui.available_width(), 18.0], slider);
+        // przeciąganie suwaka: szybki podgląd; dokładna bryła po puszczeniu
+        self.scrubbing = r.dragged();
         ui.horizontal(|ui| {
             ui.label(tr!("Prędkość"));
             ui.add(egui::Slider::new(&mut self.speed, 1.0..=500.0).logarithmic(true).suffix("×").max_decimals(0));
@@ -418,20 +467,33 @@ impl SimState {
         ui.checkbox(&mut self.show_model, tr!("Model 3D")).on_hover_text(tr!("Model STL — widoczny tam, gdzie materiał jest zdjęty, albo po wyłączeniu materiału"));
         ui.horizontal(|ui| {
             ui.label(tr!("Silnik"));
-            ui.selectable_value(&mut self.engine, Engine::Solid, tr!("Bryła"))
+            let a = ui
+                .selectable_value(&mut self.engine, Engine::Solid, tr!("Bryła"))
                 .on_hover_text(tr!("Dokładna bryła (operacje boolowskie) — czyste ściany, fazy i zaokrąglenia; dłuższe przeliczenie"));
-            ui.selectable_value(&mut self.engine, Engine::Fast, tr!("Szybki"))
+            let b = ui
+                .selectable_value(&mut self.engine, Engine::Fast, tr!("Szybki"))
                 .on_hover_text(tr!("Mapa wysokości — natychmiastowe przeliczenie, dla bardzo dużych programów"));
+            if a.clicked() || b.clicked() {
+                self.engine_auto = false;
+            }
         });
+        if let (Some(n), true, Engine::Fast) = (self.dense, self.engine_auto, self.engine) {
+            ui.label(
+                RichText::new(tr!("Bardzo gęsta ścieżka ({} ruchów) — wybrano silnik Szybki; Bryła liczyłaby się bardzo długo.", n))
+                    .small()
+                    .color(Color32::from_rgb(230, 180, 80)),
+            );
+        }
         ui.add_enabled_ui(self.engine == Engine::Fast, |ui| ui.horizontal(|ui| {
             ui.label(tr!("Dokładność"));
             let label = |n: usize| match n {
                 200 => tr!("zgrubna"),
                 400 => tr!("normalna"),
-                _ => tr!("wysoka"),
+                800 => tr!("wysoka"),
+                _ => tr!("bardzo wysoka"),
             };
             egui::ComboBox::from_id_salt("sim_res").selected_text(label(self.resolution)).show_ui(ui, |ui| {
-                for n in [200, 400, 800] {
+                for n in [200, 400, 800, 1600] {
                     ui.selectable_value(&mut self.resolution, n, tr!("{} ({} kom.)", label(n), n));
                 }
             });
@@ -589,7 +651,11 @@ mod perf {
             cam_ops::Operation { side: cam_ops::Side::A, name: "x".into(), enabled: true, kind, tool_id: tool.id, cut, contours: vec![] }
         };
         doc.add_op(mk(cam_ops::OpKind::Rough3D(Default::default()), &flat));
-        doc.add_op(mk(cam_ops::OpKind::Finish3D(Default::default()), &ball));
+        let so = std::env::var("PERF_STEPOVER").ok().and_then(|v| v.parse().ok()).unwrap_or(0.1);
+        // PERF_ENGRAVER=1: frez grawerski 0,2 mm, odstęp `so` w mm
+        let engr = lib.tools.iter().find(|t| matches!(t.kind, cam_ops::ToolKind::Engraver { .. })).unwrap().clone();
+        let (fin, so) = if std::env::var_os("PERF_ENGRAVER").is_some() { (&engr, so / engr.diameter) } else { (&ball, so) };
+        doc.add_op(mk(cam_ops::OpKind::Finish3D(cam_ops::Finish3DParams { stepover: so, ..Default::default() }), fin));
         doc.regenerate(&lib, None);
         let data: Vec<OpData> = doc
             .ops
@@ -603,6 +669,24 @@ mod perf {
         let ops: Vec<SimOp> = data.iter().map(|(t, p)| SimOp { tool: t.clone(), points: p }).collect();
         let area = doc.stock_box().unwrap();
         let th = doc.stock.thickness;
+        // silnik szybki (mapa wysokości, „wysoka” dokładność): całość i przewijanie
+        let mut hm = Simulator::new(Heightmap::new(area, 0.0, -th, 800), &ops, 6000.0);
+        let t = Instant::now();
+        hm.advance_to(hm.duration());
+        let t_adv = t.elapsed();
+        let t = Instant::now();
+        let m = hm.mesh();
+        eprintln!(
+            "mapa wysokości: {} odcinków, przeliczenie {:?}, siatka {:?} ({} trójkątów, komórka {:.3} mm)",
+            hm.path.len(),
+            t_adv,
+            t.elapsed(),
+            m.indices.len() / 3,
+            hm.map.cell
+        );
+        if std::env::var_os("PERF_ONLY_FAST").is_some() {
+            return;
+        }
         let mut sim = Simulator::new(Heightmap::new(area, 0.0, -th, 400), &ops, 6000.0);
         sim.advance_to(0.0);
         use cam_sim::solid;
@@ -619,8 +703,16 @@ mod perf {
         });
         eprintln!("bryła: {} odcinków, co {every}, przeliczenie {:?}, {}", ss.segment_count(), t.elapsed(), ss.stats());
         eprintln!("klatki kluczowe: {} trójkątów razem", ss.keyframe_triangles());
-        // odtwarzanie: klatki co 1/30 s przy 20× (czas programu)
+        // przewijanie ręczne: skoki w różne miejsca
         let dur = sim.duration();
+        let mut seeks = Vec::new();
+        for frac in [0.95, 0.6, 0.85, 0.7, 0.99, 0.75] {
+            let t = Instant::now();
+            let m = ss.mesh_at(dur * frac);
+            seeks.push((frac, t.elapsed().as_millis(), m.indices.len() / 3));
+        }
+        eprintln!("przewijanie (ułamek, ms, trójkąty): {seeks:?}");
+        // odtwarzanie: klatki co 1/30 s przy 20× (czas programu)
         for frac in [0.1, 0.5, 0.9] {
             let mut tt = dur * frac;
             let t = Instant::now();

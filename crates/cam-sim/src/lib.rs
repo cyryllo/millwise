@@ -143,8 +143,13 @@ impl Heightmap {
             return 0.0;
         }
         let mut removed = 0.0f32;
+        let tip = a.z.min(b.z) as f32;
         for j in j0..=j1 as usize {
             for i in i0..=i1 as usize {
+                // materiał już niżej niż czubek — narzędzie nic tu nie zdejmie
+                if self.z[j * self.nx + i] <= tip {
+                    continue;
+                }
                 let c = self.center(i, j);
                 if let Some(h) = seg_height(c, a, b, tool) {
                     let k = j * self.nx + i;
@@ -199,7 +204,14 @@ pub fn seg_height(p: Vec2, a: P3, b: P3, tool: &ToolShape) -> Option<f64> {
             // f(t) = z(t) + max(dist(t) − tip, 0) / tan — wypukła; minimum w punkcie
             // stacjonarnym części stożkowej albo na końcach przedziałów
             let k = 1.0 / tan_half.max(1e-9);
-            let mut cand = vec![t0, t1];
+            // kandydaci na minimum (bez alokacji — funkcja wołana miliony razy)
+            let mut cand = [t0; 6];
+            let mut nc = 2;
+            cand[1] = t1;
+            let mut push = |t: f64| {
+                cand[nc] = t;
+                nc += 1;
+            };
             if l2 > 1e-18 {
                 let len = l2.sqrt();
                 let tp = -w.dot(d) / l2; // rzut p na prostą
@@ -207,17 +219,17 @@ pub fn seg_height(p: Vec2, a: P3, b: P3, tool: &ToolShape) -> Option<f64> {
                 let g = -(b.z - a.z) / (k * len);
                 if g.abs() < 1.0 {
                     let u = g * e / (1.0 - g * g).sqrt();
-                    cand.push((tp + u / len).clamp(t0, t1));
+                    push((tp + u / len).clamp(t0, t1));
                 }
-                cand.push(tp.clamp(t0, t1));
+                push(tp.clamp(t0, t1));
                 // granice płaskiego czubka (dist = tip)
                 if tip_r > 0.0 && e < tip_r {
                     let h = (tip_r * tip_r - e * e).sqrt() / len;
-                    cand.push((tp - h).clamp(t0, t1));
-                    cand.push((tp + h).clamp(t0, t1));
+                    push((tp - h).clamp(t0, t1));
+                    push((tp + h).clamp(t0, t1));
                 }
             }
-            Some(cand.into_iter().map(f).fold(f64::INFINITY, f64::min))
+            Some(cand[..nc].iter().map(|&t| f(t)).fold(f64::INFINITY, f64::min))
         }
         Profile::Ball | Profile::Bull { .. } => {
             // funkcja wypukła — przeszukiwanie złotym podziałem
@@ -305,6 +317,9 @@ pub struct Collision {
     pub op: usize,
     pub depth: f32,
 }
+
+/// Powyżej tylu odcinków w kubełku siatka materiału nie liczy dokładnych ścian.
+const DENSE_BUCKET: usize = 192;
 
 pub struct Simulator {
     pub map: Heightmap,
@@ -480,6 +495,18 @@ impl Simulator {
             _ => {}
         }
         self.advance_to(t);
+    }
+
+    /// Czy w okolicy punktu jest tyle odcinków ścieżki, że dokładne liczenie wysokości
+    /// między węzłami nic nie daje (przejścia gęstsze niż siatka), a kosztuje bardzo dużo.
+    pub fn dense_at(&self, p: Vec2) -> bool {
+        let m = &self.map;
+        let bx = ((p.x - m.origin.x) / self.bucket).floor();
+        let by = ((p.y - m.origin.y) / self.bucket).floor();
+        if bx < 0.0 || by < 0.0 || bx as usize >= self.bnx || by as usize >= self.bny {
+            return false;
+        }
+        self.buckets[by as usize * self.bnx + bx as usize].len() > DENSE_BUCKET
     }
 
     /// Dokładna wysokość materiału w dowolnym punkcie (nie tylko w węzłach siatki).

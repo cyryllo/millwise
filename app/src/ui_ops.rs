@@ -690,14 +690,15 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
             });
             ui.end_row();
             let waterline = p.strategy == cam_ops::Finish3DStrategy::Waterline;
-            let mut pct = p.stepover * 100.0;
+            // w mm — przy frezach z cienką końcówką (V, grawerski) % średnicy nic nie mówi
+            let mut mm = p.stepover * d;
             ui_kit::label(ui, if waterline { tr!("Odstęp warstw") } else { tr!("Odstęp przejść") });
             ui.horizontal(|ui| {
-                if ui.add(egui::DragValue::new(&mut pct).range(1.0..=100.0).speed(0.2).suffix(" % Ø")).changed() {
-                    p.stepover = pct / 100.0;
+                if ui.add(egui::DragValue::new(&mut mm).range(0.01..=d.max(0.01)).speed(0.005).max_decimals(3).suffix(" mm")).changed() {
+                    p.stepover = mm / d.max(1e-6);
                     changed = true;
                 }
-                ui.label(RichText::new(format!("= {:.2} mm", p.stepover * d)).small().color(ui_kit::LABEL));
+                ui.label(RichText::new(format!("= {:.1} % Ø", p.stepover * 100.0)).small().color(ui_kit::LABEL));
             });
             ui.end_row();
             // wysokość grzbietów między przejściami (frez kulowy, płaska powierzchnia)

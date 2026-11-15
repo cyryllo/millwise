@@ -42,4 +42,10 @@ fn main() {
         let r = generate_with_model(&op, &tool, &[], Some(&ModelInput { heights: &h, stock, ref_tool: None }));
         println!("warstwice ({name}): {} ruchów, {:?}, {:?}", r.toolpath.moves.len(), t.elapsed(), r.warnings);
     }
+    // frez grawerski z końcówką 0,2 mm, przejścia co 0,1 mm (jak u użytkownika)
+    let tool = Tool { diameter: 3.175, kind: ToolKind::Engraver { angle: 30.0, tip_diameter: 0.2 }, ..Default::default() };
+    let op = Operation { kind: OpKind::Finish3D(Finish3DParams { stepover: 0.1 / 3.175, ..Default::default() }), ..op.clone() };
+    let t = Instant::now();
+    let r = generate_with_model(&op, &tool, &[], Some(&ModelInput { heights: &h, stock, ref_tool: None }));
+    println!("grawerski 0,2 / co 0,1 mm: {} ruchów, {:?}", r.toolpath.moves.len(), t.elapsed());
 }

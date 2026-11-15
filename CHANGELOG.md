@@ -92,6 +92,16 @@ Version numbers:
   more detailed (e.g. after 3D finishing: about 5 frames per second at the
   end, now 15–30+). Keyframes for seeking share unchanged tiles and are kept
   within a memory budget.
+- **Very dense toolpaths** (e.g. 3D finishing every 0.1 mm with a fine
+  engraving cutter) no longer stall the simulation. Dragging the time slider
+  shows a quick preview and the exact solid follows when the slider is
+  released. A program with more than 40 000 moves switches to the Fast engine
+  by itself (with a note; choosing the engine by hand still works), which
+  gained a „very high” accuracy. The Fast engine builds its surface up to
+  ~250× faster where the passes are denser than its grid, and its flat
+  bottom is drawn with far fewer triangles. 3D parallel finishing is
+  computed on all processor cores. The finishing pass spacing is entered in
+  millimetres.
 
 ## 0.5.0 (2026-11-15)
 

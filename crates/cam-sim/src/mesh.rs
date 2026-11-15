@@ -96,14 +96,19 @@ pub(crate) fn build_mesh(sim: &Simulator) -> SimMesh {
     // --- uskoki na krawędziach (wspólne dla sąsiednich komórek) ---
     let mut step_cache: HashMap<EdgeKey, Vec<Step>> = HashMap::new();
     let mut steps_of = |key: EdgeKey| -> Vec<Step> {
+        let (i, j, dir) = key;
+        let (i2, j2) = if dir == 0 { (i + 1, j) } else { (i, j + 1) };
+        let mid = m.center(i, j).lerp(m.center(i2, j2), 0.5);
+        // gęsta ścieżka (przejścia gęstsze niż siatka): bez dokładnych ścian i bez pamięci podręcznej
+        if sim.dense_at(mid) {
+            return Vec::new();
+        }
         step_cache
             .entry(key)
             .or_insert_with(|| {
-                let (i, j, dir) = key;
-                let (i2, j2) = if dir == 0 { (i + 1, j) } else { (i, j + 1) };
                 let (ha, hb) = (h(i, j), h(i2, j2));
                 // także przy równych końcach może być wąski rowek/żebro — stąd pomiar środka
-                let zm = sim.height_exact(m.center(i, j).lerp(m.center(i2, j2), 0.5)) as f32;
+                let zm = sim.height_exact(mid) as f32;
                 if (ha - hb).abs() <= 0.005 && (zm - ha).abs() <= 0.005 {
                     return Vec::new();
                 }
@@ -165,6 +170,8 @@ pub(crate) fn build_mesh(sim: &Simulator) -> SimMesh {
         n: Vec2,
     }
     let mut wall_segs: Vec<WallSeg> = Vec::new();
+    // spód gładkich komórek: zbierany i łączony w pasy (płaski — nie trzeba 2 trójkątów na komórkę)
+    let mut full_bottom = vec![false; nx * ny];
 
     for j in 0..ny - 1 {
         for i in 0..nx - 1 {
@@ -174,7 +181,7 @@ pub(crate) fn build_mesh(sim: &Simulator) -> SimMesh {
             let edges: [(EdgeKey, bool); 4] = [((i, j, 0), true), ((i + 1, j, 1), true), ((i, j + 1, 0), false), ((i, j, 1), false)];
             let steps: [Vec<Step>; 4] = edges.map(|(k, _)| steps_of(k));
 
-            let smooth = |out: &mut SimMesh| {
+            let smooth = |out: &mut SimMesh, full_bottom: &mut Vec<bool>| {
                 if hs.iter().all(|&z| through(z)) {
                     return;
                 }
@@ -183,7 +190,7 @@ pub(crate) fn build_mesh(sim: &Simulator) -> SimMesh {
                 if zmax - zmin > 1e-4 {
                     // zbocze: punkt środkowy o dokładnej wysokości — załamania idą wzdłuż geometrii
                     let pc = m.center(i, j).lerp(m.center(i + 1, j + 1), 0.5);
-                    let zc = sim.height_exact(pc) as f32;
+                    let zc = if sim.dense_at(pc) { hs.iter().sum::<f32>() * 0.25 } else { sim.height_exact(pc) as f32 };
                     let mut n = [0.0f32; 3];
                     for (ci, cj) in corners {
                         let k = normals[cj * nx + ci];
@@ -195,12 +202,11 @@ pub(crate) fn build_mesh(sim: &Simulator) -> SimMesh {
                 } else {
                     out.indices.extend_from_slice(&[a, b, c, a, c, d]);
                 }
-                let [a, b, c, d] = corners.map(|(x, y)| bnode(x, y));
-                out.indices.extend_from_slice(&[a, c, b, a, d, c]);
+                full_bottom[j * nx + i] = true;
             };
 
             if steps.iter().all(|s| s.is_empty()) {
-                smooth(&mut out);
+                smooth(&mut out, &mut full_bottom);
                 continue;
             }
 
@@ -326,7 +332,7 @@ pub(crate) fn build_mesh(sim: &Simulator) -> SimMesh {
                         );
                     }
                 }
-                smooth(&mut out);
+                smooth(&mut out, &mut full_bottom);
                 continue;
             }
 
@@ -424,6 +430,23 @@ pub(crate) fn build_mesh(sim: &Simulator) -> SimMesh {
     }
 
     // ściany z normalnymi uśrednionymi w punktach wspólnych sąsiednich komórek
+    // spód: ciągłe pasy gładkich komórek w każdym wierszu jako jeden prostokąt
+    for j in 0..ny - 1 {
+        let mut i = 0;
+        while i < nx - 1 {
+            if !full_bottom[j * nx + i] {
+                i += 1;
+                continue;
+            }
+            let start = i;
+            while i < nx - 1 && full_bottom[j * nx + i] {
+                i += 1;
+            }
+            let (a, b, c, d) = (bnode(start, j), bnode(i, j), bnode(i, j + 1), bnode(start, j + 1));
+            out.indices.extend_from_slice(&[a, c, b, a, d, c]);
+        }
+    }
+
     let mut acc: HashMap<(EdgeKey, usize), Vec2> = HashMap::with_capacity(wall_segs.len() * 2);
     for w in &wall_segs {
         let len = w.p[0].distance(w.p[1]).max(1e-6);

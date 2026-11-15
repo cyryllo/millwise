@@ -28,7 +28,7 @@ pub(crate) fn generate(cut: &CutParams, p: &Finish3DParams, tool: &Tool, contour
     } else {
         closed.iter().map(|c| c.flatten(0.01)).collect()
     };
-    let step = (p.stepover.clamp(0.01, 1.0) * tool.diameter).max(0.01);
+    let step = (p.stepover.clamp(0.001, 1.0) * tool.diameter).max(0.01);
     let ds = (h.cell * 2.0).clamp(0.05, 0.25);
     let tol = (h.cell * 0.25).max(0.005);
     let prof = ToolProfile::of(tool);
@@ -50,8 +50,9 @@ pub(crate) fn generate(cut: &CutParams, p: &Finish3DParams, tool: &Tool, contour
         let vmin = pts.clone().map(|q| q.dot(v)).fold(f64::MAX, f64::min);
         let vmax = pts.map(|q| q.dot(v)).fold(f64::MIN, f64::max);
         let n = ((vmax - vmin) / step).ceil().max(1.0) as usize;
-        let mut passes: Vec<Vec<P3>> = Vec::new();
-        for k in 0..=n {
+        // linie niezależne — liczone równolegle na wszystkich rdzeniach, potem po kolei
+        let line_passes = |k: usize| -> Vec<Vec<P3>> {
+            let mut passes = Vec::new();
             let vv = vmin + (vmax - vmin) * k as f64 / n as f64;
             let mut spans = spans_on_line(&area, u, v, vv);
             if k % 2 == 1 {
@@ -80,7 +81,22 @@ pub(crate) fn generate(cut: &CutParams, p: &Finish3DParams, tool: &Tool, contour
                     }
                 }
             }
-        }
+            passes
+        };
+        let threads = std::thread::available_parallelism().map_or(4, |t| t.get()).min(n + 1);
+        let mut per_line: Vec<Vec<Vec<P3>>> = vec![Vec::new(); n + 1];
+        let chunk = (n + 1).div_ceil(threads);
+        std::thread::scope(|sc| {
+            for (c, slot) in per_line.chunks_mut(chunk).enumerate() {
+                let line_passes = &line_passes;
+                sc.spawn(move || {
+                    for (k, out) in slot.iter_mut().enumerate() {
+                        *out = line_passes(c * chunk + k);
+                    }
+                });
+            }
+        });
+        let passes: Vec<Vec<P3>> = per_line.into_iter().flatten().collect();
         // przejścia: sąsiednie łączone po powierzchni, dalsze — przez wysokość bezpieczną
         let tp = &mut res.toolpath;
         for pass in passes {
@@ -257,7 +273,7 @@ fn waterline(cut: &CutParams, p: &Finish3DParams, tool: &Tool, contours: &[Conto
     let (tz, nx, ny) = drop_grid(&idx, &prof, p.allowance, area, step);
     let Some(rest) = rest_filter(cut, p, tool, m, &idx, res) else { return };
     let keep = |q: Vec2| inside(q) && rest.as_ref().is_none_or(|r| r.height_at(q).is_some());
-    let dz = (p.stepover.clamp(0.01, 1.0) * tool.diameter).max(0.01);
+    let dz = (p.stepover.clamp(0.001, 1.0) * tool.diameter).max(0.01);
     let bottom = cut.bottom_z();
     let tol = (step * 0.1).max(0.005);
     let tp = &mut res.toolpath;
