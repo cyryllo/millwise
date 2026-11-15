@@ -3,7 +3,7 @@
 **Po polsku:** [README_pl.md](README_pl.md) · **Changes:** [CHANGELOG.md](CHANGELOG.md) · **For developers:** [DEVELOPMENT.md](DEVELOPMENT.md)
 
 > **Early development — not ready for use.** Millwise is at a very early stage
-> (version 0.7.0). It changes every day and the G-code it writes has not been
+> (version 0.7.1). It changes every day and the G-code it writes has not been
 > tested on real machines. **Please do not use it to run a CNC machine yet.**
 > A first test version for Linux can be downloaded (see below). Feedback and
 > ideas are welcome in the issues.
@@ -15,7 +15,7 @@ not planned for now). The user interface is in Polish and English.
 
 ![Millwise main window](docs/screenshot.png)
 
-## What it does (0.7.0)
+## What it does (0.7.1)
 
 - **DXF import:** lines, arcs, circles, polylines with arcs, splines,
   ellipses and blocks; loose pieces are joined into contours, inches are
@@ -58,9 +58,10 @@ not planned for now). The user interface is in Polish and English.
   (with their operations) to the current one; the elements list shows what
   the project is made of.
 - **Tool library** shared by all projects, with a visual choice of the cutter
-  type (flat, ball, bull nose, V, engraving, drill), cutting data per
-  material (wood, MDF, aluminium, acrylic) and a basic set of flat, ball and
-  V cutters and drills in 3, 4 and 6 mm.
+  type (flat, ball, tapered ball, bull nose, V, engraving, drill), cutting
+  data per material (wood, MDF, aluminium, acrylic) and a basic set of flat,
+  ball and V cutters and drills in 3, 4 and 6 mm; the tools are grouped by
+  type.
 - **Machines** with a picture of the machine type: work area, homing corner, controller, feed and rapid limits,
   spindle, tool change (M0 pause, M6 or one file per tool), coolant, custom
   program start and end. Operations are checked against the machine.
@@ -89,8 +90,8 @@ The [Releases](https://github.com/cyryllo/millwise/releases) page has an
 Ubuntu 22.04 or newer and other distributions of that age.
 
 ```sh
-chmod +x Millwise-0.7.0-x86_64.AppImage
-./Millwise-0.7.0-x86_64.AppImage
+chmod +x Millwise-0.7.1-x86_64.AppImage
+./Millwise-0.7.1-x86_64.AppImage
 ```
 
 Millwise chooses OpenGL by itself on NVIDIA cards and when the default
