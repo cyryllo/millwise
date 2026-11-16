@@ -77,17 +77,7 @@ drewnie (jedna paczka = jedno wydanie):
 - [ ] Wykańczanie ze stałym odstępem na powierzchni (scallop): jednakowe
       grzbiety na stromym i na płaskim.
 
-## 3. Karta graficzna (GPU)
-
-Symulacja materiału na karcie jest (silnik „GPU”). Dalej:
-
-- [ ] **Ścieżki w widoku 2D rysowane przez kartę.** Teraz procesor przygotowuje
-      każdą linię w każdej klatce — przy gęstych ścieżkach 3D (np. co 0,1 mm)
-      widok 2D zwalnia przy przesuwaniu i powiększaniu. Ścieżki wysyłane na
-      kartę raz po zmianie (jak w widoku 3D), rysowane w każdej klatce bez
-      przeliczania.
-
-## 4. Pomysły na dalej
+## 3. Pomysły na dalej
 
 **Frezowanie 2D**
 

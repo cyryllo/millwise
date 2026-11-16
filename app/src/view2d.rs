@@ -61,6 +61,35 @@ pub struct View2D {
     last_size: egui::Vec2,
     /// Krótki komunikat na dole widoku (tekst, czas pojawienia się).
     flash: Option<(String, f64)>,
+    /// Ścieżki rysowane przez kartę graficzną i stan, dla którego wysłano odcinki.
+    gpu: Option<crate::view2d_gpu::PathsRenderer>,
+    gpu_key: Option<PathsKey>,
+}
+
+/// Co wpływa na odcinki ścieżek na karcie: przeliczone ścieżki (adres i długość
+/// danych każdej operacji), włączenie, średnica freza i zaznaczona operacja.
+#[derive(PartialEq)]
+struct PathsKey {
+    selected: Option<usize>,
+    ops: Vec<(usize, usize, bool, u64, u64)>,
+}
+
+impl PathsKey {
+    fn new(doc: &Document, tool_diameters: &[f64]) -> Self {
+        PathsKey {
+            selected: doc.selected_op,
+            ops: doc
+                .ops
+                .iter()
+                .zip(&doc.op_cache)
+                .enumerate()
+                .map(|(i, (op, c))| {
+                    let (ptr, len) = c.as_ref().map_or((0, 0), |c| (c.display.as_ptr() as usize, c.display.len()));
+                    (ptr, len, op.enabled, tool_diameters.get(i).copied().unwrap_or(0.0).to_bits(), op.cut.top_z.to_bits())
+                })
+                .collect(),
+        }
+    }
 }
 
 impl Default for View2D {
@@ -75,6 +104,8 @@ impl Default for View2D {
             auto_fit: true,
             last_size: egui::Vec2::ZERO,
             flash: None,
+            gpu: None,
+            gpu_key: None,
         }
     }
 }
@@ -114,6 +145,7 @@ impl View2D {
         tool_diameters: &[f64],
         inter: Interaction,
         work_area: Option<(f64, f64)>,
+        rs: Option<&egui_wgpu::RenderState>,
     ) -> Vec<ViewEvent> {
         let mut events = Vec::new();
         let resp = ui.allocate_rect(rect, Sense::click_and_drag());
@@ -375,7 +407,10 @@ impl View2D {
             }
         }
 
-        self.draw_toolpaths(&painter, rect, doc, tool_diameters);
+        match rs {
+            Some(rs) => self.draw_toolpaths_gpu(ui, &painter, rect, doc, tool_diameters, rs),
+            None => self.draw_toolpaths(&painter, rect, doc, tool_diameters),
+        }
         self.draw_zero(&painter, rect);
         // obróbka dwustronna: oś odwracania (przerywana)
         if let Some(t) = &doc.stock.two_sided {
@@ -513,6 +548,32 @@ impl View2D {
 
     pub fn flash(&mut self, msg: impl Into<String>, now: f64) {
         self.flash = Some((msg.into(), now));
+    }
+
+    /// Ścieżki przez kartę graficzną: odcinki wysyłane tylko po zmianie, klatka to
+    /// jedno narysowanie tekstury (przy gęstych ścieżkach 3D płynnie).
+    fn draw_toolpaths_gpu(
+        &mut self,
+        ui: &egui::Ui,
+        painter: &egui::Painter,
+        rect: Rect,
+        doc: &Document,
+        tool_diameters: &[f64],
+        rs: &egui_wgpu::RenderState,
+    ) {
+        let r = self.gpu.get_or_insert_with(|| crate::view2d_gpu::PathsRenderer::new(&rs.device));
+        let key = PathsKey::new(doc, tool_diameters);
+        if self.gpu_key.as_ref() != Some(&key) {
+            r.upload(&rs.device, &toolpath_segments(doc, tool_diameters));
+            self.gpu_key = Some(key);
+        }
+        if r.is_empty() {
+            return;
+        }
+        let ppp = ui.ctx().pixels_per_point();
+        let size = [(rect.width() * ppp).round() as u32, (rect.height() * ppp).round() as u32];
+        let tex = r.render(rs, size, self.center, self.scale, ppp);
+        painter.image(tex, rect, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
     }
 
     fn draw_toolpaths(&self, painter: &egui::Painter, rect: Rect, doc: &Document, tool_diameters: &[f64]) {
@@ -660,6 +721,45 @@ impl View2D {
             Color32::from_gray(140),
         );
     }
+}
+
+/// Odcinki ścieżek wszystkich operacji dla karty graficznej — te same kolory i
+/// szerokości co w rysowaniu przez procesor (`draw_toolpaths`).
+fn toolpath_segments(doc: &Document, tool_diameters: &[f64]) -> Vec<crate::view2d_gpu::Segment> {
+    use crate::view2d_gpu::{SegKind, Segment};
+    let mut out = Vec::new();
+    for (i, (op, cache)) in doc.ops.iter().zip(&doc.op_cache).enumerate() {
+        let Some(cache) = cache else { continue };
+        if !op.enabled || cache.display.is_empty() {
+            continue;
+        }
+        let selected = doc.selected_op == Some(i);
+        let base = op_color(i);
+        // bez sumowania nakładających się przejść (mieszanie „max”) kolory są mocniejsze
+        // niż przy rysowaniu przez procesor, żeby wyglądały podobnie
+        let color = if selected || doc.selected_op.is_none() { base } else { base.gamma_multiply(0.55) };
+        let rapid_color = Color32::from_rgb(220, 60, 60).gamma_multiply(if selected { 0.9 } else { 0.5 });
+        let band = base.gamma_multiply(0.6);
+        let d = tool_diameters.get(i).copied().unwrap_or(0.0) as f32;
+        let top = op.cut.top_z - 1e-6;
+        for w in cache.display.windows(2) {
+            let ((a, _), (b, rapid)) = (w[0], w[1]);
+            let (pa, pb) = (a.xy(), b.xy());
+            if rapid {
+                out.push(Segment::new(pa, pb, rapid_color, 1.0, SegKind::Dashed));
+                continue;
+            }
+            if pa == pb {
+                continue;
+            }
+            // pas o szerokości narzędzia — tylko dla zaznaczonej operacji, tylko w materiale
+            if selected && d > 0.0 && b.z <= top {
+                out.push(Segment::new(pa, pb, band, d, SegKind::Band));
+            }
+            out.push(Segment::new(pa, pb, color, 1.3, SegKind::Line));
+        }
+    }
+    out
 }
 
 fn intersects(a: &Aabb2, b: &Aabb2) -> bool {

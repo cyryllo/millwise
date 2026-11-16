@@ -2624,7 +2624,15 @@ impl eframe::App for CamApp {
                         events.push(ViewEvent::Empty);
                     }
                 } else {
-                    events = self.view2d.ui(ui, rect, &mut self.doc, &tool_d, inter, Some((machine.travel_x, machine.travel_y)));
+                    events = self.view2d.ui(
+                        ui,
+                        rect,
+                        &mut self.doc,
+                        &tool_d,
+                        inter,
+                        Some((machine.travel_x, machine.travel_y)),
+                        frame.wgpu_render_state(),
+                    );
                 }
             });
             self.handle_view_events(events, &ctx);

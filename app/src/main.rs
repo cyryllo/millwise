@@ -17,6 +17,7 @@ mod history;
 mod model3d;
 mod i18n_check;
 mod view2d;
+mod view2d_gpu;
 mod view3d;
 
 use std::sync::atomic::{AtomicBool, Ordering};

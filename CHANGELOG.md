@@ -6,6 +6,19 @@ Version numbers:
 - the **second number** goes up with every release that adds features;
 - the **third number** goes up for releases that only fix bugs.
 
+## Unreleased
+
+### Changed
+
+- **Toolpaths in the 2D view are drawn by the graphics card.** They are sent
+  to the card once, after the toolpaths change or another operation is
+  selected; moving and zooming the view only redraws them. Dense 3D
+  finishing (e.g. 230 000 moves) now pans and zooms smoothly — about
+  13 ms per frame instead of 40 ms, and the gap grows with the size of the
+  program. Overlapping passes no longer add up into a solid colour: the
+  tool-width band of the selected operation stays see-through, so the
+  toolpath lines inside it remain visible.
+
 ## 0.7.1 (2026-11-15)
 
 ### Added
