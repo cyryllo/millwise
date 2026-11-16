@@ -39,9 +39,11 @@ not planned for now). The user interface is in Polish and English.
   90° rotations, stock left above it) and has its own „3D model” tab.
   - **Roughing** in Z levels around the model, with extra levels above flat
     areas.
-  - **Finishing** with parallel passes or waterlines (constant heights,
-    for steep walls), and **rest finishing** only where a bigger tool could
-    not reach.
+  - **Finishing** with parallel passes, waterlines (constant heights, for
+    steep walls) or **combined** (waterlines on steep places, parallel
+    passes on gentle ones), limited to a slope range if needed (e.g. flat
+    places only), and **rest finishing** only where a bigger tool could not
+    reach.
   - **Cut-out** along the model silhouette with tabs; silhouette and outline
     at any height also as curves for 2D operations.
   - Undercut warning; 3D toolpaths are computed in the background.

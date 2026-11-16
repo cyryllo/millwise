@@ -2,6 +2,8 @@
 //! opuszczane na model w gęstych punktach każdej linii (drop-cutter), więc
 //! dotyka powierzchni, nie wcinając się w nią. Linie na przemian w obie strony,
 //! sąsiednie połączone po powierzchni; opcjonalnie drugi raz w poprzek.
+//! Do tego warstwice i strategia łączona (warstwice na stromym, równoległe na
+//! łagodnym) oraz ograniczenie do zakresu nachylenia.
 
 use crate::model::{DropIndex, ModelHeights, ToolProfile};
 use crate::operation::{CutParams, Finish3DParams, Finish3DStrategy, OpResult};
@@ -11,10 +13,55 @@ use crate::toolpath::P3;
 use cam_geom::{Contour, Vec2};
 use cam_i18n::tr;
 
+/// Zakładka strategii łączonej [°]: przejścia równoległe sięgają trochę wyżej niż
+/// kąt graniczny, a warstwice trochę niżej — bez paska nieobrobionego między nimi.
+const SPLIT_OVERLAP: f64 = 3.0;
+
 pub(crate) fn generate(cut: &CutParams, p: &Finish3DParams, tool: &Tool, contours: &[Contour], m: &ModelInput, res: &mut OpResult) {
-    if p.strategy == Finish3DStrategy::Waterline {
-        return waterline(cut, p, tool, contours, m, res);
+    let (lo, hi) = (p.slope_min.clamp(0.0, 90.0), p.slope_max.clamp(0.0, 90.0));
+    if lo >= hi {
+        res.warnings.push(tr!("Zakres nachylenia jest pusty — „od” musi być mniejsze niż „do”").into());
+        return;
     }
+    let whole = lo <= 0.0 && hi >= 90.0;
+    let idx = DropIndex::new(m.heights);
+    let prof = ToolProfile::of(tool);
+    // mapa nachylenia — tylko gdy potrzebna (zakres albo strategia łączona)
+    let slopes = (!whole || p.strategy == Finish3DStrategy::Combined).then(|| SlopeMap::new(&idx, &prof, p.allowance, m.heights, tool, cut.bottom_z()));
+    let range = |a: f64, b: f64| -> Option<(&SlopeMap, f32, f32)> {
+        let s = slopes.as_ref()?;
+        (a > 0.0 || b < 90.0).then_some((s, a as f32, b as f32))
+    };
+    match p.strategy {
+        Finish3DStrategy::Raster => raster(cut, p, tool, contours, m, &idx, range(lo, hi), res),
+        Finish3DStrategy::Waterline => waterline(cut, p, tool, contours, m, &idx, range(lo, hi), res),
+        Finish3DStrategy::Combined => {
+            let split = p.split_angle.clamp(1.0, 89.0);
+            // najpierw strome (warstwice), potem łagodne (równoległe)
+            if hi > split - SPLIT_OVERLAP {
+                waterline(cut, p, tool, contours, m, &idx, range(lo.max(split - SPLIT_OVERLAP), hi), res);
+            }
+            if lo < split + SPLIT_OVERLAP {
+                raster(cut, p, tool, contours, m, &idx, range(lo, hi.min(split + SPLIT_OVERLAP)), res);
+            }
+            // te same ostrzeżenia z obu części — raz
+            let mut seen = std::collections::HashSet::new();
+            res.warnings.retain(|w| seen.insert(w.clone()));
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn raster(
+    cut: &CutParams,
+    p: &Finish3DParams,
+    tool: &Tool,
+    contours: &[Contour],
+    m: &ModelInput,
+    idx: &DropIndex,
+    slope: Option<(&SlopeMap, f32, f32)>,
+    res: &mut OpResult,
+) {
     let h = m.heights;
     let r = tool.radius();
     let closed: Vec<&Contour> = contours.iter().filter(|c| c.closed && c.verts.len() >= 3).collect();
@@ -32,11 +79,15 @@ pub(crate) fn generate(cut: &CutParams, p: &Finish3DParams, tool: &Tool, contour
     let ds = (h.cell * 2.0).clamp(0.05, 0.25);
     let tol = (h.cell * 0.25).max(0.005);
     let prof = ToolProfile::of(tool);
-    let idx = DropIndex::new(h);
     let bottom = cut.bottom_z();
     let a = p.allowance;
     let z_at = |q: Vec2| idx.drop_tool(q, &prof, a).map_or(bottom, |z| z.max(bottom));
-    let Some(rest) = rest_filter(cut, p, tool, m, &idx, res) else { return };
+    let Some(rest) = rest_filter(cut, p, tool, m, idx, res) else { return };
+    // gdzie obrabiać: resztki i zakres nachylenia
+    let filtered = rest.is_some() || slope.is_some();
+    let keep = |q: Vec2| {
+        rest.as_ref().is_none_or(|r| r.height_at(q).is_some()) && slope.is_none_or(|(s, lo, hi)| s.within(q, lo, hi))
+    };
     let mut angles = vec![p.angle];
     if p.cross {
         angles.push(p.angle + 90.0);
@@ -61,23 +112,18 @@ pub(crate) fn generate(cut: &CutParams, p: &Finish3DParams, tool: &Tool, contour
             }
             for (u0, u1) in spans {
                 let line = sample(u * u0 + v * vv, u * u1 + v * vv, ds, tol, &z_at);
-                match &rest {
-                    None => passes.push(simplify3(&line, tol * 0.5)),
-                    // resztki: tylko kawałki linii nad nimi
-                    Some(r) => {
-                        let mut run: Vec<P3> = Vec::new();
-                        for q in line {
-                            if r.height_at(q.xy()).is_some() {
-                                run.push(q);
-                            } else if run.len() >= 2 {
-                                passes.push(simplify3(&std::mem::take(&mut run), tol * 0.5));
-                            } else {
-                                run.clear();
-                            }
-                        }
-                        if run.len() >= 2 {
-                            passes.push(simplify3(&run, tol * 0.5));
-                        }
+                if !filtered {
+                    passes.push(simplify3(&line, tol * 0.5));
+                    continue;
+                }
+                // resztki / nachylenie: tylko kawałki linii w obszarze (krótkie przerwy
+                // przejeżdżane po powierzchni, okruchy pomijane)
+                let xy: Vec<Vec2> = line.iter().map(|q| q.xy()).collect();
+                let flags: Vec<bool> = xy.iter().map(|&q| keep(q)).collect();
+                for (run, _) in kept_runs(&xy, &flags, false, r, r * 0.5) {
+                    let pts: Vec<P3> = run.iter().map(|&i| line[i]).collect();
+                    if pts.len() >= 2 {
+                        passes.push(simplify3(&pts, tol * 0.5));
                     }
                 }
             }
@@ -242,7 +288,17 @@ fn rest_areas(h: &ModelHeights, idx: &DropIndex, reft: &Tool, bottom: f64, min: 
 /// Warstwice: na każdej wysokości narzędzie obchodzi model po linii, na której
 /// opuszczone narzędzie dotyka go dokładnie na tej wysokości. Wysokości opuszczenia
 /// liczone raz w węzłach siatki (równolegle), linie — z interpolacji między węzłami.
-fn waterline(cut: &CutParams, p: &Finish3DParams, tool: &Tool, contours: &[Contour], m: &ModelInput, res: &mut OpResult) {
+#[allow(clippy::too_many_arguments)]
+fn waterline(
+    cut: &CutParams,
+    p: &Finish3DParams,
+    tool: &Tool,
+    contours: &[Contour],
+    m: &ModelInput,
+    idx: &DropIndex,
+    slope: Option<(&SlopeMap, f32, f32)>,
+    res: &mut OpResult,
+) {
     let h = m.heights;
     let r = tool.radius();
     let closed: Vec<&Contour> = contours.iter().filter(|c| c.closed && c.verts.len() >= 3).collect();
@@ -269,10 +325,11 @@ fn waterline(cut: &CutParams, p: &Finish3DParams, tool: &Tool, contours: &[Conto
     let step = h.cell.clamp(0.1, 0.5);
     let area = h.bounds().expanded(r + p.allowance.max(0.0) + 2.0 * step);
     let prof = ToolProfile::of(tool);
-    let idx = DropIndex::new(h);
-    let (tz, nx, ny) = drop_grid(&idx, &prof, p.allowance, area, step);
-    let Some(rest) = rest_filter(cut, p, tool, m, &idx, res) else { return };
-    let keep = |q: Vec2| inside(q) && rest.as_ref().is_none_or(|r| r.height_at(q).is_some());
+    let (tz, nx, ny) = drop_grid(idx, &prof, p.allowance, area, step);
+    let Some(rest) = rest_filter(cut, p, tool, m, idx, res) else { return };
+    let keep = |q: Vec2| {
+        inside(q) && rest.as_ref().is_none_or(|r| r.height_at(q).is_some()) && slope.is_none_or(|(s, lo, hi)| s.within(q, lo, hi))
+    };
     let dz = (p.stepover.clamp(0.001, 1.0) * tool.diameter).max(0.01);
     let bottom = cut.bottom_z();
     let tol = (step * 0.1).max(0.005);
@@ -283,32 +340,18 @@ fn waterline(cut: &CutParams, p: &Finish3DParams, tool: &Tool, contours: &[Conto
         for mut c in crate::model::iso_contours(&tz, nx, ny, area.min, step, z, step * 2.0, tol) {
             c.reverse();
             let pts: Vec<Vec2> = c.verts.iter().map(|v| v.p).collect();
-            if limit.is_empty() && rest.is_none() {
+            if limit.is_empty() && rest.is_none() && slope.is_none() {
                 paths.push((pts, true));
                 continue;
             }
-            // z granicą albo resztkami: tylko kawałki wewnątrz wybranych krzywych / na resztkach
+            // z granicą, resztkami albo zakresem nachylenia: tylko kawałki w obszarze
             let pts = densify(&pts, step);
             let flags: Vec<bool> = pts.iter().map(|&q| keep(q)).collect();
-            if flags.iter().all(|f| *f) {
-                paths.push((pts, true));
-                continue;
-            }
-            let Some(start) = flags.iter().position(|f| !f) else { continue };
-            let n = pts.len();
-            let mut run: Vec<Vec2> = Vec::new();
-            for k in 0..=n {
-                let i = (start + k) % n;
-                if flags[i] {
-                    run.push(pts[i]);
-                } else if run.len() >= 2 {
-                    paths.push((std::mem::take(&mut run), false));
-                } else {
-                    run.clear();
+            for (run, closed) in kept_runs(&pts, &flags, true, r, r * 0.5) {
+                let run: Vec<Vec2> = run.iter().map(|&i| pts[i]).collect();
+                if run.len() >= 2 {
+                    paths.push((run, closed));
                 }
-            }
-            if run.len() >= 2 {
-                paths.push((run, false));
             }
         }
         // kolejność: najbliższa następna
@@ -348,6 +391,143 @@ fn rest_filter(cut: &CutParams, p: &Finish3DParams, tool: &Tool, m: &ModelInput,
         res.warnings.push(tr!("Resztki: narzędzie odniesienia powinno być większe niż to (Ø{} ≤ Ø{})", reft.diameter, tool.diameter));
     }
     Some(Some(rest_areas(m.heights, idx, reft, cut.bottom_z(), p.rest_min.max(0.0), tool.radius())))
+}
+
+/// Nachylenie powierzchni, po której jedzie narzędzie [°], w węzłach siatki —
+/// liczone z wysokości opuszczonego narzędzia (tak „czuje” je frez) i lekko
+/// wygładzone, żeby granica strome/łagodne nie szarpała ścieżki.
+pub(crate) struct SlopeMap {
+    min: Vec2,
+    step: f64,
+    nx: usize,
+    ny: usize,
+    deg: Vec<f32>,
+}
+
+impl SlopeMap {
+    fn new(idx: &DropIndex, prof: &ToolProfile, allowance: f64, h: &ModelHeights, tool: &Tool, bottom: f64) -> Self {
+        let step = h.cell.clamp(0.1, 0.5);
+        let area = h.bounds().expanded(tool.radius() + allowance.max(0.0) + 2.0 * step);
+        let (tz, nx, ny) = drop_grid(idx, prof, allowance, area, step);
+        let b = bottom as f32;
+        let z = |i: usize, j: usize| {
+            let v = tz[j * nx + i];
+            if v.is_finite() { v.max(b) } else { b }
+        };
+        let mut deg = vec![0f32; nx * ny];
+        for j in 0..ny {
+            for i in 0..nx {
+                let (i0, i1) = (i.saturating_sub(1), (i + 1).min(nx - 1));
+                let (j0, j1) = (j.saturating_sub(1), (j + 1).min(ny - 1));
+                let gx = (z(i1, j) - z(i0, j)) / ((i1 - i0).max(1) as f64 * step) as f32;
+                let gy = (z(i, j1) - z(i, j0)) / ((j1 - j0).max(1) as f64 * step) as f32;
+                deg[j * nx + i] = (gx * gx + gy * gy).sqrt().atan().to_degrees();
+            }
+        }
+        // wygładzanie: średnia w kwadracie ok. ćwierci promienia narzędzia
+        let k = ((tool.radius() * 0.25) / step).round().max(1.0) as usize;
+        let mut tmp = vec![0f32; nx * ny];
+        for j in 0..ny {
+            for i in 0..nx {
+                let (a, b) = (i.saturating_sub(k), (i + k).min(nx - 1));
+                tmp[j * nx + i] = deg[j * nx + a..=j * nx + b].iter().sum::<f32>() / (b - a + 1) as f32;
+            }
+        }
+        for j in 0..ny {
+            for i in 0..nx {
+                let (a, b) = (j.saturating_sub(k), (j + k).min(ny - 1));
+                deg[j * nx + i] = (a..=b).map(|jj| tmp[jj * nx + i]).sum::<f32>() / (b - a + 1) as f32;
+            }
+        }
+        SlopeMap { min: area.min, step, nx, ny, deg }
+    }
+
+    /// Nachylenie w punkcie (najbliższy węzeł); poza mapą — płasko.
+    fn at(&self, q: Vec2) -> f32 {
+        let i = ((q.x - self.min.x) / self.step).round();
+        let j = ((q.y - self.min.y) / self.step).round();
+        if i < 0.0 || j < 0.0 || i >= self.nx as f64 || j >= self.ny as f64 {
+            return 0.0;
+        }
+        self.deg[j as usize * self.nx + i as usize]
+    }
+
+    fn within(&self, q: Vec2, lo: f32, hi: f32) -> bool {
+        let d = self.at(q);
+        d >= lo && d <= hi
+    }
+}
+
+/// Kawałki łamanej do obróbki: listy indeksów punktów, dla których `flags` = true,
+/// po wypełnieniu przerw krótszych niż `max_gap` (przejazd po powierzchni zamiast
+/// podnoszenia freza) i pominięciu kawałków krótszych niż `min_len`. Dla łamanej
+/// zamkniętej (`closed`) kawałki mogą przechodzić przez jej początek; `true` przy
+/// kawałku — cała pętla.
+fn kept_runs(pts: &[Vec2], flags: &[bool], closed: bool, max_gap: f64, min_len: f64) -> Vec<(Vec<usize>, bool)> {
+    let n = pts.len();
+    if n == 0 || !flags.iter().any(|f| *f) {
+        return Vec::new();
+    }
+    if flags.iter().all(|f| *f) {
+        return vec![((0..n).collect(), closed)];
+    }
+    // kolejność: zamknięta — od początku któregoś kawałka (bez przechodzenia przez koniec)
+    let start = if closed { (0..n).find(|&i| flags[i] && !flags[(i + n - 1) % n]).unwrap_or(0) } else { 0 };
+    let order: Vec<usize> = (0..n).map(|k| (start + k) % n).collect();
+    // ciągi tych samych flag
+    let mut runs: Vec<(bool, Vec<usize>)> = Vec::new();
+    for &i in &order {
+        match runs.last_mut() {
+            Some((f, v)) if *f == flags[i] => v.push(i),
+            _ => runs.push((flags[i], vec![i])),
+        }
+    }
+    let len = |v: &[usize]| -> f64 { v.windows(2).map(|w| pts[w[0]].distance(pts[w[1]])).sum() };
+    let count = runs.len();
+    for k in 0..count {
+        if runs[k].0 {
+            continue;
+        }
+        let bounded = closed || (k > 0 && k + 1 < count);
+        if !bounded {
+            continue;
+        }
+        // przerwa: od ostatniego punktu przed nią do pierwszego po niej
+        let prev = *runs[(k + count - 1) % count].1.last().unwrap();
+        let next = runs[(k + 1) % count].1[0];
+        let mut path = vec![prev];
+        path.extend(&runs[k].1);
+        path.push(next);
+        if len(&path) <= max_gap {
+            runs[k].0 = true;
+        }
+    }
+    // sklejenie sąsiednich kawałków
+    let mut merged: Vec<Vec<usize>> = Vec::new();
+    let mut prev_true = false;
+    for (f, v) in runs {
+        if f {
+            if prev_true {
+                merged.last_mut().unwrap().extend(v);
+            } else {
+                merged.push(v);
+            }
+        }
+        prev_true = f;
+    }
+    // zamknięta: ostatni i pierwszy kawałek stykają się na początku
+    if closed && merged.len() > 1 {
+        let first = merged[0][0];
+        let last = *merged.last().unwrap().last().unwrap();
+        if (last + 1) % n == first {
+            let head = merged.remove(0);
+            merged.last_mut().unwrap().extend(head);
+        }
+    }
+    if closed && merged.len() == 1 && merged[0].len() == n {
+        return vec![(merged.remove(0), true)];
+    }
+    merged.into_iter().filter(|v| len(v) >= min_len).map(|v| (v, false)).collect()
 }
 
 /// Punkty łamanej zamkniętej co najwyżej co `step` (do przycinania do obszaru).
@@ -536,6 +716,113 @@ mod tests {
             ccw_like += (a.xy() - c).cross(b.xy() - c);
         }
         assert!(ccw_like < 0.0, "współbieżnie: wokół wyspy zgodnie z ruchem wskazówek zegara");
+    }
+
+    /// Punkty ruchów roboczych w materiale (co 0,1 mm), bez dojazdów nad Z 0.
+    fn cutting_points(tp: &crate::Toolpath) -> Vec<crate::P3> {
+        let pl = tp.polyline(0.01);
+        let mut out = Vec::new();
+        for w in pl.windows(2) {
+            if w[1].1 {
+                continue;
+            }
+            let (a, b) = (w[0].0, w[1].0);
+            let n = (a.distance(b) / 0.1).ceil().max(1.0) as usize;
+            for k in 0..=n {
+                let t = k as f64 / n as f64;
+                let q = crate::P3::from_xy(a.xy().lerp(b.xy(), t), a.z + (b.z - a.z) * t);
+                if q.z < -0.01 {
+                    out.push(q);
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn slope_range_and_combined_strategy() {
+        let h = dome();
+        let tool = Tool { diameter: 6.0, kind: ToolKind::BallEnd, ..Default::default() };
+        let m = ModelInput { heights: &h, stock: Aabb2 { min: Vec2::new(0.0, 0.0), max: Vec2::new(30.0, 30.0) }, ref_tool: None };
+        let run = |strategy, lo: f64, hi: f64, depth: f64| {
+            let mut o = op(false);
+            o.cut.depth = depth;
+            o.kind = OpKind::Finish3D(Finish3DParams { strategy, stepover: 0.1, slope_min: lo, slope_max: hi, ..Default::default() });
+            let res = generate_with_model(&o, &tool, &[], Some(&m));
+            assert!(res.warnings.is_empty(), "{:?}", res.warnings);
+            res
+        };
+        // odległość od osi kopuły; nachylenie pod środkiem freza = asin(ρ / 13), a od
+        // ρ = √160 ≈ 12,65 frez stoi już na płycie (płasko). Przy tym narożniku mapa
+        // nachylenia jest wygładzona (ok. 0,75 mm) — pasek 1 mm nie jest sprawdzany.
+        let rho = |q: &crate::P3| q.xy().distance(Vec2::new(15.0, 15.0));
+        let foot = 160f64.sqrt();
+        let slope_at = |q: &crate::P3| if rho(q) >= foot { 0.0 } else { (rho(q) / 13.0).asin().to_degrees() };
+        let near_foot = |q: &crate::P3| (rho(q) - foot).abs() < 1.0;
+        // równoległa do 40°: nic tam, gdzie wyraźnie stromiej (z zapasem na wygładzenie mapy)
+        let flat = cutting_points(&run(Finish3DStrategy::Raster, 0.0, 40.0, 10.0).toolpath);
+        assert!(flat.len() > 1000);
+        let bad: Vec<_> = flat.iter().filter(|q| !near_foot(q) && slope_at(q) > 47.0).collect();
+        assert!(bad.is_empty(), "równoległa na stromym: {} pkt, np. {:?}", bad.len(), bad.first());
+        assert!(flat.iter().any(|q| rho(q) < 1.0), "szczyt obrobiony");
+        // warstwice od 50°: tylko na stromym
+        let steep = cutting_points(&run(Finish3DStrategy::Waterline, 50.0, 90.0, 9.0).toolpath);
+        assert!(steep.len() > 500);
+        let bad: Vec<_> = steep.iter().filter(|q| !near_foot(q) && slope_at(q) <= 42.0).collect();
+        assert!(bad.is_empty(), "warstwice na łagodnym: {} pkt, np. {:?}", bad.len(), bad.first());
+        // tylko płaskie (0–2°): płyta i sam czubek
+        let only_flat = cutting_points(&run(Finish3DStrategy::Raster, 0.0, 2.0, 10.0).toolpath);
+        assert!(only_flat.iter().all(|q| rho(q) > foot - 1.0 || rho(q) < 1.5), "{:?}", only_flat.iter().find(|q| rho(q) <= foot - 1.0 && rho(q) >= 1.5));
+        assert!(only_flat.iter().any(|q| rho(q) > 14.0));
+        // łączona = warstwice na stromym i równoległa na łagodnym, bez wcinania
+        let both = run(Finish3DStrategy::Combined, 0.0, 90.0, 9.0);
+        let pts = cutting_points(&both.toolpath);
+        let prof = ToolProfile::of(&tool);
+        let idx = DropIndex::new(&h);
+        for q in &pts {
+            let zs = idx.drop_tool(q.xy(), &prof, -h.cell * 0.25 - 1e-3).unwrap_or(f64::NEG_INFINITY);
+            assert!(q.z >= zs - 1e-9, "wcięcie w {q:?}");
+        }
+        // pokrycie: w każdej strefie nachylenia są punkty (bez paska nieobrobionego)
+        for band in [(0.0, 10.0), (35.0, 45.0), (45.0, 55.0), (60.0, 75.0)] {
+            assert!(pts.iter().any(|q| slope_at(q) >= band.0 && slope_at(q) < band.1 && q.z > -9.0), "brak obróbki przy {band:?}°");
+        }
+        // pusty zakres: ostrzeżenie
+        let mut o = op(false);
+        o.kind = OpKind::Finish3D(Finish3DParams { slope_min: 50.0, slope_max: 20.0, ..Default::default() });
+        assert!(!generate_with_model(&o, &tool, &[], Some(&m)).warnings.is_empty());
+    }
+
+    #[test]
+    fn kept_runs_fill_gaps_and_drop_crumbs() {
+        // 20 punktów co 1 mm; przerwa 2 pkt (wypełniana przy max_gap 3) i okruch 1 pkt
+        let pts: Vec<Vec2> = (0..20).map(|i| Vec2::new(i as f64, 0.0)).collect();
+        let mut f = vec![true; 20];
+        f[5] = false;
+        f[6] = false;
+        for k in 10..20 {
+            f[k] = false;
+        }
+        f[15] = true; // okruch
+        let runs = super::kept_runs(&pts, &f, false, 3.0, 1.5);
+        assert_eq!(runs.len(), 1, "{runs:?}");
+        assert_eq!(runs[0].0, (0..10).collect::<Vec<_>>());
+        // zamknięta: przerwa przez początek wypełniona — cała pętla
+        let mut c = vec![true; 20];
+        c[0] = false;
+        c[19] = false;
+        let runs = super::kept_runs(&pts, &c, true, 30.0, 1.0);
+        assert_eq!(runs.len(), 1);
+        assert!(runs[0].1 && runs[0].0.len() == 20, "{runs:?}");
+        // zamknięta z długą przerwą: jeden kawałek przechodzący przez koniec
+        let mut d = vec![true; 20];
+        for k in 8..12 {
+            d[k] = false;
+        }
+        let runs = super::kept_runs(&pts, &d, true, 1.0, 1.0);
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].0.first(), Some(&12));
+        assert_eq!(runs[0].0.last(), Some(&7));
     }
 
     #[test]

@@ -20,6 +20,14 @@ Version numbers:
   finishing, cut-out, simulation. The project keeps the photo itself (in
   grey, at most 1600 px on the longer side) and its settings, not the
   mesh, so it stays small and the relief can be changed later.
+- **Combined 3D finishing**: waterlines where the surface is steeper than
+  the split angle (45° by default) and parallel passes where it is gentler,
+  in one operation, with a small overlap so no strip is left between them.
+  The slope is measured the way the cutter meets the surface, short pieces
+  at the border are joined so the cutter does not keep lifting.
+- **Slope range for every 3D finishing** („from–to”, 0–90° = everywhere),
+  with a „Flat only” button (0–2°): e.g. a flat cutter only on the floor
+  around a relief, or waterlines only on the steepest walls.
 - **Filters for the relief**, with a live preview of the heights in the
   model card (brighter = higher) while you change them:
   - *Image:* black and white point (with „Auto levels”), gamma, denoise

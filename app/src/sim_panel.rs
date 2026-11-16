@@ -239,7 +239,9 @@ pub struct SimState {
     /// Tryb „Ścieżki”: oś czasu programu (bez wątku symulacji).
     timeline: Vec<cam_sim::SimPoint>,
     /// Dla każdej operacji symulacji: wykańczanie równoległe (warstwa = bieżąca linia).
-    raster: Vec<bool>,
+    /// Wykańczanie równoległe (Some(true)), warstwami (Some(false)) albo łączone (None —
+    /// rozpoznawane po ostatnim ruchu: zmiana wysokości = przejście równoległe).
+    raster: Vec<Option<bool>>,
     /// Linie postępu (wykonane i ostatnia warstwa) dla czasu `progress_time`.
     progress_lines: Vec<(P3, P3, Color32)>,
     progress_time: f64,
@@ -393,7 +395,14 @@ impl SimState {
             }
             data.push((ToolShape::new(&tool.kind, tool.diameter), cache.result.toolpath.polyline_with_feed(0.01)));
             self.ops.push((i, op.name.clone()));
-            self.raster.push(matches!(&op.kind, cam_ops::OpKind::Finish3D(p) if p.strategy == cam_ops::Finish3DStrategy::Raster));
+            self.raster.push(match &op.kind {
+                cam_ops::OpKind::Finish3D(p) => match p.strategy {
+                    cam_ops::Finish3DStrategy::Raster => Some(true),
+                    cam_ops::Finish3DStrategy::Waterline => Some(false),
+                    cam_ops::Finish3DStrategy::Combined => None,
+                },
+                _ => Some(false),
+            });
         }
         if data.is_empty() {
             return;
@@ -551,8 +560,8 @@ impl SimState {
         let mut start = last + 1;
         if last >= 1 && !tl[last].rapid {
             let op = tl[last].op;
-            let raster = self.raster.get(op).copied().unwrap_or(false);
             let (a0, b0) = seg(last);
+            let raster = self.raster.get(op).copied().unwrap_or(Some(false)).unwrap_or((b0.z - a0.z).abs() > 1e-3);
             let dir0 = (b0.xy() - a0.xy()).normalized();
             let z0 = b0.z;
             start = last;

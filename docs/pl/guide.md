@@ -290,8 +290,13 @@ jednolitym tłem; portret zwykle potrzebuje trochę wygładzania.
 | **Zgrubna** | Zdejmuje większość materiału warstwami Z wokół modelu, z dodatkowymi warstwami tuż nad płaskimi miejscami. Zostawia **naddatek na modelu** do wykończenia. Bez krzywych obejmuje cały półfabrykat; zamknięte krzywe zaznaczone w projekcie 2D ograniczają ją do środka. |
 | **Wykańczająca — równoległa** | Frez jest opuszczany na model w gęstych punktach: dotyka powierzchni, nie wcinając się. Najlepsza na łagodne zbocza i płaskie miejsca. **Odstęp przejść** pokazuje spodziewaną wysokość grzbietów; **kąt przejść** i **drugi raz w poprzek** (pod kątem 90°) wygładzają strome boki. Najlepiej frezem kulowym albo kulowym stożkowym, po obróbce zgrubnej. |
 | **Wykańczająca — warstwicowa** | Wokół modelu na stałych wysokościach — na strome ściany. Płaskie miejsca zostają dla równoległej. |
+| **Wykańczająca — łączona** | Obie naraz, w jednej operacji: warstwice tam, gdzie powierzchnia jest bardziej stroma niż **kąt graniczny** (domyślnie 45°), przejścia równoległe tam, gdzie jest łagodniejsza — z małą zakładką, żeby nie został pasek między nimi. |
 | **Tylko resztki** | Wykańczanie tylko tam, gdzie większe narzędzie (wybrane w operacji) nie sięgnęło: wąskie doliny i narożniki. **Resztki grubsze niż** pomija cienkie pozostałości. |
 | **Wycięcie** | Profil zewnętrzny po sylwetce modelu, z mostkami — wycina detal z półfabrykatu. |
+
+Każdą wykańczającą można ograniczyć do zakresu **nachylenia**: np. 0–2°
+(**Tylko płaskie**) obrabia same poziome miejsca — przydatne z frezem płaskim
+po dnie wokół płaskorzeźby — a 50–90° tylko strome ściany.
 
 **Głębokość** operacji 3D to najniższe miejsce, do którego zjedzie frez
 (poza modelem). Ścieżki 3D **liczą się w tle**: operacja pokazuje „liczy

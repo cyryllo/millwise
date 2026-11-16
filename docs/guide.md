@@ -293,8 +293,13 @@ best; a portrait usually needs some smoothing.
 | **Roughing** | Removes most of the material in Z levels around the model, with extra levels just above flat areas. Leaves **stock on the model** for finishing. Without curves it covers the whole stock; closed curves selected in the 2D project limit it to the inside. |
 | **Finishing — Parallel** | The tool is lowered onto the model in dense points: it touches the surface without cutting into it. Best for gentle slopes and flat areas. **Pass spacing** shows the expected scallop height; **pass angle** and **second time across** (at 90°) make steep sides smoother. Best with a ball or tapered ball cutter, after roughing. |
 | **Finishing — Waterline** | Around the model at constant heights, for steep walls. Flat areas are left for the parallel finishing. |
+| **Finishing — Combined** | Both in one operation: waterlines where the surface is steeper than the **split angle** (45° by default), parallel passes where it is gentler, with a small overlap so no strip is left between them. |
 | **Rest only** | Finishing only where a larger tool (chosen in the operation) could not reach: narrow valleys and corners. **Rest thicker than** skips thin leftovers. |
 | **Cut-out** | An outside profile along the silhouette of the model, with tabs, to cut the part out of the stock. |
+
+Every finishing operation can be limited to a **slope** range: e.g. 0–2°
+(**Flat only**) machines just the horizontal places — handy with a flat
+cutter on the floor around a relief — and 50–90° only the steep walls.
 
 The **depth** of a 3D operation is the lowest point the tool goes to (outside
 the model). 3D toolpaths are **computed in the background**: the operation

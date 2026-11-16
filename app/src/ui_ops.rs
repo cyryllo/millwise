@@ -767,12 +767,23 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
                     .radio_value(&mut p.strategy, cam_ops::Finish3DStrategy::Waterline, tr!("Warstwicowa"))
                     .on_hover_text(tr!("Wokół modelu na stałych wysokościach — strome ściany; płaskie miejsca zostają dla równoległej"))
                     .changed();
+                changed |= ui
+                    .radio_value(&mut p.strategy, cam_ops::Finish3DStrategy::Combined, tr!("Łączona"))
+                    .on_hover_text(tr!("Warstwice na stromych miejscach, przejścia równoległe na łagodnych — jedna równa powierzchnia w jednej operacji"))
+                    .changed();
             });
             ui.end_row();
             let waterline = p.strategy == cam_ops::Finish3DStrategy::Waterline;
+            let combined = p.strategy == cam_ops::Finish3DStrategy::Combined;
+            if combined {
+                changed |= num(ui, tr!("Kąt graniczny"), &mut p.split_angle, 5.0..=85.0, 0.5, "°");
+                ui.label("");
+                ui.label(RichText::new(tr!("Bardziej strome niż ten kąt — warstwice; łagodniejsze — przejścia równoległe")).small().color(ui_kit::LABEL));
+                ui.end_row();
+            }
             // w mm — przy frezach z cienką końcówką (V, grawerski) % średnicy nic nie mówi
             let mut mm = p.stepover * d;
-            ui_kit::label(ui, if waterline { tr!("Odstęp warstw") } else { tr!("Odstęp przejść") });
+            ui_kit::label(ui, if waterline { tr!("Odstęp warstw") } else if combined { tr!("Odstęp przejść i warstw") } else { tr!("Odstęp przejść") });
             ui.horizontal(|ui| {
                 if ui.add(egui::DragValue::new(&mut mm).range(0.01..=d.max(0.01)).speed(0.005).max_decimals(3).suffix(" mm")).changed() {
                     p.stepover = mm / d.max(1e-6);
@@ -805,6 +816,27 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
                 changed |= ui.checkbox(&mut p.cross, "").on_hover_text(tr!("Drugie przejście pod kątem 90° — gładziej na zboczach równoległych do pierwszego")).changed();
                 ui.end_row();
             }
+            // tylko część powierzchni według nachylenia
+            ui_kit::label(ui, tr!("Nachylenie"));
+            ui.horizontal(|ui| {
+                let hint = tr!("Obróbka tylko tam, gdzie powierzchnia jest nachylona w tym zakresie (0–90° = wszędzie)");
+                changed |= ui.add(egui::DragValue::new(&mut p.slope_min).range(0.0..=90.0).speed(0.5).prefix(tr!("od ")).suffix("°")).on_hover_text(hint).changed();
+                changed |= ui.add(egui::DragValue::new(&mut p.slope_max).range(0.0..=90.0).speed(0.5).prefix(tr!("do ")).suffix("°")).on_hover_text(hint).changed();
+                if (p.slope_min > 0.0 || p.slope_max < 90.0) && ui.small_button(tr!("Wszędzie")).clicked() {
+                    (p.slope_min, p.slope_max) = (0.0, 90.0);
+                    changed = true;
+                }
+                if p.slope_max > 2.0
+                    && ui
+                        .small_button(tr!("Tylko płaskie"))
+                        .on_hover_text(tr!("Tylko poziome powierzchnie (0–2°) — np. frezem płaskim po dnie wokół płaskorzeźby"))
+                        .clicked()
+                {
+                    (p.slope_min, p.slope_max) = (0.0, 2.0);
+                    changed = true;
+                }
+            });
+            ui.end_row();
             changed |= num(ui, tr!("Naddatek na modelu"), &mut p.allowance, -5.0..=20.0, 0.01, " mm");
             // resztki po większym narzędziu
             ui_kit::label(ui, tr!("Tylko resztki"));

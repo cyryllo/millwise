@@ -36,8 +36,10 @@ razie nie planujemy). Interfejs jest po polsku i po angielsku.
   obroty o 90°, naddatek nad modelem), z własną zakładką „Model 3D”.
   - **Zgrubna** warstwami Z wokół modelu, z dodatkowymi warstwami nad
     płaskimi miejscami.
-  - **Wykańczająca** równoległa albo warstwicowa (stałe wysokości — strome
-    ściany) oraz **resztki** tylko tam, gdzie większy frez nie sięgnął.
+  - **Wykańczająca** równoległa, warstwicowa (stałe wysokości — strome
+    ściany) albo **łączona** (warstwice na stromym, równoległa na łagodnym),
+    z ograniczeniem do zakresu nachylenia (np. tylko płaskie miejsca), oraz
+    **resztki** tylko tam, gdzie większy frez nie sięgnął.
   - **Wycięcie** po sylwetce modelu z mostkami; sylwetka i obrys na dowolnej
     wysokości także jako krzywe do operacji 2D.
   - Ostrzeżenie o podcięciach; ścieżki 3D liczą się w tle.

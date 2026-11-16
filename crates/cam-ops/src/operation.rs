@@ -261,6 +261,9 @@ pub enum Finish3DStrategy {
     Raster,
     /// Warstwice (waterline): wokół modelu na stałych wysokościach — strome ściany.
     Waterline,
+    /// Łączona: warstwice na stromych miejscach, przejścia równoległe na łagodnych
+    /// (podział kątem `split_angle`, z małą zakładką).
+    Combined,
 }
 
 /// Obróbka wykańczająca 3D: przejścia równoległe po powierzchni modelu albo warstwice.
@@ -281,6 +284,12 @@ pub struct Finish3DParams {
     pub rest_tool: Option<u32>,
     /// Najmniejsza grubość resztek, które warto zbierać [mm].
     pub rest_min: f64,
+    /// Strategia łączona: kąt nachylenia [°], od którego są warstwice (niżej — równoległa).
+    pub split_angle: f64,
+    /// Obróbka tylko tam, gdzie nachylenie powierzchni jest w zakresie od–do [°]
+    /// (0–90 = wszędzie; np. 0–2 — tylko płaskie miejsca).
+    pub slope_min: f64,
+    pub slope_max: f64,
 }
 
 impl Default for Finish3DParams {
@@ -293,6 +302,9 @@ impl Default for Finish3DParams {
             allowance: 0.0,
             rest_tool: None,
             rest_min: 0.1,
+            split_angle: 45.0,
+            slope_min: 0.0,
+            slope_max: 90.0,
         }
     }
 }

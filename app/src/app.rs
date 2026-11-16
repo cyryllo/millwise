@@ -282,6 +282,15 @@ impl CamApp {
                             }
                         }
                     }
+                    "combined" => {
+                        app.toolbar.set(Sub::Finish3D);
+                        app.pick_target = None;
+                        if let Some(i) = app.ensure_target() {
+                            if let cam_ops::OpKind::Finish3D(p) = &mut app.doc.ops[i].kind {
+                                p.strategy = cam_ops::Finish3DStrategy::Combined;
+                            }
+                        }
+                    }
                     "finish3d" => {
                         app.toolbar.set(Sub::Finish3D);
                         app.pick_target = None;

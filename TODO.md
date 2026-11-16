@@ -19,23 +19,14 @@ weszło do programu, jest w [CHANGELOG.md](CHANGELOG.md) i w historii gita.
 ## 2. STL i obróbka 3D
 
 Jest: model STL w półfabrykacie (zakładka „Model 3D”), krzywe z modelu,
-zgrubna warstwami Z, wykańczająca równoległa i warstwicowa, resztki, wycięcie
+zgrubna warstwami Z, wykańczająca równoległa, warstwicowa i łączona (z
+zakresem nachylenia), resztki, wycięcie
 po sylwetce, frezy kulowe stożkowe, płaskorzeźba ze zdjęcia, symulacja na GPU
 i „Ścieżki”. Szczegóły w
 [ROADMAP.md](ROADMAP.md).
 
 Dalej w paczkach, w kolejności od największego pożytku przy frezowaniu w
 drewnie (jedna paczka = jedno wydanie):
-
-**Paczka 2 — Wykańczanie łączone**
-
-- [ ] Strome i płaskie w jednej operacji: warstwice tylko na stromych
-      miejscach, równoległa tylko na łagodnych, kąt graniczny do ustawienia —
-      jedna, równa powierzchnia bez nakładania się dwóch operacji.
-- [ ] Ograniczenie stromizny dla każdej wykańczającej (obrabiaj tylko
-      nachylenie od–do).
-- [ ] Płaskie miejsca: frez płaski tylko po poziomych powierzchniach (np. dno
-      wokół płaskorzeźby).
 
 **Paczka 3 — Kształty okrągłe**
 
