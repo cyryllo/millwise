@@ -397,7 +397,7 @@ impl SimState {
             self.ops.push((i, op.name.clone()));
             self.raster.push(match &op.kind {
                 cam_ops::OpKind::Finish3D(p) => match p.strategy {
-                    cam_ops::Finish3DStrategy::Raster => Some(true),
+                    cam_ops::Finish3DStrategy::Raster | cam_ops::Finish3DStrategy::Spiral | cam_ops::Finish3DStrategy::Radial => Some(true),
                     cam_ops::Finish3DStrategy::Waterline => Some(false),
                     cam_ops::Finish3DStrategy::Combined => None,
                 },

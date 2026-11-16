@@ -264,6 +264,10 @@ pub enum Finish3DStrategy {
     /// Łączona: warstwice na stromych miejscach, przejścia równoległe na łagodnych
     /// (podział kątem `split_angle`, z małą zakładką).
     Combined,
+    /// Spirala od środka na zewnątrz, bez zawracania — kopuły, misy, rozety.
+    Spiral,
+    /// Przejścia promieniowe (szprychy) od środka.
+    Radial,
 }
 
 /// Obróbka wykańczająca 3D: przejścia równoległe po powierzchni modelu albo warstwice.

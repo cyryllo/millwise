@@ -20,6 +20,12 @@ Version numbers:
   finishing, cut-out, simulation. The project keeps the photo itself (in
   grey, at most 1600 px on the longer side) and its settings, not the
   mesh, so it stays small and the relief can be changed later.
+- **Spiral and radial 3D finishing**: one continuous spiral from the centre
+  outwards without turning back, or passes from the centre like spokes
+  (extra spokes start only where the gap would get too wide, so the centre
+  is not crowded). The centre is the middle of the model, or of the selected
+  curves — e.g. a circle around a dome. Turns leaving the area come back
+  along the surface instead of lifting the cutter.
 - **3D shape from 2D curves** (3D › Shape): select closed curves — lettering,
   a logo, any outline — and they become a raised 3D model standing exactly
   on them, with holes in letters kept as holes. Edge profile: flat, rounded
@@ -48,6 +54,9 @@ Version numbers:
 
 ### Fixed
 
+- **A circle now works as the boundary of 3D operations.** A circle (two
+  arcs) was treated as an open curve, so selecting a circle around a part
+  did not limit roughing or finishing.
 - **Arcs (G2/G3) are written so that the controller runs exactly the
   intended arc.** Each arc is now checked the way GRBL and LinuxCNC read
   it — from the rounded numbers in the program — and I/J are rounded to the

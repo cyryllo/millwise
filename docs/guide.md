@@ -305,6 +305,7 @@ after changing them, make the shape again.
 | **Finishing — Parallel** | The tool is lowered onto the model in dense points: it touches the surface without cutting into it. Best for gentle slopes and flat areas. **Pass spacing** shows the expected scallop height; **pass angle** and **second time across** (at 90°) make steep sides smoother. Best with a ball or tapered ball cutter, after roughing. |
 | **Finishing — Waterline** | Around the model at constant heights, for steep walls. Flat areas are left for the parallel finishing. |
 | **Finishing — Combined** | Both in one operation: waterlines where the surface is steeper than the **split angle** (45° by default), parallel passes where it is gentler, with a small overlap so no strip is left between them. |
+| **Finishing — Spiral / Radial** | One continuous spiral from the centre outwards, or passes from the centre like spokes — for domes, bowls and rosettes. The centre is the middle of the model, or of the selected curves (e.g. a circle around a dome). |
 | **Rest only** | Finishing only where a larger tool (chosen in the operation) could not reach: narrow valleys and corners. **Rest thicker than** skips thin leftovers. |
 | **Cut-out** | An outside profile along the silhouette of the model, with tabs, to cut the part out of the stock. |
 

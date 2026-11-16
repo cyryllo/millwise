@@ -40,8 +40,8 @@ not planned for now). The user interface is in Polish and English.
   - **Roughing** in Z levels around the model, with extra levels above flat
     areas.
   - **Finishing** with parallel passes, waterlines (constant heights, for
-    steep walls) or **combined** (waterlines on steep places, parallel
-    passes on gentle ones), limited to a slope range if needed (e.g. flat
+    steep walls), **combined** (waterlines on steep places, parallel
+    passes on gentle ones), **spiral** or **radial**, limited to a slope range if needed (e.g. flat
     places only), and **rest finishing** only where a bigger tool could not
     reach.
   - **Cut-out** along the model silhouette with tabs; silhouette and outline

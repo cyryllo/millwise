@@ -19,8 +19,8 @@ weszło do programu, jest w [CHANGELOG.md](CHANGELOG.md) i w historii gita.
 ## 2. STL i obróbka 3D
 
 Jest: model STL w półfabrykacie (zakładka „Model 3D”), krzywe z modelu,
-zgrubna warstwami Z, wykańczająca równoległa, warstwicowa i łączona (z
-zakresem nachylenia), resztki, wycięcie
+zgrubna warstwami Z, wykańczająca równoległa, warstwicowa, łączona,
+spiralna i promieniowa (z zakresem nachylenia), resztki, wycięcie
 po sylwetce, frezy kulowe stożkowe, płaskorzeźba ze zdjęcia, kształt 3D z
 krzywych 2D, symulacja na GPU i „Ścieżki”. W projekcie jest zawsze jeden model
 3D (decyzja: tak najprościej); kilka elementów — tylko w 2D. Szczegóły w
@@ -28,12 +28,6 @@ krzywych 2D, symulacja na GPU i „Ścieżki”. W projekcie jest zawsze jeden m
 
 Dalej w paczkach, w kolejności od największego pożytku przy frezowaniu w
 drewnie (jedna paczka = jedno wydanie):
-
-**Paczka 3 — Kształty okrągłe**
-
-- [ ] Wykańczająca spiralna: jedna ciągła spirala od środka na zewnątrz, bez
-      zawracania — kopuły, misy, rozety.
-- [ ] Wykańczająca promieniowa: przejścia od środka jak szprychy.
 
 **Paczka 4 — Grawer na powierzchni 3D**
 

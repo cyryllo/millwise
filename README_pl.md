@@ -37,7 +37,8 @@ razie nie planujemy). Interfejs jest po polsku i po angielsku.
   - **Zgrubna** warstwami Z wokół modelu, z dodatkowymi warstwami nad
     płaskimi miejscami.
   - **Wykańczająca** równoległa, warstwicowa (stałe wysokości — strome
-    ściany) albo **łączona** (warstwice na stromym, równoległa na łagodnym),
+    ściany), **łączona** (warstwice na stromym, równoległa na łagodnym),
+    **spiralna** albo **promieniowa**,
     z ograniczeniem do zakresu nachylenia (np. tylko płaskie miejsca), oraz
     **resztki** tylko tam, gdzie większy frez nie sięgnął.
   - **Wycięcie** po sylwetce modelu z mostkami; sylwetka i obrys na dowolnej

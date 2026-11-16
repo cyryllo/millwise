@@ -758,7 +758,7 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
             let tool = lib.get(op.tool_id);
             let d = tool.map_or(6.0, |t| t.diameter);
             ui_kit::label(ui, tr!("Strategia"));
-            ui.horizontal(|ui| {
+            ui.horizontal_wrapped(|ui| {
                 changed |= ui
                     .radio_value(&mut p.strategy, cam_ops::Finish3DStrategy::Raster, tr!("Równoległa"))
                     .on_hover_text(tr!("Przejścia równoległe po powierzchni — łagodne zbocza i płaskie miejsca"))
@@ -771,8 +771,26 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
                     .radio_value(&mut p.strategy, cam_ops::Finish3DStrategy::Combined, tr!("Łączona"))
                     .on_hover_text(tr!("Warstwice na stromych miejscach, przejścia równoległe na łagodnych — jedna równa powierzchnia w jednej operacji"))
                     .changed();
+                changed |= ui
+                    .radio_value(&mut p.strategy, cam_ops::Finish3DStrategy::Spiral, tr!("Spiralna"))
+                    .on_hover_text(tr!("Jedna ciągła spirala od środka na zewnątrz, bez zawracania — kopuły, misy, rozety"))
+                    .changed();
+                changed |= ui
+                    .radio_value(&mut p.strategy, cam_ops::Finish3DStrategy::Radial, tr!("Promieniowa"))
+                    .on_hover_text(tr!("Przejścia od środka jak szprychy — rozety, promieniste wzory"))
+                    .changed();
             });
             ui.end_row();
+            let round = matches!(p.strategy, cam_ops::Finish3DStrategy::Spiral | cam_ops::Finish3DStrategy::Radial);
+            if round {
+                ui.label("");
+                ui.label(
+                    RichText::new(tr!("Środek: bez krzywych — środek modelu; z zaznaczonymi krzywymi (np. okręgiem wokół kopuły) — środek ich obrysu"))
+                        .small()
+                        .color(ui_kit::LABEL),
+                );
+                ui.end_row();
+            }
             let waterline = p.strategy == cam_ops::Finish3DStrategy::Waterline;
             let combined = p.strategy == cam_ops::Finish3DStrategy::Combined;
             if combined {
@@ -810,7 +828,7 @@ fn op_editor(ui: &mut egui::Ui, doc: &mut Document, i: usize, lib: &ToolLibrary,
                 ui.label(RichText::new(tr!("grzbiety ok. {:.3} mm", scallop)).small().color(ui_kit::LABEL));
                 ui.end_row();
             }
-            if !waterline {
+            if !waterline && !round {
                 changed |= num(ui, tr!("Kierunek przejść"), &mut p.angle, -180.0..=180.0, 1.0, "°");
                 ui_kit::label(ui, tr!("Drugi raz w poprzek"));
                 changed |= ui.checkbox(&mut p.cross, "").on_hover_text(tr!("Drugie przejście pod kątem 90° — gładziej na zboczach równoległych do pierwszego")).changed();

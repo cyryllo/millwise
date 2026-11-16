@@ -18,10 +18,16 @@ pub struct ModelInput<'a> {
     pub ref_tool: Option<Tool>,
 }
 
+/// Czy krzywa może być granicą obróbki: zamknięta i obejmująca pole — także okrąg
+/// (dwa wierzchołki z łukami).
+pub(crate) fn is_boundary(c: &Contour) -> bool {
+    c.closed && c.verts.len() >= 2 && c.flatten(0.05).len() >= 3
+}
+
 pub(crate) fn generate(cut: &CutParams, p: &Rough3DParams, tool: &Tool, contours: &[Contour], m: &ModelInput, res: &mut OpResult) {
     let r = tool.radius();
     let a = p.allowance.max(0.0);
-    let closed: Vec<Contour> = contours.iter().filter(|c| c.closed && c.verts.len() >= 3).cloned().collect();
+    let closed: Vec<Contour> = contours.iter().filter(|c| is_boundary(c)).cloned().collect();
     if closed.len() < contours.len() {
         res.warnings.push(tr!("Pominięto krzywe otwarte — granicą obróbki są tylko zamknięte").into());
     }

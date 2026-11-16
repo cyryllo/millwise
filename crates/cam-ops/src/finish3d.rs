@@ -48,6 +48,210 @@ pub(crate) fn generate(cut: &CutParams, p: &Finish3DParams, tool: &Tool, contour
             let mut seen = std::collections::HashSet::new();
             res.warnings.retain(|w| seen.insert(w.clone()));
         }
+        Finish3DStrategy::Spiral | Finish3DStrategy::Radial => round(cut, p, tool, contours, m, &idx, range(lo, hi), res),
+    }
+}
+
+/// Spirala albo szprychy wokół środka obszaru: bez krzywych — środka modelu,
+/// z zaznaczonymi krzywymi — środka ich obrysu (np. okręgu wokół kopuły).
+#[allow(clippy::too_many_arguments)]
+fn round(
+    cut: &CutParams,
+    p: &Finish3DParams,
+    tool: &Tool,
+    contours: &[Contour],
+    m: &ModelInput,
+    idx: &DropIndex,
+    slope: Option<(&SlopeMap, f32, f32)>,
+    res: &mut OpResult,
+) {
+    let h = m.heights;
+    let r = tool.radius();
+    let closed: Vec<&Contour> = contours.iter().filter(|c| crate::rough3d::is_boundary(c)).collect();
+    if closed.len() < contours.len() {
+        res.warnings.push(tr!("Pominięto krzywe otwarte — granicą obróbki są tylko zamknięte").into());
+    }
+    let area: Vec<Vec<Vec2>> = if closed.is_empty() {
+        let b = h.bounds().expanded(r);
+        vec![vec![b.min, Vec2::new(b.max.x, b.min.y), b.max, Vec2::new(b.min.x, b.max.y)]]
+    } else {
+        closed.iter().map(|c| c.flatten(0.01)).collect()
+    };
+    let mut bb = cam_geom::Aabb2::EMPTY;
+    area.iter().flatten().for_each(|&q| bb.add_point(q));
+    let center = bb.center();
+    let reach = area.iter().flatten().map(|q| q.distance(center)).fold(0.0, f64::max);
+    let step = (p.stepover.clamp(0.001, 1.0) * tool.diameter).max(0.01);
+    let ds = (h.cell * 2.0).clamp(0.05, 0.25);
+    let paths: Vec<Vec<Vec2>> = if p.strategy == Finish3DStrategy::Spiral {
+        vec![spiral_points(center, reach, step, ds)]
+    } else {
+        spokes(center, reach, step)
+    };
+    let inside = |q: Vec2| {
+        let mut n = 0;
+        for poly in &area {
+            for k in 0..poly.len() {
+                let (a, b) = (poly[k], poly[(k + 1) % poly.len()]);
+                if (a.y > q.y) != (b.y > q.y) && q.x < a.x + (q.y - a.y) / (b.y - a.y) * (b.x - a.x) {
+                    n += 1;
+                }
+            }
+        }
+        n % 2 == 1
+    };
+    // przejazd po powierzchni także dalej, jeśli cała droga leży w obszarze (bez
+    // podnoszenia): szprychy — przy środku końce sąsiednich są na różnych promieniach;
+    // spirala — zewnętrzne zwoje wychodzą poza prostokąt modelu i wracają
+    let long = 2.0 * reach;
+    follow(cut, p, tool, m, idx, slope, &inside, paths, ds, (step * 1.6, long), res);
+}
+
+/// Spirala Archimedesa od środka do promienia `reach`: odstęp zwojów `step`,
+/// punkty co ok. `ds` (blisko środka gęściej po kącie, żeby nie ścinać).
+fn spiral_points(c: Vec2, reach: f64, step: f64, ds: f64) -> Vec<Vec2> {
+    let b = step / std::f64::consts::TAU; // r = b·θ
+    let end = reach / b;
+    let mut out = vec![c];
+    let mut th = 0.0;
+    while th < end {
+        let r = b * th;
+        // długość łuku na kąt: √(r² + b²) — krok kąta dla odcinka ok. ds
+        th += (ds / (r * r + b * b).sqrt()).min(0.2);
+        let r = b * th.min(end);
+        out.push(c + Vec2::new(r * th.cos(), r * th.sin()));
+    }
+    out
+}
+
+/// Szprychy od środka: tyle, żeby na brzegu odstęp nie przekraczał `step`;
+/// dodatkowe zaczynają się dopiero tam, gdzie odstęp sąsiednich robi się za duży.
+/// Na przemian na zewnątrz i do środka — bez podnoszenia między nimi.
+fn spokes(c: Vec2, reach: f64, step: f64) -> Vec<Vec<Vec2>> {
+    let need = (std::f64::consts::TAU * reach / step).ceil().max(8.0);
+    let n = (need as usize).next_power_of_two();
+    let mut out = Vec::with_capacity(n);
+    for k in 0..n {
+        // poziom: szprycha k pojawia się, gdy jest ich 2^l (l — najmniejsze takie)
+        let l = if k == 0 { 0 } else { (n.trailing_zeros() - k.trailing_zeros()) as i32 };
+        let r0 = if l <= 2 { 0.0 } else { step * 2f64.powi(l) / (4.0 * std::f64::consts::PI) };
+        if r0 >= reach {
+            continue;
+        }
+        let a = std::f64::consts::TAU * k as f64 / n as f64;
+        let d = Vec2::new(a.cos(), a.sin());
+        let (p0, p1) = (c + d * r0, c + d * reach);
+        out.push(if out.len() % 2 == 0 { vec![p0, p1] } else { vec![p1, p0] });
+    }
+    out
+}
+
+/// Prowadzi frez po ścieżkach w płaszczyźnie: opuszczanie na model, tylko w
+/// obszarze (`inside`), na resztkach i w zakresie nachylenia; kolejne kawałki
+/// bliżej niż `link` łączone po powierzchni, dalsze — przez wysokość bezpieczną.
+#[allow(clippy::too_many_arguments)]
+fn follow(
+    cut: &CutParams,
+    p: &Finish3DParams,
+    tool: &Tool,
+    m: &ModelInput,
+    idx: &DropIndex,
+    slope: Option<(&SlopeMap, f32, f32)>,
+    inside: &(dyn Fn(Vec2) -> bool + Sync),
+    paths: Vec<Vec<Vec2>>,
+    ds: f64,
+    (link, long_link): (f64, f64),
+    res: &mut OpResult,
+) {
+    let h = m.heights;
+    let r = tool.radius();
+    let tol = (h.cell * 0.25).max(0.005);
+    let prof = ToolProfile::of(tool);
+    let bottom = cut.bottom_z();
+    let a = p.allowance;
+    let z_at = |q: Vec2| idx.drop_tool(q, &prof, a).map_or(bottom, |z| z.max(bottom));
+    let Some(rest) = rest_filter(cut, p, tool, m, idx, res) else { return };
+    let keep = |q: Vec2| {
+        inside(q) && rest.as_ref().is_none_or(|rr| rr.height_at(q).is_some()) && slope.is_none_or(|(s, lo, hi)| s.within(q, lo, hi))
+    };
+    let threads = std::thread::available_parallelism().map_or(4, |t| t.get());
+    let mut passes: Vec<Vec<P3>> = Vec::new();
+    for path in paths {
+        // gęste punkty ścieżki i ich wysokości (równolegle), potem zagęszczenie na zgięciach
+        let mut pts: Vec<Vec2> = Vec::new();
+        for w in path.windows(2) {
+            let n = (w[0].distance(w[1]) / ds).ceil().max(1.0) as usize;
+            for i in 0..n {
+                pts.push(w[0].lerp(w[1], i as f64 / n as f64));
+            }
+        }
+        if let Some(&last) = path.last() {
+            pts.push(last);
+        }
+        let flags: Vec<bool> = pts.iter().map(|&q| keep(q)).collect();
+        let mut zs = vec![0f64; pts.len()];
+        let chunk = pts.len().div_ceil(threads).max(1);
+        std::thread::scope(|sc| {
+            for (c, out) in zs.chunks_mut(chunk).enumerate() {
+                let (pts, z_at) = (&pts, &z_at);
+                sc.spawn(move || {
+                    for (k, z) in out.iter_mut().enumerate() {
+                        *z = z_at(pts[c * chunk + k]);
+                    }
+                });
+            }
+        });
+        for (run, _) in kept_runs(&pts, &flags, false, r, r * 0.5) {
+            let mut line: Vec<P3> = Vec::with_capacity(run.len());
+            for &i in &run {
+                let q = P3::from_xy(pts[i], zs[i]);
+                if let Some(&prev) = line.last() {
+                    refine(prev, q, tol, &z_at, &mut line, 0);
+                }
+                line.push(q);
+            }
+            if line.len() >= 2 {
+                passes.push(simplify3(&line, tol * 0.5));
+            }
+        }
+    }
+    let tp = &mut res.toolpath;
+    let mut over_top = false;
+    for pass in passes {
+        let Some(&first) = pass.first() else { continue };
+        over_top |= pass.iter().any(|q| q.z > cut.top_z + 1e-6);
+        let near = tp.pos().filter(|c| {
+            let d = c.xy().distance(first.xy());
+            // w obszarze albo po jego granicy (wyjście i powrót spirali leżą na tej samej
+            // krawędzi) — punkt odsunięty o 0,01 mm w którąś stronę jest w środku
+            let chord_inside = || {
+                let n = (d / ds).ceil().max(1.0) as usize;
+                let side = (first.xy() - c.xy()).normalized().perp() * 0.01;
+                (0..=n).all(|i| {
+                    let q = c.xy().lerp(first.xy(), i as f64 / n as f64);
+                    inside(q) || inside(q + side) || inside(q - side)
+                })
+            };
+            c.z < cut.safe_z - 1e-9 && (d <= link + 1e-6 || (d <= long_link && chord_inside()))
+        });
+        match near {
+            Some(c) => {
+                for q in simplify3(&sample(c.xy(), first.xy(), ds, tol, &z_at), tol * 0.5).into_iter().skip(1) {
+                    tp.feed(q, cut.feed);
+                }
+            }
+            None => {
+                tp.travel_to(P3::from_xy(first.xy(), first.z + cut.retract_clearance), cut.safe_z);
+                tp.feed(first, cut.plunge_feed);
+            }
+        }
+        for &q in &pass[1..] {
+            tp.feed(q, cut.feed);
+        }
+    }
+    res.toolpath.retract(cut.safe_z);
+    if over_top {
+        res.warnings.push(tr!("Model wystaje ponad górę półfabrykatu — narzędzie pojedzie nad Z0").into());
     }
 }
 
@@ -64,7 +268,7 @@ fn raster(
 ) {
     let h = m.heights;
     let r = tool.radius();
-    let closed: Vec<&Contour> = contours.iter().filter(|c| c.closed && c.verts.len() >= 3).collect();
+    let closed: Vec<&Contour> = contours.iter().filter(|c| crate::rough3d::is_boundary(c)).collect();
     if closed.len() < contours.len() {
         res.warnings.push(tr!("Pominięto krzywe otwarte — granicą obróbki są tylko zamknięte").into());
     }
@@ -301,7 +505,7 @@ fn waterline(
 ) {
     let h = m.heights;
     let r = tool.radius();
-    let closed: Vec<&Contour> = contours.iter().filter(|c| c.closed && c.verts.len() >= 3).collect();
+    let closed: Vec<&Contour> = contours.iter().filter(|c| crate::rough3d::is_boundary(c)).collect();
     if closed.len() < contours.len() {
         res.warnings.push(tr!("Pominięto krzywe otwarte — granicą obróbki są tylko zamknięte").into());
     }
@@ -791,6 +995,87 @@ mod tests {
         let mut o = op(false);
         o.kind = OpKind::Finish3D(Finish3DParams { slope_min: 50.0, slope_max: 20.0, ..Default::default() });
         assert!(!generate_with_model(&o, &tool, &[], Some(&m)).warnings.is_empty());
+    }
+
+    #[test]
+    fn spiral_and_radial_around_the_dome() {
+        let h = dome();
+        let tool = Tool { diameter: 6.0, kind: ToolKind::BallEnd, ..Default::default() };
+        let m = ModelInput { heights: &h, stock: Aabb2 { min: Vec2::new(0.0, 0.0), max: Vec2::new(30.0, 30.0) }, ref_tool: None };
+        let prof = ToolProfile::of(&tool);
+        let idx = DropIndex::new(&h);
+        let ring = cam_geom::Contour::circle(Vec2::new(15.0, 15.0), 14.0);
+        let run = |strategy| {
+            let mut o = op(false);
+            o.kind = OpKind::Finish3D(Finish3DParams { strategy, stepover: 0.1, ..Default::default() });
+            let res = generate_with_model(&o, &tool, std::slice::from_ref(&ring), Some(&m));
+            assert!(res.warnings.is_empty(), "{:?}", res.warnings);
+            res
+        };
+        let rho = |q: &crate::P3| q.xy().distance(Vec2::new(15.0, 15.0));
+        for strategy in [Finish3DStrategy::Spiral, Finish3DStrategy::Radial] {
+            let res = run(strategy);
+            let pts = cutting_points(&res.toolpath);
+            assert!(pts.len() > 2000, "{strategy:?}");
+            for q in &pts {
+                // w okręgu i bez wcinania
+                assert!(rho(q) <= 14.0 + 1e-6, "{strategy:?}: poza granicą {q:?}");
+                let zs = idx.drop_tool(q.xy(), &prof, -h.cell * 0.25 - 1e-3).unwrap_or(f64::NEG_INFINITY);
+                assert!(q.z >= zs - 1e-9, "{strategy:?}: wcięcie w {q:?}");
+            }
+            // szczyt i brzeg obrobione, a między nimi każdy pierścień co 1 mm
+            for k in 0..14 {
+                let (r0, r1) = (k as f64, k as f64 + 1.0);
+                assert!(pts.iter().any(|q| rho(q) >= r0 && rho(q) < r1), "{strategy:?}: nic w pierścieniu {r0}–{r1} mm");
+            }
+            let lifts = res.toolpath.moves.iter().filter(|mv| matches!(mv, crate::Move::Rapid(p) if p.z >= 4.9)).count();
+            match strategy {
+                // jedna ciągła spirala: tylko dojazd na początek i odjazd
+                Finish3DStrategy::Spiral => assert!(lifts <= 3, "spirala podnosi się {lifts} razy"),
+                // promieniowa: przy środku przejazdy po powierzchni, bez podnoszenia
+                _ => assert!(lifts <= 3, "szprychy podnoszą się {lifts} razy"),
+            }
+        }
+        // bez krzywych (prostokąt modelu): zwoje wychodzące poza niego wracają po powierzchni
+        let mut o = op(false);
+        o.kind = OpKind::Finish3D(Finish3DParams { strategy: Finish3DStrategy::Spiral, stepover: 0.1, ..Default::default() });
+        let res = generate_with_model(&o, &tool, &[], Some(&m));
+        let lifts = res.toolpath.moves.iter().filter(|mv| matches!(mv, crate::Move::Rapid(p) if p.z >= 4.9)).count();
+        assert!(lifts <= 3, "spirala w prostokącie podnosi się {lifts} razy");
+        // spirala: zwoje co 0,6 mm (10 % Ø6) — promień rośnie równomiernie
+        let sp = super::spiral_points(Vec2::ZERO, 10.0, 0.6, 0.1);
+        let turn = sp.iter().position(|q| q.x > 0.0 && q.y.abs() < 0.05 && q.length() > 0.5).unwrap();
+        assert!((sp[turn].length() - 0.6).abs() < 0.06, "{:?}", sp[turn]);
+        assert!((sp.last().unwrap().length() - 10.0).abs() < 1e-6);
+        // szprychy: na brzegu odstęp ≤ krok, przy środku nie gęściej niż trzeba
+        let sk = super::spokes(Vec2::ZERO, 10.0, 0.6);
+        assert!(sk.len() as f64 * 0.6 >= std::f64::consts::TAU * 10.0);
+        let from_center = sk.iter().filter(|s| s[0].length() < 1e-9 || s[1].length() < 1e-9).count();
+        assert!(from_center <= 4, "{from_center} szprych od samego środka");
+    }
+
+    #[test]
+    fn a_circle_is_a_boundary() {
+        // okrąg (dwa półłuki) ogranicza obróbkę jak każda zamknięta krzywa
+        let h = dome();
+        let tool = Tool { diameter: 6.0, kind: ToolKind::BallEnd, ..Default::default() };
+        let m = ModelInput { heights: &h, stock: Aabb2 { min: Vec2::new(0.0, 0.0), max: Vec2::new(30.0, 30.0) }, ref_tool: None };
+        let ring = cam_geom::Contour::circle(Vec2::new(15.0, 15.0), 8.0);
+        for strategy in [Finish3DStrategy::Raster, Finish3DStrategy::Waterline] {
+            let mut o = op(false);
+            o.cut.depth = 9.0;
+            o.kind = OpKind::Finish3D(Finish3DParams { strategy, stepover: 0.2, ..Default::default() });
+            let res = generate_with_model(&o, &tool, std::slice::from_ref(&ring), Some(&m));
+            assert!(res.warnings.is_empty(), "{strategy:?}: {:?}", res.warnings);
+            let pts = cutting_points(&res.toolpath);
+            assert!(!pts.is_empty());
+            assert!(pts.iter().all(|q| q.xy().distance(Vec2::new(15.0, 15.0)) <= 8.0 + 0.3), "{strategy:?}: poza okręgiem");
+        }
+        let mut o = op(false);
+        o.kind = OpKind::Rough3D(Rough3DParams::default());
+        o.cut.step_down = 3.0;
+        let r = generate_with_model(&o, &Tool::default(), std::slice::from_ref(&ring), Some(&m));
+        assert!(!r.warnings.iter().any(|w| w.contains("otwarte")), "{:?}", r.warnings);
     }
 
     #[test]

@@ -302,6 +302,7 @@ krzywych: po ich zmianie utwórz kształt od nowa.
 | **Wykańczająca — równoległa** | Frez jest opuszczany na model w gęstych punktach: dotyka powierzchni, nie wcinając się. Najlepsza na łagodne zbocza i płaskie miejsca. **Odstęp przejść** pokazuje spodziewaną wysokość grzbietów; **kąt przejść** i **drugi raz w poprzek** (pod kątem 90°) wygładzają strome boki. Najlepiej frezem kulowym albo kulowym stożkowym, po obróbce zgrubnej. |
 | **Wykańczająca — warstwicowa** | Wokół modelu na stałych wysokościach — na strome ściany. Płaskie miejsca zostają dla równoległej. |
 | **Wykańczająca — łączona** | Obie naraz, w jednej operacji: warstwice tam, gdzie powierzchnia jest bardziej stroma niż **kąt graniczny** (domyślnie 45°), przejścia równoległe tam, gdzie jest łagodniejsza — z małą zakładką, żeby nie został pasek między nimi. |
+| **Wykańczająca — spiralna / promieniowa** | Jedna ciągła spirala od środka na zewnątrz albo przejścia od środka jak szprychy — do kopuł, mis i rozet. Środek to środek modelu albo zaznaczonych krzywych (np. okręgu wokół kopuły). |
 | **Tylko resztki** | Wykańczanie tylko tam, gdzie większe narzędzie (wybrane w operacji) nie sięgnęło: wąskie doliny i narożniki. **Resztki grubsze niż** pomija cienkie pozostałości. |
 | **Wycięcie** | Profil zewnętrzny po sylwetce modelu, z mostkami — wycina detal z półfabrykatu. |
 
