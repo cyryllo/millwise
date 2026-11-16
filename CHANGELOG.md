@@ -38,6 +38,14 @@ Version numbers:
 
 ### Changed
 
+- **Faster 3D roughing of reliefs.** The extra levels just above flat areas
+  are now added only where they take off at least a quarter of the step
+  down (0.3 mm or more), and only truly flat places count. A relief from a
+  photo has a tiny „shelf” for every shade of grey, and each became a level
+  going over the whole area: on a 100 × 67 mm test relief roughing had 15
+  levels and about 27 minutes, now 5 levels and about 11 minutes. Bumps
+  lower than a quarter of the stock allowance (at most 0.1 mm) are no longer
+  cut around as separate islands, which cut the number of moves by a third.
 - **Toolpaths in the 2D view are drawn by the graphics card.** They are sent
   to the card once, after the toolpaths change or another operation is
   selected; moving and zooming the view only redraws them. The tool-width

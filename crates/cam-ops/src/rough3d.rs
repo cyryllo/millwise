@@ -65,8 +65,12 @@ pub(crate) fn generate(cut: &CutParams, p: &Rough3DParams, tool: &Tool, contours
     }
     let mut prev = cut.top_z;
     let mut empty = 0;
+    // wysepki niższe niż ¼ naddatku (najwyżej 0,1 mm) nie są omijane — frez zbiera
+    // tyle z naddatku; bez tego płaskorzeźba (odcienie szarości co setne milimetra)
+    // daje na warstwie tysiące maleńkich wysp
+    let island_tol = (0.25 * a).min(0.1);
     for z in levels(cut, bottom, a, &grid, tool) {
-        let limit = (z - a + 1e-4) as f32;
+        let limit = (z - a + island_tol + 1e-4) as f32;
         let region: Vec<Contour> = grid.outline_where_tol(|k, _| inside[k] && !(grown.z[k] > limit), tol);
         if region.is_empty() {
             // niżej model zajmuje jeszcze więcej — koniec
@@ -86,21 +90,65 @@ pub(crate) fn generate(cut: &CutParams, p: &Rough3DParams, tool: &Tool, contours
 
 /// Poziomy Z: równe kroki od góry do dna i dodatkowo tuż nad płaskimi powierzchniami
 /// modelu (wysokość + naddatek), żeby na półkach nie zostawał cały krok materiału.
+///
+/// Dodatkowy poziom powstaje tylko wtedy, gdy zbiera z półki co najmniej `min_gain`
+/// (¼ kroku, najmniej 0,3 mm) — płaskorzeźba ze zdjęcia ma setki „półek” co jeden
+/// odcień szarości (kilka setnych milimetra), a każda zbędna warstwa to objazd
+/// całego obszaru. Zwykły poziom tuż pod dodatkowym jest pomijany, gdy krok niżej
+/// wciąż się mieści.
 fn levels(cut: &CutParams, bottom: f64, a: f64, grid: &ModelHeights, tool: &Tool) -> Vec<f64> {
-    let mut zs = z_levels(cut.top_z, bottom, cut.step_down);
-    // płaskie: wysokość (co 0,01 mm) zajmująca co najmniej tyle, ile przekrój freza
+    let step = cut.step_down.max(0.01);
+    let uniform = z_levels(cut.top_z, bottom, step);
+    let min_gain = (0.25 * step).max(0.3);
+    // płaskie: komórki bez spadku do sąsiadów (do ok. 1°), zgrupowane co 0,01 mm;
+    // wysokość jest półką, gdy zajmuje co najmniej tyle, ile przekrój freza
     let min_cells = ((tool.diameter * tool.diameter) / (grid.cell * grid.cell)).max(4.0) as usize;
-    // BTreeMap: stała kolejność (od najniższych) — te same poziomy przy każdym liczeniu
+    let flat_tol = (grid.cell * 0.02).max(0.002) as f32;
+    // BTreeMap: stała kolejność — te same poziomy przy każdym liczeniu
     let mut hist: std::collections::BTreeMap<i64, usize> = std::collections::BTreeMap::new();
-    for &z in &grid.z {
-        if z.is_finite() {
-            *hist.entry((z as f64 * 100.0).round() as i64).or_default() += 1;
+    let (nx, ny) = (grid.nx, grid.ny);
+    for j in 0..ny {
+        for i in 0..nx {
+            let z = grid.z[j * nx + i];
+            if !z.is_finite() {
+                continue;
+            }
+            let flat = [(i.wrapping_sub(1), j), (i + 1, j), (i, j.wrapping_sub(1)), (i, j + 1)]
+                .iter()
+                .filter(|&&(x, y)| x < nx && y < ny)
+                .all(|&(x, y)| {
+                    let n = grid.z[y * nx + x];
+                    !n.is_finite() || (n - z).abs() <= flat_tol
+                });
+            if flat {
+                *hist.entry((z as f64 * 100.0).round() as i64).or_default() += 1;
+            }
         }
     }
-    for (k, n) in hist {
+    let mut extra: Vec<f64> = Vec::new();
+    // od najwyższych półek: zysk = odległość do najbliższego poziomu nad półką
+    for (k, n) in hist.into_iter().rev() {
         let z = k as f64 / 100.0 + a;
-        if n >= min_cells && z < cut.top_z - 1e-3 && z > bottom + 1e-3 && zs.iter().all(|q| (q - z).abs() > 0.05) {
-            zs.push(z);
+        if n < min_cells || z >= cut.top_z - 1e-3 || z <= bottom + 1e-3 {
+            continue;
+        }
+        let above = uniform.iter().chain(&extra).copied().chain(std::iter::once(cut.top_z)).filter(|&q| q >= z + 1e-6).fold(f64::INFINITY, f64::min);
+        if above - z > min_gain {
+            extra.push(z);
+        }
+    }
+    let mut zs: Vec<f64> = extra.clone();
+    for &u in &uniform {
+        // zwykły poziom tuż pod dodatkowym — zbędny, jeśli następny niżej jest w zasięgu kroku
+        let over = extra.iter().copied().filter(|&e| e >= u && e - u < min_gain).fold(f64::NAN, f64::max);
+        if !over.is_nan() && (u - bottom).abs() > 1e-6 {
+            let below = uniform.iter().chain(&extra).copied().filter(|&q| q < u - 1e-6).fold(f64::NEG_INFINITY, f64::max);
+            if over - below.max(bottom) <= step + 1e-6 {
+                continue;
+            }
+        }
+        if zs.iter().all(|q| (q - u).abs() > 1e-6) {
+            zs.push(u);
         }
     }
     zs.sort_by(|x, y| y.partial_cmp(x).unwrap());
@@ -182,6 +230,32 @@ mod tests {
         assert!(!pts.iter().any(|(p, z)| p.distance(Vec2::new(20.0, 15.0)) < 5.0 && *z < 0.0));
         // tylko ruchy liniowe lub łuki, kończy się wycofaniem
         assert!(matches!(res.toolpath.moves.last(), Some(Move::Rapid(_))));
+    }
+
+    #[test]
+    fn photo_terraces_do_not_multiply_levels() {
+        // łagodny spadek z Z −1 do −5 schodkami co 0,02 mm (jak odcienie szarości
+        // płaskorzeźby): każdy schodek 0,5 mm szeroki (większy niż przekrój freza 3 mm)
+        let mut t = Vec::new();
+        let n = 200;
+        for k in 0..n {
+            let (x0, x1) = (k as f32 * 0.5, (k + 1) as f32 * 0.5);
+            let z = -1.0 - 4.0 * k as f32 / n as f32;
+            t.push([[x0, 0.0, z], [x1, 0.0, z], [x1, 30.0, z]]);
+            t.push([[x0, 0.0, z], [x1, 30.0, z], [x0, 30.0, z]]);
+        }
+        let h = ModelHeights::from_triangles(&t, 0.05).unwrap();
+        let tool = Tool { diameter: 3.0, ..Default::default() };
+        let cut = CutParams { top_z: 0.0, depth: 6.0, step_down: 2.0, ..Default::default() };
+        let zs = super::levels(&cut, cut.bottom_z(), 0.5, &h, &tool);
+        // równe kroki 0 → −6 to 3 poziomy; dodatkowe tylko co ≥ 0,5 mm
+        assert!(zs.len() <= 3 + 6, "{zs:?}");
+        for w in zs.windows(2) {
+            assert!(w[0] - w[1] <= 2.0 + 1e-9, "krok większy niż zadany: {zs:?}");
+        }
+        // a prawdziwa półka (kostka) dalej dostaje swój poziom
+        let shelf = super::levels(&rough_op(0.5).cut, -10.0, 0.5, &stepped(), &Tool { diameter: 6.0, ..Default::default() });
+        assert!(shelf.iter().any(|z| (z + 4.5).abs() < 1e-6), "{shelf:?}");
     }
 
     #[test]
