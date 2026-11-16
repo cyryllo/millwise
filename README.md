@@ -45,6 +45,9 @@ not planned for now). The user interface is in Polish and English.
   - **Cut-out** along the model silhouette with tabs; silhouette and outline
     at any height also as curves for 2D operations.
   - Undercut warning; 3D toolpaths are computed in the background.
+- **Relief from a photo:** open a JPG, PNG or BMP image and it becomes a 3D
+  model — bright places higher, dark lower (or inverted), with width, depth,
+  base, smoothing and mesh spacing. Machined like an STL model.
 - **Text** turned into curves (built-in fonts or any .ttf / .otf).
 - **Automation:** operations for all free curves by layer, corners, tabs by
   perimeter and order by tool in one step.

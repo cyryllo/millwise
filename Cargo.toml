@@ -17,6 +17,7 @@ cam-sim = { path = "crates/cam-sim" }
 cavalier_contours = "0.9"
 dxf = "0.6"
 stl_io = "0.11"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp"] }
 glam = { version = "0.34", features = ["bytemuck"] }
 bytemuck = { version = "1", features = ["derive"] }
 eframe = { version = "0.37", default-features = false, features = ["wgpu", "default_fonts", "x11", "wayland", "accesskit"] }
@@ -35,6 +36,11 @@ opt-level = 2
 # symulacja musi być szybka także w trybie debug
 [profile.dev.package.cam-sim]
 opt-level = 3
+
+# offsety krzywych: wewnętrzne sprawdzenia biblioteki tylko spowalniają i potrafią
+# przerwać liczenie na prawie zdegenerowanych łukach, które wydanie liczy poprawnie
+[profile.dev.package.cavalier_contours]
+debug-assertions = false
 
 # ścieżki 3D liczą dużo — szybkie także w trybie debug
 [profile.dev.package.cam-ops]

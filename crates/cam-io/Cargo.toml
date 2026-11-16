@@ -9,3 +9,4 @@ cam-i18n.workspace = true
 cam-geom.workspace = true
 dxf.workspace = true
 anyhow.workspace = true
+image.workspace = true

@@ -8,6 +8,25 @@ Version numbers:
 
 ## Unreleased
 
+### Added
+
+- **Relief from a photo.** Open (or add) a JPG, PNG or BMP image and it
+  becomes a 3D model: bright places higher, dark ones lower — or the other
+  way round with „Dark is higher”. The model card shows the photo and its
+  settings: width (the height follows the proportions of the photo), depth
+  between the darkest and the brightest place, base under the lowest point,
+  smoothing (removes noise and the grain of the photo) and mesh spacing.
+  From there it is machined like an STL model: roughing, finishing, rest
+  finishing, cut-out, simulation. The project keeps the photo itself (in
+  grey, at most 1600 px on the longer side) and its settings, not the
+  mesh, so it stays small and the relief can be changed later.
+
+### Fixed
+
+- **A 3D operation whose computation failed no longer stays „computing…”
+  forever** (starting again and again in the background); it shows a
+  warning and an empty toolpath instead.
+
 ### Changed
 
 - **Toolpaths in the 2D view are drawn by the graphics card.** They are sent

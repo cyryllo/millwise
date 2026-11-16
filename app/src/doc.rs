@@ -227,7 +227,15 @@ impl Key3D {
             .name("millwise-3d".into())
             .spawn(move || {
                 let m = cam_ops::ModelInput { heights: &key.heights, stock: key.stock, ref_tool: key.ref_tool.clone() };
-                let _ = tx.send(cam_ops::generate_with_model(&op, &key.tool, &key.geom, Some(&m)));
+                // błąd w obliczeniach: pusta ścieżka z uwagą zamiast liczenia w kółko od nowa
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    cam_ops::generate_with_model(&op, &key.tool, &key.geom, Some(&m))
+                }))
+                .unwrap_or_else(|_| OpResult {
+                    warnings: vec![tr!("Błąd podczas liczenia ścieżki — zmień trochę ustawienia (np. odstęp przejść) i zgłoś problem").into()],
+                    ..Default::default()
+                });
+                let _ = tx.send(result);
             })
             .expect("nie można uruchomić wątku obliczeń 3D");
         Job3D { key: self.clone(), rx }

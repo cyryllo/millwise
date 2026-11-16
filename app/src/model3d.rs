@@ -1,7 +1,8 @@
 //! Model 3D (STL) w półfabrykacie: siatka z pliku i jej ustawienie —
 //! jednostki, skala, obrót o wielokrotności 90°, położenie, naddatek nad modelem.
+//! Płaskorzeźba ze zdjęcia to taki sam model, którego siatka powstaje z obrazu.
 
-use cam_io::Mesh;
+use cam_io::{GrayImage, Mesh, ReliefParams};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use cam_ops::model::ModelHeights;
 use std::sync::{Arc, OnceLock};
@@ -10,9 +11,18 @@ use std::sync::{Arc, OnceLock};
 pub type Rot = [[i8; 3]; 3];
 pub const IDENTITY: Rot = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
 
+/// Źródło płaskorzeźby: obraz w skali szarości i ustawienia, z których powstaje siatka.
+#[derive(Clone, Debug)]
+pub struct Relief {
+    pub image: Arc<GrayImage>,
+    pub params: ReliefParams,
+}
+
 #[derive(Clone, Debug)]
 pub struct Model3D {
     pub name: String,
+    /// Płaskorzeźba ze zdjęcia (siatka liczona z obrazu); None — model z pliku STL.
+    pub relief: Option<Relief>,
     /// Siatka jak w pliku (współdzielona — kopie w historii jej nie kopiują).
     pub mesh: Arc<Mesh>,
     /// Mnożnik jednostek pliku na milimetry (1 = mm, 25,4 = cale).
@@ -43,6 +53,8 @@ impl PartialEq for Model3D {
             && self.rot == o.rot
             && self.top_allowance == o.top_allowance
             && self.pos == o.pos
+            && self.relief.as_ref().map(|r| (Arc::as_ptr(&r.image), r.params))
+                == o.relief.as_ref().map(|r| (Arc::as_ptr(&r.image), r.params))
     }
 }
 
@@ -69,6 +81,7 @@ impl Model3D {
     pub fn new(name: String, mesh: Mesh, units: f64) -> Self {
         let mut m = Model3D {
             name,
+            relief: None,
             mesh: Arc::new(mesh),
             units,
             scale: 1.0,
@@ -82,6 +95,25 @@ impl Model3D {
         };
         m.refresh();
         m
+    }
+
+    /// Płaskorzeźba z obrazu (wymiary w mm z ustawień).
+    pub fn from_relief(name: String, image: GrayImage, params: ReliefParams) -> Self {
+        let mesh = cam_io::relief_mesh(&image, &params);
+        let mut m = Model3D::new(name, mesh, 1.0);
+        m.relief = Some(Relief { image: Arc::new(image), params });
+        m
+    }
+
+    /// Nowe ustawienia płaskorzeźby: siatka liczona od nowa.
+    pub fn set_relief_params(&mut self, params: ReliefParams) {
+        let Some(r) = &mut self.relief else { return };
+        if r.params == params {
+            return;
+        }
+        r.params = params;
+        self.mesh = Arc::new(cam_io::relief_mesh(&r.image, &params));
+        self.refresh();
     }
 
     /// Obraca o 90° wokół osi świata.
@@ -195,7 +227,11 @@ fn undercut_area(tris: &[[[f32; 3]; 3]]) -> f64 {
 #[derive(Serialize, Deserialize)]
 struct ModelFile {
     name: String,
+    /// Puste dla płaskorzeźby — siatka powstaje z obrazu.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     stl_base64: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    relief: Option<ReliefFile>,
     units: f64,
     scale: f64,
     rot: Rot,
@@ -203,11 +239,37 @@ struct ModelFile {
     pos: [f64; 2],
 }
 
+/// Płaskorzeźba w projekcie: obraz w skali szarości (bajty w base64) i ustawienia.
+#[derive(Serialize, Deserialize)]
+struct ReliefFile {
+    image_width: u32,
+    image_height: u32,
+    gray_base64: String,
+    width: f64,
+    depth: f64,
+    base: f64,
+    smooth: f64,
+    invert: bool,
+    cell: f64,
+}
+
 impl Serialize for Model3D {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let relief = self.relief.as_ref().map(|r| ReliefFile {
+            image_width: r.image.width,
+            image_height: r.image.height,
+            gray_base64: b64_encode(&r.image.pixels),
+            width: r.params.width,
+            depth: r.params.depth,
+            base: r.params.base,
+            smooth: r.params.smooth,
+            invert: r.params.invert,
+            cell: r.params.cell,
+        });
         ModelFile {
             name: self.name.clone(),
-            stl_base64: b64_encode(&self.mesh.to_binary()),
+            stl_base64: if relief.is_some() { String::new() } else { b64_encode(&self.mesh.to_binary()) },
+            relief,
             units: self.units,
             scale: self.scale,
             rot: self.rot,
@@ -221,9 +283,29 @@ impl Serialize for Model3D {
 impl<'de> Deserialize<'de> for Model3D {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let f = ModelFile::deserialize(d)?;
-        let bytes = b64_decode(&f.stl_base64).ok_or_else(|| serde::de::Error::custom("base64"))?;
-        let mesh = cam_io::parse_stl(&bytes).map_err(serde::de::Error::custom)?;
-        let mut m = Model3D::new(f.name, mesh, f.units);
+        let mut m = match f.relief {
+            Some(r) => {
+                let pixels = b64_decode(&r.gray_base64).ok_or_else(|| serde::de::Error::custom("base64"))?;
+                if r.image_width < 2 || r.image_height < 2 || pixels.len() != (r.image_width * r.image_height) as usize {
+                    return Err(serde::de::Error::custom("relief image"));
+                }
+                let image = GrayImage { width: r.image_width, height: r.image_height, pixels };
+                let params = ReliefParams {
+                    width: r.width,
+                    depth: r.depth,
+                    base: r.base,
+                    smooth: r.smooth,
+                    invert: r.invert,
+                    cell: r.cell,
+                };
+                Model3D::from_relief(f.name, image, params)
+            }
+            None => {
+                let bytes = b64_decode(&f.stl_base64).ok_or_else(|| serde::de::Error::custom("base64"))?;
+                let mesh = cam_io::parse_stl(&bytes).map_err(serde::de::Error::custom)?;
+                Model3D::new(f.name, mesh, f.units)
+            }
+        };
         m.scale = f.scale;
         m.rot = f.rot;
         m.top_allowance = f.top_allowance;
@@ -313,6 +395,26 @@ mod tests {
         let m = Model3D::new("t".into(), Mesh { tris: t }, 1.0);
         // spód półki liczony w całości (300 mm²; środek nad słupkiem to tylko styk brył w tym teście)
         assert!(m.undercut_area() >= 200.0, "{}", m.undercut_area());
+    }
+
+    #[test]
+    fn relief_model_saved_as_image() {
+        // 4 × 2: ciemna lewa połowa, jasna prawa
+        let img = GrayImage { width: 4, height: 2, pixels: vec![0, 0, 255, 255, 0, 0, 255, 255] };
+        let p = ReliefParams { width: 40.0, depth: 5.0, base: 2.0, smooth: 0.0, invert: false, cell: 1.0 };
+        let mut m = Model3D::from_relief("foto.png".into(), img, p);
+        assert_eq!(m.size(), [40.0, 20.0, 7.0]);
+        m.set_relief_params(ReliefParams { depth: 8.0, ..p });
+        assert_eq!(m.size(), [40.0, 20.0, 10.0]);
+        m.top_allowance = 1.0;
+        m.refresh();
+        let json = serde_json::to_string(&m).unwrap();
+        assert!(!json.contains("stl_base64"), "płaskorzeźba zapisana jako obraz, nie siatka");
+        let back: Model3D = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.size(), m.size());
+        assert_eq!(back.relief.as_ref().unwrap().params, m.relief.as_ref().unwrap().params);
+        assert_eq!(back.mesh.tris, m.mesh.tris);
+        assert_eq!(back.top_allowance, 1.0);
     }
 
     #[test]

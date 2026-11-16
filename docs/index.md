@@ -57,7 +57,7 @@ description: "Millwise is free CAM software for 3-axis CNC routers and mills. Fr
   <div class="text-col">
     <h3>3D machining of STL models</h3>
     <ul>
-      <li>Open an STL file: the model sits in the stock (units, scale, 90° rotations, stock left above it) and has its own <strong>3D model</strong> tab.</li>
+      <li>Open an STL file — or a <strong>photo</strong>, which becomes a relief — the model sits in the stock (units, scale, 90° rotations, stock left above it) and has its own <strong>3D model</strong> tab.</li>
       <li><strong>Roughing</strong> in Z levels around the model, with extra levels just above flat areas.</li>
       <li><strong>Finishing</strong> with parallel passes or <strong>waterlines</strong> for steep walls; <strong>rest finishing</strong> only where a bigger cutter could not reach.</li>
       <li><strong>Cut-out</strong> along the model silhouette with tabs; the silhouette and the outline at any height also as curves for 2D operations.</li>
@@ -158,7 +158,7 @@ chmod +x Millwise-*-x86_64.AppImage
 
 **Millwise 0.7 is an early test version.** It already does 2D and 3D
 machining, but it changes every day and has not been tested enough on real
-machines. Planned next: a relief from a photo, combined steep and shallow
+machines. Planned next: combined steep and shallow
 finishing, spiral finishing, engraving on 3D surfaces. See the
 [changes]({{ site.repo }}/blob/main/CHANGELOG.md) and the
 [to-do list]({{ site.repo }}/blob/main/TODO.md) (in Polish).

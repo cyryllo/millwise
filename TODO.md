@@ -20,18 +20,12 @@ weszło do programu, jest w [CHANGELOG.md](CHANGELOG.md) i w historii gita.
 
 Jest: model STL w półfabrykacie (zakładka „Model 3D”), krzywe z modelu,
 zgrubna warstwami Z, wykańczająca równoległa i warstwicowa, resztki, wycięcie
-po sylwetce, frezy kulowe stożkowe, symulacja na GPU i „Ścieżki”. Szczegóły w
+po sylwetce, frezy kulowe stożkowe, płaskorzeźba ze zdjęcia, symulacja na GPU
+i „Ścieżki”. Szczegóły w
 [ROADMAP.md](ROADMAP.md).
 
 Dalej w paczkach, w kolejności od największego pożytku przy frezowaniu w
 drewnie (jedna paczka = jedno wydanie):
-
-**Paczka 1 — Płaskorzeźba ze zdjęcia**
-
-- [ ] Import JPG / PNG jako mapy wysokości: jasne miejsca wyżej, ciemne
-      niżej (z odwróceniem). Ustawienia: rozmiar w mm, głębokość, wygładzanie,
-      podstawa pod spodem. Portrety, litofany, ozdobne panele — bez pliku STL.
-      Dalej jak model STL (zgrubna, wykańczająca, symulacja).
 
 **Paczka 2 — Wykańczanie łączone**
 
@@ -81,6 +75,12 @@ drewnie (jedna paczka = jedno wydanie):
 
 **Frezowanie 2D**
 
+- [ ] **Nesting**: automatyczne układanie detali z rysunków 2D na płycie,
+      jak najciaśniej, żeby zostało jak najmniej odpadu. Odstęp między
+      detalami (co najmniej średnica freza), obroty (o 90° albo dowolne),
+      kilka sztuk tego samego detalu, otwory i wnęki wewnątrz większych
+      detali. Operacje idą razem z detalami; gdy nie mieszczą się na jednej
+      płycie — kolejne płyty.
 - [ ] Kieszeń o stałym kącie opasania (pełne HSM / trochoidalna) — teraz jest
       uproszczona odmiana: mały krok i zaokrąglone pętle.
 

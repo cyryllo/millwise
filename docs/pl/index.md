@@ -57,7 +57,7 @@ description: "Millwise to darmowy program CAM do 3-osiowych frezarek CNC. Z rysu
   <div class="text-col">
     <h3>Obróbka 3D modeli STL</h3>
     <ul>
-      <li>Otwórz plik STL: model trafia do półfabrykatu (jednostki, skala, obroty o 90°, naddatek nad modelem) i ma własną zakładkę <strong>Model 3D</strong>.</li>
+      <li>Otwórz plik STL albo <strong>zdjęcie</strong>, z którego powstanie płaskorzeźba: model trafia do półfabrykatu (jednostki, skala, obroty o 90°, naddatek nad modelem) i ma własną zakładkę <strong>Model 3D</strong>.</li>
       <li><strong>Zgrubna</strong> warstwami Z wokół modelu, z dodatkowymi warstwami tuż nad płaskimi miejscami.</li>
       <li><strong>Wykańczająca</strong> przejściami równoległymi albo <strong>warstwicowa</strong> na strome ściany; <strong>tylko resztki</strong> — tam, gdzie większy frez nie sięgnął.</li>
       <li><strong>Wycięcie</strong> detalu po sylwetce modelu z mostkami; sylwetka i obrys na dowolnej wysokości także jako krzywe do operacji 2D.</li>
@@ -158,7 +158,7 @@ chmod +x Millwise-*-x86_64.AppImage
 
 **Millwise 0.7 to wczesna wersja testowa.** Robi już obróbkę 2D i 3D, ale
 zmienia się z dnia na dzień i nie była jeszcze dość testowana na prawdziwych
-maszynach. W planach: relief ze zdjęcia, wykańczanie łączone (strome i
+maszynach. W planach: wykańczanie łączone (strome i
 płaskie), wykańczanie spiralne, grawer na powierzchniach 3D. Zobacz
 [listę zmian]({{ site.repo }}/blob/main/CHANGELOG.md) i
 [plany]({{ site.repo }}/blob/main/TODO.md).

@@ -250,6 +250,27 @@ machined from the top. Turn the model or machine it from two sides.
 
 <div style="clear:both"></div>
 
+### Relief from a photo
+
+Open or add a **JPG, PNG or BMP** image instead of an STL file and Millwise
+turns it into a 3D model: bright places are higher, dark ones lower. The
+model card then shows the photo and its settings:
+
+- **Width (X)** — the height (Y) follows the proportions of the photo.
+- **Depth** — the height difference between the darkest and the brightest
+  place.
+- **Base** — material left under the lowest point.
+- **Smoothing** — blurs the photo, removing noise and grain; larger values
+  give softer shapes.
+- **Mesh spacing** — smaller gives more detail but takes longer (at most
+  1000 points on the longer side).
+- **Dark is higher** — for pictures in which the raised parts are dark.
+
+Changes are applied when you release the mouse or press Enter. The relief is
+then machined like any model: roughing, finishing with a ball or tapered
+ball cutter, cut-out. Photos with soft light and a plain background work
+best; a portrait usually needs some smoothing.
+
 ### Operations
 
 | Operation | What it does |

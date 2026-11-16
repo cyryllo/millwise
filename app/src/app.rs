@@ -24,6 +24,16 @@ fn is_stl(p: &Path) -> bool {
     p.extension().is_some_and(|e| e.eq_ignore_ascii_case("stl"))
 }
 
+/// Czy plik daje model 3D: STL albo obraz (płaskorzeźba ze zdjęcia).
+fn is_model_file(p: &Path) -> bool {
+    is_stl(p) || cam_io::is_image_path(p)
+}
+
+/// Rozszerzenia w oknach wyboru plików.
+const OPEN_EXTS: [&str; 14] =
+    ["dxf", "DXF", "stl", "STL", "png", "PNG", "jpg", "JPG", "jpeg", "JPEG", "bmp", "BMP", "millwise", "camsoft"];
+const IMAGE_EXTS: [&str; 8] = ["png", "PNG", "jpg", "JPG", "jpeg", "JPEG", "bmp", "BMP"];
+
 /// Ustawienia narzędzia „Tekst” i podgląd zarysów liter (względem punktu wstawienia).
 struct TextTool {
     text: String,
@@ -127,6 +137,10 @@ pub struct CamApp {
     gcode_preview: Option<Vec<String>>,
     about_open: bool,
     shortcuts_open: bool,
+    /// Płaskorzeźba: ustawienia w trakcie przeciągania (siatka liczy się po puszczeniu).
+    relief_edit: Option<cam_io::ReliefParams>,
+    /// Miniatura zdjęcia płaskorzeźby (adres obrazu, tekstura).
+    relief_thumb: Option<(usize, egui::TextureHandle)>,
     /// Wysokość obrysu modelu 3D („Obrys powyżej Z”).
     outline_z: f64,
     /// Grafika, przez którą działa okno (do „O programie”).
@@ -189,6 +203,8 @@ impl CamApp {
             about_open: false,
             shortcuts_open: false,
             outline_z: -1.0,
+            relief_edit: None,
+            relief_thumb: None,
             graphics: cc
                 .wgpu_render_state
                 .as_ref()
@@ -297,8 +313,8 @@ impl CamApp {
         let is_project = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("millwise") || e.eq_ignore_ascii_case("camsoft"));
         if is_project {
             self.open_project(&path);
-        } else if is_stl(&path) {
-            // STL otwierany jako nowy projekt z samym modelem
+        } else if is_model_file(&path) {
+            // STL albo zdjęcie otwierane jako nowy projekt z samym modelem
             let mut doc = Document::default();
             doc.stock = std::mem::take(&mut self.doc.stock);
             doc.stock.model = None;
@@ -306,7 +322,7 @@ impl CamApp {
             doc.path = Some(path.clone());
             doc.finish_load();
             self.set_doc(doc);
-            self.add_stl(&path);
+            self.add_model(&path);
             self.doc.place_at_origin();
             self.doc.edit_label = None;
             self.history.reset(&self.doc, tr!("Otwarto {}", self.doc.file_name()));
@@ -315,12 +331,21 @@ impl CamApp {
         }
     }
 
-    /// Wczytuje STL jako model 3D bieżącego projektu (zastępuje poprzedni model).
-    fn add_stl(&mut self, path: &Path) -> bool {
-        match cam_io::load_stl(path) {
-            Ok(mesh) => {
-                let name = path.file_name().map_or("model.stl".into(), |n| n.to_string_lossy().into_owned());
-                self.doc.set_model(crate::model3d::Model3D::new(name, mesh, 1.0));
+    /// Wczytuje STL albo zdjęcie (płaskorzeźba) jako model 3D bieżącego projektu
+    /// (zastępuje poprzedni model).
+    fn add_model(&mut self, path: &Path) -> bool {
+        let name = path.file_name().map_or("model.stl".into(), |n| n.to_string_lossy().into_owned());
+        let model = if cam_io::is_image_path(path) {
+            cam_io::load_image(path).map(|img| {
+                let params = cam_io::ReliefParams::for_image(&img);
+                crate::model3d::Model3D::from_relief(name, img, params)
+            })
+        } else {
+            cam_io::load_stl(path).map(|mesh| crate::model3d::Model3D::new(name, mesh, 1.0))
+        };
+        match model {
+            Ok(model) => {
+                self.doc.set_model(model);
                 self.view2d.fit_requested = true;
                 self.view3d.fit_requested = true;
                 self.view_model.fit_requested = true;
@@ -388,9 +413,10 @@ impl CamApp {
 
     fn open_dialog(&mut self) {
         let mut dlg = rfd::FileDialog::new()
-            .add_filter("DXF, STL i projekty", &["dxf", "DXF", "stl", "STL", "millwise", "camsoft"])
+            .add_filter(tr!("DXF, STL, zdjęcia i projekty"), &OPEN_EXTS)
             .add_filter("DXF", &["dxf", "DXF"])
             .add_filter("STL", &["stl", "STL"])
+            .add_filter(tr!("Zdjęcie — płaskorzeźba (JPG, PNG, BMP)"), &IMAGE_EXTS)
             .add_filter("Projekt Millwise", &["millwise", "camsoft"]);
         if let Some(dir) = self.doc.project_path.as_ref().or(self.doc.path.as_ref()).and_then(|p| p.parent()) {
             dlg = dlg.set_directory(dir);
@@ -404,9 +430,10 @@ impl CamApp {
     fn add_dialog(&mut self) {
         let mut dlg = rfd::FileDialog::new()
             .set_title(tr!("Dodaj do projektu"))
-            .add_filter("DXF, STL i projekty", &["dxf", "DXF", "stl", "STL", "millwise", "camsoft"])
+            .add_filter(tr!("DXF, STL, zdjęcia i projekty"), &OPEN_EXTS)
             .add_filter("DXF", &["dxf", "DXF"])
             .add_filter("STL", &["stl", "STL"])
+            .add_filter(tr!("Zdjęcie — płaskorzeźba (JPG, PNG, BMP)"), &IMAGE_EXTS)
             .add_filter("Projekt Millwise", &["millwise", "camsoft"]);
         if let Some(dir) = self.doc.project_path.as_ref().or(self.doc.path.as_ref()).and_then(|p| p.parent()) {
             dlg = dlg.set_directory(dir);
@@ -424,8 +451,8 @@ impl CamApp {
                 self.open_any(path);
                 continue;
             }
-            if is_stl(&path) {
-                if self.add_stl(&path) {
+            if is_model_file(&path) {
+                if self.add_model(&path) {
                     added.push(tr!("{}: model 3D", self.doc.stock.model.as_ref().map_or(String::new(), |m| m.name.clone())));
                 }
                 continue;
@@ -1802,10 +1829,29 @@ impl CamApp {
         let mut fit_stock = false;
         let mut outline: Option<Option<f64>> = None;
         let thickness = self.doc.stock.thickness;
+        let mut relief_apply: Option<cam_io::ReliefParams> = None;
+        // miniatura zdjęcia (tekstura tworzona raz dla obrazu)
+        if let Some(r) = self.doc.stock.model.as_ref().and_then(|m| m.relief.as_ref()) {
+            let key = std::sync::Arc::as_ptr(&r.image) as usize;
+            if self.relief_thumb.as_ref().is_none_or(|t| t.0 != key) {
+                let img = &r.image;
+                let k = (img.width.max(img.height) as f64 / 240.0).max(1.0);
+                let (w, h) = (((img.width as f64 / k) as usize).max(1), ((img.height as f64 / k) as usize).max(1));
+                let px: Vec<u8> = (0..w * h)
+                    .map(|n| {
+                        let (x, y) = ((n % w) as f64 * k, (n / w) as f64 * k);
+                        img.pixels[(y as u32).min(img.height - 1) as usize * img.width as usize + (x as u32).min(img.width - 1) as usize]
+                    })
+                    .collect();
+                let ci = egui::ColorImage::from_gray([w, h], &px);
+                self.relief_thumb = Some((key, ui.ctx().load_texture("relief_thumb", ci, egui::TextureOptions::LINEAR)));
+            }
+        }
+        let thumb = self.relief_thumb.as_ref().map(|t| t.1.clone());
         let Some(m) = self.doc.stock.model.as_mut() else { return };
         ui_kit::card(ui, |ui| {
             ui.horizontal(|ui| {
-                ui_kit::title(ui, tr!("Model 3D"));
+                ui_kit::title(ui, if m.relief.is_some() { tr!("Płaskorzeźba") } else { tr!("Model 3D") });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     remove = ui.small_button(tr!("Usuń")).on_hover_text(tr!("Usuń model z projektu")).clicked();
                 });
@@ -1813,20 +1859,67 @@ impl CamApp {
             ui.add(egui::Label::new(RichText::new(&m.name).color(Color32::WHITE)).truncate());
             let s = m.size();
             ui.label(RichText::new(tr!("{:.1} × {:.1} × {:.1} mm  ·  {} trójkątów", s[0], s[1], s[2], m.mesh.tris.len())).small().color(ui_kit::LABEL));
-            egui::Grid::new("model3d").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
-                ui_kit::label(ui, tr!("Jednostki pliku"));
-                ui.horizontal(|ui| {
-                    changed |= ui.radio_value(&mut m.units, 1.0, "mm").changed();
-                    changed |= ui.radio_value(&mut m.units, 25.4, tr!("cale")).changed();
+            if let (Some(r), Some(t)) = (&m.relief, &thumb) {
+                let size = t.size_vec2();
+                let k = (ui.available_width().min(240.0) / size.x).min(140.0 / size.y);
+                ui.add(egui::Image::new(t).fit_to_exact_size(size * k));
+                // ustawienia: zmiana przeciąganiem liczona po puszczeniu myszy
+                let mut p = self.relief_edit.unwrap_or(r.params);
+                let mut commit = false;
+                let mut editing = false;
+                egui::Grid::new("relief").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                    let mut row = |ui: &mut egui::Ui, label: &str, hint: &str, v: &mut f64, range: std::ops::RangeInclusive<f64>, speed: f64| {
+                        ui_kit::label(ui, label);
+                        let resp = ui.add(egui::DragValue::new(v).range(range).speed(speed).suffix(" mm").max_decimals(3)).on_hover_text(hint);
+                        if resp.dragged() || resp.has_focus() {
+                            editing = true;
+                        }
+                        if (resp.changed() && !resp.dragged()) || resp.drag_stopped() || resp.lost_focus() {
+                            commit = true;
+                        }
+                        ui.end_row();
+                    };
+                    row(ui, tr!("Szerokość (X)"), tr!("Wysokość (Y) wynika z proporcji zdjęcia"), &mut p.width, 1.0..=5000.0, 0.5);
+                    row(ui, tr!("Głębokość"), tr!("Różnica wysokości między najciemniejszym a najjaśniejszym miejscem"), &mut p.depth, 0.0..=200.0, 0.05);
+                    row(ui, tr!("Podstawa"), tr!("Materiał pod najniższym miejscem płaskorzeźby"), &mut p.base, 0.0..=500.0, 0.1);
+                    row(ui, tr!("Wygładzanie"), tr!("Rozmycie zdjęcia — usuwa szum i drobne ziarno; większe = łagodniejsze kształty"), &mut p.smooth, 0.0..=10.0, 0.02);
+                    row(ui, tr!("Dokładność siatki"), tr!("Odstęp punktów siatki: mniejszy = więcej szczegółów, ale wolniej (najwyżej 1000 punktów na dłuższym boku)"), &mut p.cell, 0.02..=5.0, 0.01);
+                    ui_kit::label(ui, tr!("Wysokość (Y)"));
+                    ui.label(format!("{:.1} mm", p.height(&r.image)));
+                    ui.end_row();
                 });
-                ui.end_row();
-                ui_kit::label(ui, tr!("Skala"));
-                let mut pct = m.scale * 100.0;
-                if ui.add(egui::DragValue::new(&mut pct).range(1.0..=10000.0).speed(0.5).suffix(" %")).changed() {
-                    m.scale = pct / 100.0;
-                    changed = true;
+                if ui.checkbox(&mut p.invert, tr!("Ciemne wyżej (odwróć)")).on_hover_text(tr!("Zwykle jasne miejsca są wyżej; zaznacz dla zdjęć, w których wypukłe jest ciemne")).changed() {
+                    commit = true;
                 }
-                ui.end_row();
+                let cell = p.effective_cell(&r.image);
+                if cell > p.cell + 1e-9 {
+                    ui.label(RichText::new(tr!("Siatka co {:.3} mm (najwyżej 1000 punktów na boku)", cell)).small().color(ui_kit::LABEL));
+                }
+                if commit && !editing {
+                    relief_apply = Some(p);
+                    self.relief_edit = None;
+                } else if p != r.params {
+                    self.relief_edit = Some(p);
+                } else {
+                    self.relief_edit = None;
+                }
+            }
+            egui::Grid::new("model3d").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                if m.relief.is_none() {
+                    ui_kit::label(ui, tr!("Jednostki pliku"));
+                    ui.horizontal(|ui| {
+                        changed |= ui.radio_value(&mut m.units, 1.0, "mm").changed();
+                        changed |= ui.radio_value(&mut m.units, 25.4, tr!("cale")).changed();
+                    });
+                    ui.end_row();
+                    ui_kit::label(ui, tr!("Skala"));
+                    let mut pct = m.scale * 100.0;
+                    if ui.add(egui::DragValue::new(&mut pct).range(1.0..=10000.0).speed(0.5).suffix(" %")).changed() {
+                        m.scale = pct / 100.0;
+                        changed = true;
+                    }
+                    ui.end_row();
+                }
                 ui_kit::label(ui, tr!("Obróć o 90°"));
                 ui.horizontal(|ui| {
                     for (axis, name) in [(0, "X"), (1, "Y"), (2, "Z")] {
@@ -1881,8 +1974,18 @@ impl CamApp {
                 ui.add(egui::DragValue::new(&mut self.outline_z).range(bottom..=top).speed(0.1).prefix("Z ").suffix(" mm"));
             });
         });
-        if changed {
+        if let Some(p) = relief_apply {
+            let before = m.size()[2] + m.top_allowance;
+            m.set_relief_params(p);
+            // półfabrykat szedł za modelem — idzie dalej (np. po zmianie podstawy)
+            if (before - thickness).abs() < 1e-6 {
+                fit_stock = true;
+            }
+            changed = true;
+        } else if changed {
             m.refresh();
+        }
+        if changed {
             self.doc.recompute_bbox();
             self.doc.ops_dirty = true;
             self.doc.revision += 1;

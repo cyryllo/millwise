@@ -248,6 +248,27 @@ obrobisz od góry. Obróć model albo obrabiaj z dwóch stron.
 
 <div style="clear:both"></div>
 
+### Płaskorzeźba ze zdjęcia
+
+Zamiast pliku STL otwórz albo dodaj obraz **JPG, PNG lub BMP**, a Millwise
+zamieni go na model 3D: jasne miejsca są wyżej, ciemne niżej. Karta modelu
+pokazuje wtedy zdjęcie i jego ustawienia:
+
+- **Szerokość (X)** — wysokość (Y) wynika z proporcji zdjęcia.
+- **Głębokość** — różnica wysokości między najciemniejszym a najjaśniejszym
+  miejscem.
+- **Podstawa** — materiał zostawiony pod najniższym miejscem.
+- **Wygładzanie** — rozmywa zdjęcie, usuwa szum i ziarno; większe wartości
+  dają łagodniejsze kształty.
+- **Dokładność siatki** — mniejsza daje więcej szczegółów, ale liczy się
+  dłużej (najwyżej 1000 punktów na dłuższym boku).
+- **Ciemne wyżej** — dla obrazów, w których wypukłe miejsca są ciemne.
+
+Zmiany wchodzą po puszczeniu myszy albo po Enter. Dalej płaskorzeźbę obrabia
+się jak każdy model: zgrubna, wykańczająca frezem kulowym albo kulowym
+stożkowym, wycięcie. Najlepiej sprawdzają się zdjęcia z miękkim światłem i
+jednolitym tłem; portret zwykle potrzebuje trochę wygładzania.
+
 ### Operacje
 
 | Operacja | Co robi |

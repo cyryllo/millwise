@@ -607,6 +607,7 @@ dependencies = [
  "cam-geom",
  "cam-i18n",
  "dxf",
+ "image",
 ]
 
 [[package]]
@@ -1694,6 +1695,8 @@ dependencies = [
  "num-traits 0.2.19",
  "png",
  "tiff",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
