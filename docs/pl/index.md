@@ -156,10 +156,11 @@ chmod +x Millwise-*-x86_64.AppImage
 
 ## Stan projektu
 
-**Millwise 0.7 to wczesna wersja testowa.** Robi już obróbkę 2D i 3D, ale
+**Millwise 0.8 to wczesna wersja testowa.** Robi już obróbkę 2D i 3D, ale
 zmienia się z dnia na dzień i nie była jeszcze dość testowana na prawdziwych
-maszynach. W planach: wykańczanie łączone (strome i
-płaskie), wykańczanie spiralne, grawer na powierzchniach 3D. Zobacz
+maszynach. W planach: grawer na powierzchniach 3D, ostrzeżenie o ocieraniu
+uchwytu narzędzia o materiał, przejście ołówkowe i ponowna zgrubna, nesting
+detali 2D na płycie. Zobacz
 [listę zmian]({{ site.repo }}/blob/main/CHANGELOG.md) i
 [plany]({{ site.repo }}/blob/main/TODO.md).
 

@@ -3,7 +3,7 @@
 **English:** [README.md](README.md) · **Zmiany:** [CHANGELOG.md](CHANGELOG.md) · **Dla programistów:** [DEVELOPMENT.md](DEVELOPMENT.md)
 
 > **Wczesny etap rozwoju — jeszcze nie do użytku.** Millwise jest na bardzo
-> wczesnym etapie (wersja 0.7.1). Zmienia się codziennie, a tworzony G-code
+> wczesnym etapie (wersja 0.8.0). Zmienia się codziennie, a tworzony G-code
 > nie był testowany na prawdziwych maszynach. **Na razie nie zalecamy używania
 > go do sterowania frezarką.** Pierwszą wersję testową dla Linuksa można
 > pobrać (niżej). Uwagi i pomysły chętnie przyjmujemy w zgłoszeniach (Issues).
@@ -15,7 +15,7 @@ razie nie planujemy). Interfejs jest po polsku i po angielsku.
 
 ![Główne okno Millwise](docs/screenshot.png)
 
-## Co potrafi (0.7.1)
+## Co potrafi (0.8.0)
 
 - **Import DXF:** linie, łuki, okręgi, polilinie z łukami, splajny, elipsy i
   bloki; luźne elementy są łączone w kontury, cale przeliczane na milimetry.
@@ -97,8 +97,8 @@ Na stronie [Releases](https://github.com/cyryllo/millwise/releases) jest
 22.04 lub nowszym i innych dystrybucjach z tego okresu.
 
 ```sh
-chmod +x Millwise-0.7.1-x86_64.AppImage
-./Millwise-0.7.1-x86_64.AppImage
+chmod +x Millwise-0.8.0-x86_64.AppImage
+./Millwise-0.8.0-x86_64.AppImage
 ```
 
 Na kartach NVIDIA i wtedy, gdy domyślna grafika nie otwiera okna, Millwise sam

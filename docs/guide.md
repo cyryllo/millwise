@@ -10,7 +10,7 @@ description: "How to use Millwise, step by step, with pictures: from opening a D
 # User guide
 
 This guide shows how to go from a drawing or a 3D model to G-code for your
-machine. It describes Millwise 0.7. The program is in early development, so
+machine. It describes Millwise 0.8. The program is in early development, so
 some details can look a little different in newer versions.
 
 <div class="notice"><strong>Safety first.</strong> Millwise writes programs that move a real machine. Always look at the toolpaths in the simulation and read the G-code before you run it, run new programs in the air or on scrap first, and never leave a running machine unattended.</div>

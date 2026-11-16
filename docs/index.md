@@ -156,10 +156,11 @@ chmod +x Millwise-*-x86_64.AppImage
 
 ## Status
 
-**Millwise 0.7 is an early test version.** It already does 2D and 3D
+**Millwise 0.8 is an early test version.** It already does 2D and 3D
 machining, but it changes every day and has not been tested enough on real
-machines. Planned next: combined steep and shallow
-finishing, spiral finishing, engraving on 3D surfaces. See the
+machines. Planned next: engraving on 3D surfaces, a warning when the tool
+holder would rub the material, pencil and rest roughing, nesting of 2D
+parts on the sheet. See the
 [changes]({{ site.repo }}/blob/main/CHANGELOG.md) and the
 [to-do list]({{ site.repo }}/blob/main/TODO.md) (in Polish).
 

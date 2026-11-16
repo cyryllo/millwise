@@ -6,7 +6,7 @@ Version numbers:
 - the **second number** goes up with every release that adds features;
 - the **third number** goes up for releases that only fix bugs.
 
-## Unreleased
+## 0.8.0 (2026-11-16)
 
 ### Added
 

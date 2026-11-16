@@ -10,7 +10,7 @@ description: "Jak pracować w Millwise krok po kroku, z obrazkami — od otwarci
 # Instrukcja obsługi
 
 Ta instrukcja pokazuje, jak przejść od rysunku albo modelu 3D do G-code dla
-twojej maszyny. Opisuje Millwise 0.7. Program jest we wczesnej fazie rozwoju,
+twojej maszyny. Opisuje Millwise 0.8. Program jest we wczesnej fazie rozwoju,
 więc w nowszych wersjach niektóre szczegóły mogą wyglądać trochę inaczej.
 
 <div class="notice"><strong>Najpierw bezpieczeństwo.</strong> Millwise tworzy programy, które poruszają prawdziwą maszyną. Zawsze obejrzyj ścieżki w symulacji i przeczytaj G-code przed uruchomieniem, nowe programy puszczaj najpierw w powietrzu albo na odpadzie i nigdy nie zostawiaj pracującej maszyny bez nadzoru.</div>
