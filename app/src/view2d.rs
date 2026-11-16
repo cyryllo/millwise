@@ -64,6 +64,8 @@ pub struct View2D {
     /// Ścieżki rysowane przez kartę graficzną i stan, dla którego wysłano odcinki.
     gpu: Option<crate::view2d_gpu::PathsRenderer>,
     gpu_key: Option<PathsKey>,
+    /// Kolor i szerokość [mm] pasa freza zaznaczonej operacji.
+    gpu_band: (Color32, f64),
 }
 
 /// Co wpływa na odcinki ścieżek na karcie: przeliczone ścieżki (adres i długość
@@ -106,6 +108,7 @@ impl Default for View2D {
             flash: None,
             gpu: None,
             gpu_key: None,
+            gpu_band: (Color32::TRANSPARENT, 0.0),
         }
     }
 }
@@ -561,19 +564,49 @@ impl View2D {
         tool_diameters: &[f64],
         rs: &egui_wgpu::RenderState,
     ) {
-        let r = self.gpu.get_or_insert_with(|| crate::view2d_gpu::PathsRenderer::new(&rs.device));
+        // renderer wyjęty na czas rysowania (potrzebne też `self.to_screen`)
+        let mut r = self.gpu.take().unwrap_or_else(|| crate::view2d_gpu::PathsRenderer::new(&rs.device));
+        self.draw_with(&mut r, ui, painter, rect, doc, tool_diameters, rs);
+        self.gpu = Some(r);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn draw_with(
+        &mut self,
+        r: &mut crate::view2d_gpu::PathsRenderer,
+        ui: &egui::Ui,
+        painter: &egui::Painter,
+        rect: Rect,
+        doc: &Document,
+        tool_diameters: &[f64],
+        rs: &egui_wgpu::RenderState,
+    ) {
         let key = PathsKey::new(doc, tool_diameters);
         if self.gpu_key.as_ref() != Some(&key) {
-            r.upload(&rs.device, &toolpath_segments(doc, tool_diameters));
+            let s = toolpath_segments(doc, tool_diameters);
+            r.upload(&rs.device, &s.lines, &s.band, s.band_width);
+            self.gpu_band = (s.band_color, s.band_width);
             self.gpu_key = Some(key);
         }
         if r.is_empty() {
             return;
         }
+        let uv = Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0));
+        // pas freza (węższy niż 2 punkty — niewidoczny, jak przy rysowaniu przez procesor)
+        let (band_color, band_width) = self.gpu_band;
+        if band_width * self.scale > 2.0 {
+            if let Some(b) = r.band(rs) {
+                let area = Rect::from_two_pos(
+                    self.to_screen(rect, Vec2::new(b.bounds.min.x, b.bounds.max.y)),
+                    self.to_screen(rect, Vec2::new(b.bounds.max.x, b.bounds.min.y)),
+                );
+                painter.image(b.texture, area, uv, band_color);
+            }
+        }
         let ppp = ui.ctx().pixels_per_point();
         let size = [(rect.width() * ppp).round() as u32, (rect.height() * ppp).round() as u32];
-        let tex = r.render(rs, size, self.center, self.scale, ppp);
-        painter.image(tex, rect, Rect::from_min_max(Pos2::ZERO, Pos2::new(1.0, 1.0)), Color32::WHITE);
+        let tex = r.render_lines(rs, size, self.center, self.scale, ppp);
+        painter.image(tex, rect, uv, Color32::WHITE);
     }
 
     fn draw_toolpaths(&self, painter: &egui::Painter, rect: Rect, doc: &Document, tool_diameters: &[f64]) {
@@ -725,9 +758,19 @@ impl View2D {
 
 /// Odcinki ścieżek wszystkich operacji dla karty graficznej — te same kolory i
 /// szerokości co w rysowaniu przez procesor (`draw_toolpaths`).
-fn toolpath_segments(doc: &Document, tool_diameters: &[f64]) -> Vec<crate::view2d_gpu::Segment> {
+struct PathSegments {
+    lines: Vec<crate::view2d_gpu::Segment>,
+    /// Pas freza zaznaczonej operacji (biały — kolor dochodzi przy wyświetlaniu).
+    band: Vec<crate::view2d_gpu::Segment>,
+    band_color: Color32,
+    band_width: f64,
+}
+
+fn toolpath_segments(doc: &Document, tool_diameters: &[f64]) -> PathSegments {
     use crate::view2d_gpu::{SegKind, Segment};
     let mut out = Vec::new();
+    let mut band_segs = Vec::new();
+    let (mut band_color, mut band_width) = (Color32::TRANSPARENT, 0.0);
     for (i, (op, cache)) in doc.ops.iter().zip(&doc.op_cache).enumerate() {
         let Some(cache) = cache else { continue };
         if !op.enabled || cache.display.is_empty() {
@@ -739,8 +782,11 @@ fn toolpath_segments(doc: &Document, tool_diameters: &[f64]) -> Vec<crate::view2
         // niż przy rysowaniu przez procesor, żeby wyglądały podobnie
         let color = if selected || doc.selected_op.is_none() { base } else { base.gamma_multiply(0.55) };
         let rapid_color = Color32::from_rgb(220, 60, 60).gamma_multiply(if selected { 0.9 } else { 0.5 });
-        let band = base.gamma_multiply(0.6);
-        let d = tool_diameters.get(i).copied().unwrap_or(0.0) as f32;
+        let d = tool_diameters.get(i).copied().unwrap_or(0.0);
+        if selected {
+            band_color = base.gamma_multiply(0.6);
+            band_width = d;
+        }
         let top = op.cut.top_z - 1e-6;
         for w in cache.display.windows(2) {
             let ((a, _), (b, rapid)) = (w[0], w[1]);
@@ -754,12 +800,12 @@ fn toolpath_segments(doc: &Document, tool_diameters: &[f64]) -> Vec<crate::view2
             }
             // pas o szerokości narzędzia — tylko dla zaznaczonej operacji, tylko w materiale
             if selected && d > 0.0 && b.z <= top {
-                out.push(Segment::new(pa, pb, band, d, SegKind::Band));
+                band_segs.push(Segment::new(pa, pb, Color32::WHITE, d as f32, SegKind::Band));
             }
             out.push(Segment::new(pa, pb, color, 1.3, SegKind::Line));
         }
     }
-    out
+    PathSegments { lines: out, band: band_segs, band_color, band_width }
 }
 
 fn intersects(a: &Aabb2, b: &Aabb2) -> bool {
