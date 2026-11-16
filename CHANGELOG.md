@@ -32,6 +32,15 @@ Version numbers:
 
 ### Fixed
 
+- **Arcs (G2/G3) are written so that the controller runs exactly the
+  intended arc.** Each arc is now checked the way GRBL and LinuxCNC read
+  it — from the rounded numbers in the program — and I/J are rounded to the
+  smallest radius error. When rounding would change the arc (its end
+  landing on its start, which LinuxCNC runs as a full circle and GRBL
+  rejects with error 26, or a tiny arc turning into an almost full circle),
+  it is written as short lines instead. With the default 3 decimals the
+  sample 2D project, the STL model and a relief were already correct; the
+  risk was with fewer decimals and with extremely small arcs.
 - **A 3D operation whose computation failed no longer stays „computing…”
   forever** (starting again and again in the background); it shows a
   warning and an empty toolpath instead.

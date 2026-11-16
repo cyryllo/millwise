@@ -4,7 +4,8 @@ use cam_i18n::tr;
 pub mod machine;
 pub use machine::{Controller, HomeCorner, Machine, MachineKind, MachineLibrary, SpindleKind};
 
-use cam_ops::toolpath::{arc_points, Move, Toolpath, P3};
+use cam_ops::toolpath::{arc_points, arc_sweep, Move, Toolpath, P3};
+pub mod check;
 use cam_ops::Tool;
 use serde::{Deserialize, Serialize};
 use std::fmt::Write;
@@ -205,21 +206,81 @@ impl<'s> Writer<'s> {
         let r = from.xy().distance(center);
         // bardzo małe lub ogromne łuki → odcinki (unika błędów promienia w sterowniku)
         if !self.s.arcs || r < 0.05 || r > 5000.0 {
-            for p in arc_points(from, to, center, ccw, 0.005) {
-                self.linear(p, f);
-            }
+            self.arc_as_lines(from, to, center, ccw, f);
             return;
         }
-        let code = if ccw { 3 } else { 2 };
-        self.motion = Some(code);
-        let axes = self.axes(to);
-        let i = center.x - from.x;
-        let j = center.y - from.y;
-        let fw = self.feed_word(f);
-        let l = format!("G{code}{axes} I{} J{}{fw}", self.num(i), self.num(j));
-        self.line(&l);
-        self.pos = Some(to);
+        match arc_words(from, to, center, ccw, self.s.decimals) {
+            Some((i, j)) => {
+                let code = if ccw { 3 } else { 2 };
+                self.motion = Some(code);
+                let axes = self.axes(to);
+                let fw = self.feed_word(f);
+                let l = format!("G{code}{axes} I{} J{}{fw}", self.num(i), self.num(j));
+                self.line(&l);
+                self.pos = Some(to);
+            }
+            // po zaokrągleniu sterownik zobaczyłby inny łuk — odcinki
+            None => self.arc_as_lines(from, to, center, ccw, f),
+        }
     }
+
+    fn arc_as_lines(&mut self, from: P3, to: P3, center: cam_geom::Vec2, ccw: bool, f: f64) {
+        for p in arc_points(from, to, center, ccw, 0.005) {
+            self.linear(p, f);
+        }
+    }
+}
+
+/// Wartość tak, jak odczyta ją sterownik (po zaokrągleniu w programie).
+fn rounded(v: f64, decimals: usize) -> f64 {
+    fmt_num(v, decimals).parse().unwrap_or(v)
+}
+
+/// I, J łuku, który sterownik wykona tak, jak zamierzono — albo None, gdy po
+/// zaokrągleniu współrzędnych byłby to inny łuk.
+///
+/// Sterownik liczy łuk od zaokrąglonego początku do zaokrąglonego końca wokół
+/// środka „początek + I, J”. Pilnowane jest, żeby:
+/// - koniec nie wypadł w punkcie startu (LinuxCNC zrobiłby pełny okrąg, GRBL zgłasza błąd),
+/// - promień do końca prawie nie różnił się od promienia do początku (LinuxCNC odrzuca
+///   łuk przy różnicy 0,001–0,028 mm zależnie od ustawień, GRBL przy 0,005 mm i 0,1 %),
+/// - kąt łuku był ten sam (przy bardzo małym kącie zaokrąglenie potrafi przestawić
+///   koniec „za” początek — wtedy wychodzi prawie pełny okrąg).
+pub fn arc_words(from: P3, to: P3, center: cam_geom::Vec2, ccw: bool, decimals: usize) -> Option<(f64, f64)> {
+    use cam_geom::Vec2;
+    let unit = 10f64.powi(-(decimals as i32));
+    let s = Vec2::new(rounded(from.x, decimals), rounded(from.y, decimals));
+    let e = Vec2::new(rounded(to.x, decimals), rounded(to.y, decimals));
+    if s.distance(e) < unit * 0.5 {
+        return None;
+    }
+    // z czterech zaokrągleń I, J (w dół / w górę) — najmniejsza różnica promieni
+    let (i0, j0) = (center.x - s.x, center.y - s.y);
+    let (il, jl) = ((i0 / unit).floor(), (j0 / unit).floor());
+    let mut best: Option<(f64, f64, f64)> = None;
+    for di in [0.0, 1.0] {
+        for dj in [0.0, 1.0] {
+            let (i, j) = (rounded((il + di) * unit, decimals), rounded((jl + dj) * unit, decimals));
+            let c = Vec2::new(s.x + i, s.y + j);
+            let dr = ((i * i + j * j).sqrt() - c.distance(e)).abs();
+            if best.is_none_or(|b| dr < b.2) {
+                best = Some((i, j, dr));
+            }
+        }
+    }
+    let (i, j, dr) = best?;
+    let r = (i * i + j * j).sqrt();
+    // z zapasem mieści się w tolerancji GRBL i najostrzejszej LinuxCNC
+    if !(dr <= 0.001 || (dr <= 0.0025 && dr <= 0.0005 * r)) {
+        return None;
+    }
+    let c = Vec2::new(s.x + i, s.y + j);
+    let seen = arc_sweep(P3::from_xy(s, 0.0), P3::from_xy(e, 0.0), c, ccw);
+    let intended = arc_sweep(from, to, center, ccw);
+    if (seen - intended).abs() * r > 3.0 * unit + 1e-9 {
+        return None;
+    }
+    Some((i, j))
 }
 
 /// Generuje kompletny program G-code.

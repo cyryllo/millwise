@@ -316,6 +316,24 @@ mod tests {
     use super::*;
     use cam_ops::{CutParams, DrillParams, OpKind, PocketParams, ProfileParams, Tabs};
 
+    /// Każdy łuk w G-code projektu sterownik wykona tak, jak zamierzono — dla
+    /// GRBL, FluidNC i LinuxCNC (najostrzejsza tolerancja z INI), a droga z
+    /// programu ma tę samą długość co ścieżki (żaden łuk nie stał się pełnym okręgiem).
+    fn assert_arcs_ok(doc: &Document, lib: &ToolLibrary) {
+        for controller in cam_post::Controller::ALL {
+            let machine = cam_post::Machine { controller, ..Default::default() };
+            for (name, g) in doc.gcode(lib, &machine).unwrap() {
+                let issues = cam_post::check::check_arcs(&g, cam_post::check::LINUXCNC_STRICTEST_TOL);
+                assert!(issues.is_empty(), "{controller:?} {name}: {:?}", &issues[..issues.len().min(5)]);
+                let len = |pts: &[(cam_ops::P3, bool)]| -> f64 { pts.windows(2).filter(|w| !w[1].1).map(|w| w[0].0.distance(w[1].0)).sum() };
+                let expected: f64 = doc.op_cache.iter().flatten().map(|c| len(&c.result.toolpath.polyline(0.002))).sum();
+                let got = len(&cam_post::check::trace(&g));
+                // program ma też dojazdy między operacjami — dopuszczalnie trochę dłuższy
+                assert!(got >= expected * 0.999 && got <= expected * 1.05 + 50.0, "{controller:?} {name}: droga {got:.1} zamiast {expected:.1}");
+            }
+        }
+    }
+
     /// Buduje projekt demonstracyjny z samples/test.dxf, zapisuje, wczytuje
     /// ponownie i porównuje. Zapisuje też samples/demo.millwise.
     #[test]
@@ -346,6 +364,7 @@ mod tests {
         doc.regenerate(&lib, None);
         let machine = cam_post::Machine::default();
         let g1 = doc.gcode(&lib, &machine).unwrap();
+        assert_arcs_ok(&doc, &lib);
 
         let out = root.join("samples/demo.millwise");
         save_project(&doc, &lib, &out).unwrap();
@@ -392,6 +411,7 @@ mod tests {
         let machine = cam_post::Machine::default();
         let g1 = doc.gcode(&lib, &machine).unwrap();
         assert!(g1[0].1.lines().count() > 1000);
+        assert_arcs_ok(&doc, &lib);
         // ponowne przeliczenie bez zmian: wynik z pamięci (ten sam G-code)
         doc.regenerate(&lib, None);
         assert_eq!(doc.gcode(&lib, &machine).unwrap(), g1);
