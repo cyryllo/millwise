@@ -21,8 +21,9 @@ weszło do programu, jest w [CHANGELOG.md](CHANGELOG.md) i w historii gita.
 Jest: model STL w półfabrykacie (zakładka „Model 3D”), krzywe z modelu,
 zgrubna warstwami Z, wykańczająca równoległa, warstwicowa i łączona (z
 zakresem nachylenia), resztki, wycięcie
-po sylwetce, frezy kulowe stożkowe, płaskorzeźba ze zdjęcia, symulacja na GPU
-i „Ścieżki”. Szczegóły w
+po sylwetce, frezy kulowe stożkowe, płaskorzeźba ze zdjęcia, kształt 3D z
+krzywych 2D, symulacja na GPU i „Ścieżki”. W projekcie jest zawsze jeden model
+3D (decyzja: tak najprościej); kilka elementów — tylko w 2D. Szczegóły w
 [ROADMAP.md](ROADMAP.md).
 
 Dalej w paczkach, w kolejności od największego pożytku przy frezowaniu w

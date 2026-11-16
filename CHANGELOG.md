@@ -20,6 +20,14 @@ Version numbers:
   finishing, cut-out, simulation. The project keeps the photo itself (in
   grey, at most 1600 px on the longer side) and its settings, not the
   mesh, so it stays small and the relief can be changed later.
+- **3D shape from 2D curves** (3D › Shape): select closed curves — lettering,
+  a logo, any outline — and they become a raised 3D model standing exactly
+  on them, with holes in letters kept as holes. Edge profile: flat, rounded
+  (radius), bevel (angle, like reversed V-carving) or dome (a pillow, highest
+  in the middle of each shape); height, base, margin, mesh spacing, and
+  „Recessed” for a shape sunk into a flat top (a bowl, recessed lettering).
+  From there it is machined like any model. The project keeps the outlines
+  and settings, not the mesh. A project still has one 3D model.
 - **Combined 3D finishing**: waterlines where the surface is steeper than
   the split angle (45° by default) and parallel passes where it is gentler,
   in one operation, with a small overlap so no strip is left between them.

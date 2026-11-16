@@ -38,6 +38,7 @@ pub enum Icon {
     Rough3D,
     Finish3D,
     Cutout3D,
+    Shape3D,
     // ikony kroków historii zmian
     Open,
     Delete,
@@ -326,6 +327,25 @@ pub fn draw(painter: &egui::Painter, r: Rect, icon: Icon) {
                 line(&seg, st(2.0, GREEN));
             }
             tool_dot(34.0, 11.0, 2.6);
+        }
+        Icon::Shape3D => {
+            // przekrój: litera z zarysu (u góry) podniesiona nad płytę z zaokrąglonymi krawędziami
+            painter.rect_filled(rect(3.0, 31.0, 34.0, 6.0), k, PLATE);
+            let mut prof: Vec<(f32, f32)> = vec![(8.0, 31.0)];
+            for i in 0..=6 {
+                let a = std::f32::consts::FRAC_PI_2 * i as f32 / 6.0;
+                prof.push((8.0 + 6.0 * (1.0 - a.cos()), 31.0 - 9.0 * a.sin()));
+            }
+            for i in 0..=6 {
+                let a = std::f32::consts::FRAC_PI_2 * i as f32 / 6.0;
+                prof.push((32.0 - 6.0 * (1.0 - a.sin()), 22.0 + 9.0 * (1.0 - a.cos())));
+            }
+            prof.push((32.0, 31.0));
+            poly(&prof, BLUE, st(1.0, OUTLINE));
+            // zarys krzywej nad kształtem
+            let a = [(9.0, 15.0), (16.0, 3.0), (24.0, 3.0), (31.0, 15.0)];
+            line(&a, st(1.8, AMBER));
+            line(&[(13.5, 10.0), (26.5, 10.0)], st(1.4, AMBER));
         }
         Icon::Text => {
             // litera „A” z zarysu i linia bazowa

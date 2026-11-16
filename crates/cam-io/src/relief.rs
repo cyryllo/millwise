@@ -212,7 +212,7 @@ pub fn auto_levels(img: &GrayImage, p: &ReliefParams) -> (f64, f64) {
 }
 
 /// 0,1 / 0,2 / 0,25 / 0,5 · 10^n — czytelne wartości.
-fn round_nice(v: f64) -> f64 {
+pub(crate) fn round_nice(v: f64) -> f64 {
     let base = 10f64.powf(v.max(1e-3).log10().floor());
     for m in [1.0, 2.0, 2.5, 5.0, 10.0] {
         if base * m >= v * 0.999 {
@@ -375,6 +375,12 @@ fn blur(v: &mut [f32], nx: usize, ny: usize, sigma: f64) {
 /// Zamknięta bryła płaskorzeźby [mm]: lewy dolny róg spodu w (0, 0, 0).
 pub fn relief_mesh(img: &GrayImage, p: &ReliefParams) -> Mesh {
     let (nx, ny, dx, dy, z) = relief_grid(img, p);
+    heightfield_mesh(nx, ny, dx, dy, &z)
+}
+
+/// Zamknięta bryła z siatki wysokości (wiersze od dołu, Z od 0 = spód): góra z
+/// siatki, pionowe boki i płaski spód; lewy dolny róg spodu w (0, 0, 0).
+pub fn heightfield_mesh(nx: usize, ny: usize, dx: f64, dy: f64, z: &[f32]) -> Mesh {
     let (w, h) = ((nx - 1) as f64 * dx, (ny - 1) as f64 * dy);
     let pt = |i: usize, j: usize| [(i as f64 * dx) as f32, (j as f64 * dy) as f32, z[j * nx + i]];
     let bot = |i: usize, j: usize| [(i as f64 * dx) as f32, (j as f64 * dy) as f32, 0.0];

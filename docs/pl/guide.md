@@ -283,6 +283,17 @@ się jak każdy model: zgrubna, wykańczająca frezem kulowym albo kulowym
 stożkowym, wycięcie. Najlepiej sprawdzają się zdjęcia z miękkim światłem i
 jednolitym tłem; portret zwykle potrzebuje trochę wygładzania.
 
+### Kształt z krzywych
+
+Zaznacz zamknięte krzywe w projekcie 2D — napis zrobiony narzędziem
+**Tekst**, logo z DXF, dowolny obrys — i kliknij **3D › Kształt**. Powstanie
+z nich model 3D stojący dokładnie na krzywych; otwory w literach zostają
+otworami. W karcie modelu wybierz **profil** krawędzi: płaski, zaokrąglony
+(promień), skos (kąt) albo kopułę (najwyżej w środku każdego kształtu), oraz
+wysokość, podstawę, margines i dokładność siatki. **Wklęsły** zamiast tego
+wgłębia kształt w płaskiej górze (misa, wgłębiony napis). Model ma kopię
+krzywych: po ich zmianie utwórz kształt od nowa.
+
 ### Operacje
 
 | Operacja | Co robi |

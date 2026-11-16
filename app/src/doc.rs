@@ -344,11 +344,20 @@ impl Document {
 
     /// Wstawia model 3D (zastępuje poprzedni): obok rysunku albo w zerze,
     /// grubość półfabrykatu według wysokości modelu.
-    pub fn set_model(&mut self, mut m: crate::model3d::Model3D) {
+    pub fn set_model(&mut self, m: crate::model3d::Model3D) {
+        self.put_model(m, true);
+    }
+
+    /// Wstawia model 3D w jego własnym położeniu (kształt z krzywych stoi na krzywych).
+    pub fn set_model_in_place(&mut self, m: crate::model3d::Model3D) {
+        self.put_model(m, false);
+    }
+
+    fn put_model(&mut self, mut m: crate::model3d::Model3D, beside: bool) {
         let name = m.name.clone();
         self.stock.model = None;
         self.recompute_bbox();
-        if let Some(b) = self.bbox {
+        if let (true, Some(b)) = (beside, self.bbox) {
             m.pos = [b.max.x + 10.0, b.min.y];
         }
         m.refresh();

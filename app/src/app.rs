@@ -139,6 +139,8 @@ pub struct CamApp {
     shortcuts_open: bool,
     /// Płaskorzeźba: ustawienia w trakcie przeciągania (siatka liczy się po puszczeniu).
     relief_edit: Option<cam_io::ReliefParams>,
+    /// Kształt z krzywych: jak wyżej.
+    shape_edit: Option<cam_io::ShapeParams>,
     /// Podgląd płaskorzeźby (adres obrazu, ustawienia, tekstura).
     relief_thumb: Option<(usize, cam_io::ReliefParams, egui::TextureHandle)>,
     /// Wysokość obrysu modelu 3D („Obrys powyżej Z”).
@@ -204,6 +206,7 @@ impl CamApp {
             shortcuts_open: false,
             outline_z: -1.0,
             relief_edit: None,
+            shape_edit: None,
             relief_thumb: None,
             graphics: cc
                 .wgpu_render_state
@@ -281,6 +284,13 @@ impl CamApp {
                                 p.strategy = cam_ops::Finish3DStrategy::Waterline;
                             }
                         }
+                    }
+                    "shape" => {
+                        for i in 0..app.doc.contours.len() {
+                            let v = app.doc.contours[i].contour.closed;
+                            app.doc.set_selected(i, v);
+                        }
+                        app.create_shape(&cc.egui_ctx);
                     }
                     "combined" => {
                         app.toolbar.set(Sub::Finish3D);
@@ -655,6 +665,10 @@ impl CamApp {
                         }
                         true
                     }
+                    Sub::Shape3D => {
+                        self.create_shape(ctx);
+                        true
+                    }
                     _ => true,
                 };
                 if !ok {
@@ -662,6 +676,34 @@ impl CamApp {
                 }
             }
         }
+    }
+
+    /// Wypukły kształt 3D z zaznaczonych zamkniętych krzywych — nowy model projektu
+    /// (zastępuje poprzedni), stojący dokładnie na krzywych.
+    fn create_shape(&mut self, ctx: &egui::Context) {
+        let now = Self::now(ctx);
+        let polys: Vec<Vec<[f64; 2]>> = self
+            .doc
+            .selected_indices()
+            .into_iter()
+            .map(|i| &self.doc.contours[i].contour)
+            .filter(|c| c.closed && c.verts.len() >= 2)
+            .map(|c| c.flatten(0.01).into_iter().map(|q| [q.x, q.y]).collect::<Vec<_>>())
+            .filter(|p: &Vec<[f64; 2]>| p.len() >= 3)
+            .collect();
+        if polys.is_empty() {
+            self.mode = ViewMode::Project;
+            self.view2d.flash(tr!("Zaznacz zamknięte krzywe (np. napis albo logo), z których ma powstać kształt 3D"), now);
+            return;
+        }
+        let n = polys.len();
+        let params = cam_io::ShapeParams::for_shapes(&polys);
+        let Some(model) = crate::model3d::Model3D::from_shape(tr!("Kształt z krzywych ({})", n), polys, params) else { return };
+        self.doc.set_model_in_place(model);
+        self.shape_edit = None;
+        self.view_model.fit_requested = true;
+        self.view3d.fit_requested = true;
+        self.mode = ViewMode::Model;
     }
 
     /// Wstawia napis: lewy koniec linii bazowej pierwszego wiersza w punkcie `p`.
@@ -1839,6 +1881,7 @@ impl CamApp {
         let mut outline: Option<Option<f64>> = None;
         let thickness = self.doc.stock.thickness;
         let mut relief_apply: Option<cam_io::ReliefParams> = None;
+        let mut shape_apply: Option<cam_io::ShapeParams> = None;
         // podgląd mapy wysokości po filtrach (przeliczany po każdej zmianie ustawień, też w trakcie przeciągania)
         if let Some(r) = self.doc.stock.model.as_ref().and_then(|m| m.relief.as_ref()) {
             let p = self.relief_edit.unwrap_or(r.params);
@@ -1853,7 +1896,16 @@ impl CamApp {
         let Some(m) = self.doc.stock.model.as_mut() else { return };
         ui_kit::card(ui, |ui| {
             ui.horizontal(|ui| {
-                ui_kit::title(ui, if m.relief.is_some() { tr!("Płaskorzeźba") } else { tr!("Model 3D") });
+                ui_kit::title(
+                    ui,
+                    if m.relief.is_some() {
+                        tr!("Płaskorzeźba")
+                    } else if m.shape.is_some() {
+                        tr!("Kształt z krzywych")
+                    } else {
+                        tr!("Model 3D")
+                    },
+                );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     remove = ui.small_button(tr!("Usuń")).on_hover_text(tr!("Usuń model z projektu")).clicked();
                 });
@@ -1967,8 +2019,60 @@ impl CamApp {
                     self.relief_edit = None;
                 }
             }
+            if let Some(sh) = &m.shape {
+                let mut p = self.shape_edit.unwrap_or(sh.params);
+                let commit = std::cell::Cell::new(false);
+                let editing = std::cell::Cell::new(false);
+                let row = |ui: &mut egui::Ui, label: &str, hint: &str, v: &mut f64, range: std::ops::RangeInclusive<f64>, speed: f64, suffix: &str| {
+                    ui_kit::label(ui, label);
+                    let resp = ui.add(egui::DragValue::new(v).range(range).speed(speed).suffix(suffix).max_decimals(3)).on_hover_text(hint);
+                    if resp.dragged() || resp.has_focus() {
+                        editing.set(true);
+                    }
+                    if (resp.changed() && !resp.dragged()) || resp.drag_stopped() || resp.lost_focus() {
+                        commit.set(true);
+                    }
+                    ui.end_row();
+                };
+                use cam_io::ShapeProfile as P;
+                ui.horizontal_wrapped(|ui| {
+                    for (pr, name, hint) in [
+                        (P::Flat, tr!("Płaski"), tr!("Pionowe ścianki i płaska góra")),
+                        (P::Round, tr!("Zaokrąglony"), tr!("Krawędź zaokrąglona promieniem, płaska góra")),
+                        (P::Bevel, tr!("Skos"), tr!("Krawędź ścięta pod kątem (jak odwrotny V-carving)")),
+                        (P::Dome, tr!("Kopuła"), tr!("Najwyżej w środku każdego kształtu — jak poduszka")),
+                    ] {
+                        if ui.radio_value(&mut p.profile, pr, name).on_hover_text(hint).changed() {
+                            commit.set(true);
+                        }
+                    }
+                });
+                egui::Grid::new("shape").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                    row(ui, tr!("Wysokość"), tr!("Wysokość kształtu nad podstawą"), &mut p.height, 0.0..=200.0, 0.05, " mm");
+                    match p.profile {
+                        P::Round => row(ui, tr!("Promień"), tr!("Promień zaokrąglenia krawędzi"), &mut p.radius, 0.05..=100.0, 0.02, " mm"),
+                        P::Bevel => row(ui, tr!("Kąt skosu"), tr!("Kąt od poziomu: 45° — tyle samo w górę co w bok"), &mut p.angle, 5.0..=85.0, 0.5, "°"),
+                        _ => {}
+                    }
+                    row(ui, tr!("Podstawa"), tr!("Materiał pod kształtem i tło wokół niego"), &mut p.base, 0.0..=500.0, 0.1, " mm");
+                    row(ui, tr!("Margines"), tr!("Tło wokół kształtu z każdej strony"), &mut p.margin, 0.0..=200.0, 0.1, " mm");
+                    row(ui, tr!("Dokładność siatki"), tr!("Odstęp punktów siatki: mniejszy = gładsze krawędzie, ale wolniej (najwyżej 1000 punktów na dłuższym boku)"), &mut p.cell, 0.02..=5.0, 0.01, " mm");
+                });
+                if ui.checkbox(&mut p.inverted, tr!("Wklęsły")).on_hover_text(tr!("Kształt wgłębiony w płaskiej górze — np. misa albo wgłębiony napis")).changed() {
+                    commit.set(true);
+                }
+                ui.label(RichText::new(tr!("Kopia zaznaczonych krzywych — po ich zmianie utwórz kształt od nowa.")).small().color(ui_kit::LABEL));
+                if commit.get() && !editing.get() {
+                    shape_apply = Some(p);
+                    self.shape_edit = None;
+                } else if p != sh.params {
+                    self.shape_edit = Some(p);
+                } else {
+                    self.shape_edit = None;
+                }
+            }
             egui::Grid::new("model3d").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
-                if m.relief.is_none() {
+                if m.relief.is_none() && m.shape.is_none() {
                     ui_kit::label(ui, tr!("Jednostki pliku"));
                     ui.horizontal(|ui| {
                         changed |= ui.radio_value(&mut m.units, 1.0, "mm").changed();
@@ -1983,16 +2087,19 @@ impl CamApp {
                     }
                     ui.end_row();
                 }
-                ui_kit::label(ui, tr!("Obróć o 90°"));
-                ui.horizontal(|ui| {
-                    for (axis, name) in [(0, "X"), (1, "Y"), (2, "Z")] {
-                        if ui.button(name).on_hover_text(tr!("Obrót o 90° wokół osi {}", name)).clicked() {
-                            m.rotate(axis);
-                            changed = true;
+                // kształt stoi na krzywych — obracanie rozjechałoby go z nimi
+                if m.shape.is_none() {
+                    ui_kit::label(ui, tr!("Obróć o 90°"));
+                    ui.horizontal(|ui| {
+                        for (axis, name) in [(0, "X"), (1, "Y"), (2, "Z")] {
+                            if ui.button(name).on_hover_text(tr!("Obrót o 90° wokół osi {}", name)).clicked() {
+                                m.rotate(axis);
+                                changed = true;
+                            }
                         }
-                    }
-                });
-                ui.end_row();
+                    });
+                    ui.end_row();
+                }
                 changed |= ui_kit::num(ui, tr!("Naddatek nad modelem"), &mut m.top_allowance, 0.0..=500.0, 0.1, " mm");
             });
             if (m.stock_thickness() - thickness).abs() > 1e-6 {
@@ -2037,7 +2144,14 @@ impl CamApp {
                 ui.add(egui::DragValue::new(&mut self.outline_z).range(bottom..=top).speed(0.1).prefix("Z ").suffix(" mm"));
             });
         });
-        if let Some(p) = relief_apply {
+        if let Some(p) = shape_apply {
+            let before = m.size()[2] + m.top_allowance;
+            m.set_shape_params(p);
+            if (before - thickness).abs() < 1e-6 {
+                fit_stock = true;
+            }
+            changed = true;
+        } else if let Some(p) = relief_apply {
             let before = m.size()[2] + m.top_allowance;
             m.set_relief_params(p);
             // półfabrykat szedł za modelem — idzie dalej (np. po zmianie podstawy)

@@ -47,6 +47,9 @@ not planned for now). The user interface is in Polish and English.
   - **Cut-out** along the model silhouette with tabs; silhouette and outline
     at any height also as curves for 2D operations.
   - Undercut warning; 3D toolpaths are computed in the background.
+- **3D shape from curves:** selected closed curves (lettering, a logo)
+  become a raised model — flat, rounded, bevelled or domed edges, or
+  recessed.
 - **Relief from a photo:** open a JPG, PNG or BMP image and it becomes a 3D
   model — bright places higher, dark lower (or inverted), with width, depth,
   base, smoothing and mesh spacing. Machined like an STL model.

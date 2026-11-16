@@ -43,6 +43,9 @@ razie nie planujemy). Interfejs jest po polsku i po angielsku.
   - **Wycięcie** po sylwetce modelu z mostkami; sylwetka i obrys na dowolnej
     wysokości także jako krzywe do operacji 2D.
   - Ostrzeżenie o podcięciach; ścieżki 3D liczą się w tle.
+- **Kształt 3D z krzywych:** zaznaczone zamknięte krzywe (napis, logo)
+  stają się wypukłym modelem — z krawędzią płaską, zaokrągloną, skośną albo
+  kopułą, albo wklęsłym.
 - **Płaskorzeźba ze zdjęcia:** otwórz obraz JPG, PNG albo BMP, a powstanie
   z niego model 3D — jasne miejsca wyżej, ciemne niżej (albo odwrotnie), z
   szerokością, głębokością, podstawą, wygładzaniem i dokładnością siatki.

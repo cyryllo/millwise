@@ -2,7 +2,7 @@
 //! jednostki, skala, obrót o wielokrotności 90°, położenie, naddatek nad modelem.
 //! Płaskorzeźba ze zdjęcia to taki sam model, którego siatka powstaje z obrazu.
 
-use cam_io::{GrayImage, Mesh, ReliefParams};
+use cam_io::{GrayImage, Mesh, ReliefParams, ShapeParams, ShapeProfile};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use cam_ops::model::ModelHeights;
 use std::sync::{Arc, OnceLock};
@@ -18,9 +18,19 @@ pub struct Relief {
     pub params: ReliefParams,
 }
 
+/// Źródło kształtu z krzywych: zarysy (w układzie rysunku, przesuwane razem z
+/// modelem) i ustawienia, z których powstaje siatka.
+#[derive(Clone, Debug)]
+pub struct ShapeSource {
+    pub polys: Arc<Vec<Vec<[f64; 2]>>>,
+    pub params: ShapeParams,
+}
+
 #[derive(Clone, Debug)]
 pub struct Model3D {
     pub name: String,
+    /// Wypukły kształt z krzywych 2D (siatka liczona z zarysów); None — inne źródło.
+    pub shape: Option<ShapeSource>,
     /// Płaskorzeźba ze zdjęcia (siatka liczona z obrazu); None — model z pliku STL.
     pub relief: Option<Relief>,
     /// Siatka jak w pliku (współdzielona — kopie w historii jej nie kopiują).
@@ -55,6 +65,8 @@ impl PartialEq for Model3D {
             && self.pos == o.pos
             && self.relief.as_ref().map(|r| (Arc::as_ptr(&r.image), r.params))
                 == o.relief.as_ref().map(|r| (Arc::as_ptr(&r.image), r.params))
+            && self.shape.as_ref().map(|r| (Arc::as_ptr(&r.polys), r.params))
+                == o.shape.as_ref().map(|r| (Arc::as_ptr(&r.polys), r.params))
     }
 }
 
@@ -82,6 +94,7 @@ impl Model3D {
         let mut m = Model3D {
             name,
             relief: None,
+            shape: None,
             mesh: Arc::new(mesh),
             units,
             scale: 1.0,
@@ -103,6 +116,30 @@ impl Model3D {
         let mut m = Model3D::new(name, mesh, 1.0);
         m.relief = Some(Relief { image: Arc::new(image), params });
         m
+    }
+
+    /// Wypukły kształt z zamkniętych krzywych (zarysy w układzie rysunku) — stoi
+    /// dokładnie na krzywych. None, gdy nie ma z czego go zrobić.
+    pub fn from_shape(name: String, polys: Vec<Vec<[f64; 2]>>, params: ShapeParams) -> Option<Self> {
+        let (mesh, origin) = cam_io::shape_mesh(&polys, &params)?;
+        let mut m = Model3D::new(name, mesh, 1.0);
+        m.shape = Some(ShapeSource { polys: Arc::new(polys), params });
+        m.pos = origin;
+        m.refresh();
+        Some(m)
+    }
+
+    /// Nowe ustawienia kształtu: siatka liczona od nowa (położenie z zarysów).
+    pub fn set_shape_params(&mut self, params: ShapeParams) {
+        let Some(sh) = &mut self.shape else { return };
+        if sh.params == params {
+            return;
+        }
+        let Some((mesh, origin)) = cam_io::shape_mesh(&sh.polys, &params) else { return };
+        sh.params = params;
+        self.mesh = Arc::new(mesh);
+        self.pos = origin;
+        self.refresh();
     }
 
     /// Nowe ustawienia płaskorzeźby: siatka liczona od nowa.
@@ -184,6 +221,10 @@ impl Model3D {
     /// Przesuwa model (np. przy ustawianiu zera programu).
     pub fn translate(&mut self, d: cam_geom::Vec2) {
         self.pos = [self.pos[0] + d.x, self.pos[1] + d.y];
+        // zarysy kształtu idą razem z modelem (przeliczenie ustawia go z nich)
+        if let Some(sh) = &mut self.shape {
+            sh.polys = Arc::new(sh.polys.iter().map(|p| p.iter().map(|q| [q[0] + d.x, q[1] + d.y]).collect()).collect());
+        }
         self.refresh();
     }
 
@@ -232,6 +273,8 @@ struct ModelFile {
     stl_base64: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     relief: Option<ReliefFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    shape: Option<ShapeFile>,
     units: f64,
     scale: f64,
     rot: Rot,
@@ -278,6 +321,20 @@ struct ReliefFile {
     frame_height: f64,
 }
 
+/// Kształt z krzywych w projekcie: zarysy i ustawienia.
+#[derive(Serialize, Deserialize)]
+struct ShapeFile {
+    polys: Vec<Vec<[f64; 2]>>,
+    profile: String,
+    height: f64,
+    radius: f64,
+    angle: f64,
+    base: f64,
+    margin: f64,
+    cell: f64,
+    inverted: bool,
+}
+
 fn one() -> f64 {
     1.0
 }
@@ -311,10 +368,22 @@ impl Serialize for Model3D {
             frame_width: r.params.frame_width,
             frame_height: r.params.frame_height,
         });
+        let shape = self.shape.as_ref().map(|sh| ShapeFile {
+            polys: sh.polys.as_ref().clone(),
+            profile: sh.params.profile.key().into(),
+            height: sh.params.height,
+            radius: sh.params.radius,
+            angle: sh.params.angle,
+            base: sh.params.base,
+            margin: sh.params.margin,
+            cell: sh.params.cell,
+            inverted: sh.params.inverted,
+        });
         ModelFile {
             name: self.name.clone(),
-            stl_base64: if relief.is_some() { String::new() } else { b64_encode(&self.mesh.to_binary()) },
+            stl_base64: if relief.is_some() || shape.is_some() { String::new() } else { b64_encode(&self.mesh.to_binary()) },
             relief,
+            shape,
             units: self.units,
             scale: self.scale,
             rot: self.rot,
@@ -328,8 +397,21 @@ impl Serialize for Model3D {
 impl<'de> Deserialize<'de> for Model3D {
     fn deserialize<D: Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
         let f = ModelFile::deserialize(d)?;
-        let mut m = match f.relief {
-            Some(r) => {
+        let mut m = match (f.relief, f.shape) {
+            (_, Some(sh)) => {
+                let params = ShapeParams {
+                    profile: ShapeProfile::from_key(&sh.profile),
+                    height: sh.height,
+                    radius: sh.radius,
+                    angle: sh.angle,
+                    base: sh.base,
+                    margin: sh.margin,
+                    cell: sh.cell,
+                    inverted: sh.inverted,
+                };
+                Model3D::from_shape(f.name, sh.polys, params).ok_or_else(|| serde::de::Error::custom("shape"))?
+            }
+            (Some(r), None) => {
                 let pixels = b64_decode(&r.gray_base64).ok_or_else(|| serde::de::Error::custom("base64"))?;
                 if r.image_width < 2 || r.image_height < 2 || pixels.len() != (r.image_width * r.image_height) as usize {
                     return Err(serde::de::Error::custom("relief image"));
@@ -357,7 +439,7 @@ impl<'de> Deserialize<'de> for Model3D {
                 };
                 Model3D::from_relief(f.name, image, params)
             }
-            None => {
+            (None, None) => {
                 let bytes = b64_decode(&f.stl_base64).ok_or_else(|| serde::de::Error::custom("base64"))?;
                 let mesh = cam_io::parse_stl(&bytes).map_err(serde::de::Error::custom)?;
                 Model3D::new(f.name, mesh, f.units)
@@ -477,6 +559,25 @@ mod tests {
         let m: Model3D = serde_json::from_str(old).unwrap();
         let p = m.relief.unwrap().params;
         assert_eq!((p.white, p.gamma, p.steps, p.frame_width), (1.0, 1.0, 0, 0.0));
+    }
+
+    #[test]
+    fn shape_from_curves_stays_on_them() {
+        let sq = vec![vec![[10.0, 20.0], [30.0, 20.0], [30.0, 30.0], [10.0, 30.0]]];
+        let p = ShapeParams { profile: ShapeProfile::Round, height: 3.0, base: 2.0, margin: 4.0, cell: 0.25, ..Default::default() };
+        let mut m = Model3D::from_shape("k".into(), sq, p).unwrap();
+        assert_eq!(m.pos, [6.0, 16.0], "lewy dolny róg = krzywe minus margines");
+        assert!((m.size()[2] - 5.0).abs() < 1e-6);
+        // przesunięcie (np. nowe zero) przesuwa też zarysy — przeliczenie zostaje na miejscu
+        m.translate(cam_geom::Vec2::new(-6.0, -16.0));
+        m.set_shape_params(ShapeParams { margin: 2.0, ..p });
+        assert_eq!(m.pos, [2.0, 2.0]);
+        let json = serde_json::to_string(&m).unwrap();
+        assert!(!json.contains("stl_base64"), "kształt zapisany jako zarysy, nie siatka");
+        let back: Model3D = serde_json::from_str(&json).unwrap();
+        assert_eq!((back.pos, back.size()), (m.pos, m.size()));
+        assert_eq!(back.shape.unwrap().params, m.shape.unwrap().params);
+        assert_eq!(back.mesh.tris, m.mesh.tris);
     }
 
     #[test]

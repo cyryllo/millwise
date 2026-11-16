@@ -286,6 +286,17 @@ then machined like any model: roughing, finishing with a ball or tapered
 ball cutter, cut-out. Photos with soft light and a plain background work
 best; a portrait usually needs some smoothing.
 
+### Shape from curves
+
+Select closed curves in the 2D project — lettering made with the **Text**
+tool, a logo from a DXF, any outline — and click **3D › Shape**. They become
+a 3D model standing exactly on the curves; holes in letters stay holes. In
+the model card choose the edge **profile**: flat, rounded (radius), bevel
+(angle) or dome (highest in the middle of each shape), and the height, base,
+margin and mesh spacing. **Recessed** sinks the shape into a flat top
+instead (a bowl, recessed lettering). The model keeps a copy of the curves:
+after changing them, make the shape again.
+
 ### Operations
 
 | Operation | What it does |

@@ -42,7 +42,7 @@ impl Group {
             Group::Pocket => &[PocketOffset, PocketZigzag, PocketAdaptive],
             Group::Drill => &[DrillSimple, DrillPeck, DrillHelix],
             Group::Engrave => &[EngCenter, EngLeft, EngRight, EngVcarve, Text],
-            Group::Model3D => &[Rough3D, Finish3D, Cutout3D],
+            Group::Model3D => &[Rough3D, Finish3D, Cutout3D, Shape3D],
             Group::Zero => &[ZeroBL, ZeroCenter, ZeroTL, ZeroPick],
         }
     }
@@ -103,6 +103,8 @@ pub enum Sub {
     Finish3D,
     /// Wycięcie detalu po sylwetce modelu (profil zewnętrzny z mostkami).
     Cutout3D,
+    /// Wypukły kształt 3D z zaznaczonych zamkniętych krzywych (nowy model).
+    Shape3D,
     ZeroBL,
     ZeroCenter,
     ZeroTL,
@@ -139,6 +141,7 @@ impl Sub {
             Rough3D => tr!("Zgrubna"),
             Finish3D => tr!("Wykańczająca"),
             Cutout3D => tr!("Wycięcie"),
+            Shape3D => tr!("Kształt"),
             ZeroBL => tr!("Lewy dolny"),
             ZeroCenter => tr!("Środek"),
             ZeroTL => tr!("Lewy górny"),
@@ -175,6 +178,7 @@ impl Sub {
             Rough3D => Icon::Rough3D,
             Finish3D => Icon::Finish3D,
             Cutout3D => Icon::Cutout3D,
+            Shape3D => Icon::Shape3D,
             ZeroBL => Icon::ZeroBL,
             ZeroCenter => Icon::ZeroCenter,
             ZeroTL => Icon::ZeroTL,
@@ -189,7 +193,7 @@ impl Sub {
 
     /// Polecenia wykonywane od razu po kliknięciu (nie zmieniają trybu).
     pub fn is_instant(&self) -> bool {
-        matches!(self, Sub::FlipH | Sub::FlipV | Sub::ZeroBL | Sub::ZeroCenter | Sub::ZeroTL)
+        matches!(self, Sub::FlipH | Sub::FlipV | Sub::ZeroBL | Sub::ZeroCenter | Sub::ZeroTL | Sub::Shape3D)
     }
 
     pub fn group(&self) -> Group {
