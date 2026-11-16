@@ -266,6 +266,21 @@ model card then shows the photo and its settings:
   1000 points on the longer side).
 - **Dark is higher** — for pictures in which the raised parts are dark.
 
+Under **Image**, **Shape** and **Crop** there are filters, and the picture
+in the card shows the heights after them (brighter = higher) as you change
+them:
+
+- **Black / white point** and **Auto levels** — use the full depth; **gamma**
+  raises or lowers the dark places.
+- **Denoise** removes specks and keeps edges, **smoothing** softens,
+  **sharpen** brings out fine details.
+- **Mirror** — left and right swapped, e.g. for a stamp.
+- **Flat background** — everything below a threshold lies flat on the base.
+- **Steps** — only a few height levels, like contour lines.
+- **Oval** — only an oval in the middle, e.g. for a portrait; **frame** — a
+  flat raised border of a given width and height.
+- **Crop** — cut off the edges of the photo.
+
 Changes are applied when you release the mouse or press Enter. The relief is
 then machined like any model: roughing, finishing with a ball or tapered
 ball cutter, cut-out. Photos with soft light and a plain background work

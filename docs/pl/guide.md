@@ -264,6 +264,20 @@ pokazuje wtedy zdjęcie i jego ustawienia:
   dłużej (najwyżej 1000 punktów na dłuższym boku).
 - **Ciemne wyżej** — dla obrazów, w których wypukłe miejsca są ciemne.
 
+W sekcjach **Obraz**, **Kształt** i **Kadrowanie** są filtry, a obrazek w
+karcie pokazuje wysokości po nich (jaśniej = wyżej) od razu przy zmianie:
+
+- **Czarny / biały punkt** i **Auto poziomy** — pełna głębokość; **gamma**
+  podnosi albo obniża ciemne miejsca.
+- **Odszumianie** usuwa plamki i zostawia krawędzie, **wygładzanie**
+  łagodzi, **wyostrzanie** wydobywa drobne szczegóły.
+- **Odbicie lustrzane** — lewo i prawo zamienione, np. do stempla.
+- **Płaskie tło** — wszystko poniżej progu leży płasko na podstawie.
+- **Schodki** — tylko kilka poziomów wysokości, jak warstwice.
+- **Owal** — tylko owal pośrodku, np. do portretu; **ramka** — płaskie,
+  wyższe obramowanie o zadanej szerokości i wysokości.
+- **Kadrowanie** — obcina brzegi zdjęcia.
+
 Zmiany wchodzą po puszczeniu myszy albo po Enter. Dalej płaskorzeźbę obrabia
 się jak każdy model: zgrubna, wykańczająca frezem kulowym albo kulowym
 stożkowym, wycięcie. Najlepiej sprawdzają się zdjęcia z miękkim światłem i

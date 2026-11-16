@@ -139,8 +139,8 @@ pub struct CamApp {
     shortcuts_open: bool,
     /// Płaskorzeźba: ustawienia w trakcie przeciągania (siatka liczy się po puszczeniu).
     relief_edit: Option<cam_io::ReliefParams>,
-    /// Miniatura zdjęcia płaskorzeźby (adres obrazu, tekstura).
-    relief_thumb: Option<(usize, egui::TextureHandle)>,
+    /// Podgląd płaskorzeźby (adres obrazu, ustawienia, tekstura).
+    relief_thumb: Option<(usize, cam_io::ReliefParams, egui::TextureHandle)>,
     /// Wysokość obrysu modelu 3D („Obrys powyżej Z”).
     outline_z: f64,
     /// Grafika, przez którą działa okno (do „O programie”).
@@ -1830,24 +1830,17 @@ impl CamApp {
         let mut outline: Option<Option<f64>> = None;
         let thickness = self.doc.stock.thickness;
         let mut relief_apply: Option<cam_io::ReliefParams> = None;
-        // miniatura zdjęcia (tekstura tworzona raz dla obrazu)
+        // podgląd mapy wysokości po filtrach (przeliczany po każdej zmianie ustawień, też w trakcie przeciągania)
         if let Some(r) = self.doc.stock.model.as_ref().and_then(|m| m.relief.as_ref()) {
+            let p = self.relief_edit.unwrap_or(r.params);
             let key = std::sync::Arc::as_ptr(&r.image) as usize;
-            if self.relief_thumb.as_ref().is_none_or(|t| t.0 != key) {
-                let img = &r.image;
-                let k = (img.width.max(img.height) as f64 / 240.0).max(1.0);
-                let (w, h) = (((img.width as f64 / k) as usize).max(1), ((img.height as f64 / k) as usize).max(1));
-                let px: Vec<u8> = (0..w * h)
-                    .map(|n| {
-                        let (x, y) = ((n % w) as f64 * k, (n / w) as f64 * k);
-                        img.pixels[(y as u32).min(img.height - 1) as usize * img.width as usize + (x as u32).min(img.width - 1) as usize]
-                    })
-                    .collect();
+            if self.relief_thumb.as_ref().is_none_or(|t| t.0 != key || t.1 != p) {
+                let (w, h, px) = cam_io::relief_preview(&r.image, &p, 240);
                 let ci = egui::ColorImage::from_gray([w, h], &px);
-                self.relief_thumb = Some((key, ui.ctx().load_texture("relief_thumb", ci, egui::TextureOptions::LINEAR)));
+                self.relief_thumb = Some((key, p, ui.ctx().load_texture("relief_thumb", ci, egui::TextureOptions::LINEAR)));
             }
         }
-        let thumb = self.relief_thumb.as_ref().map(|t| t.1.clone());
+        let thumb = self.relief_thumb.as_ref().map(|t| t.2.clone());
         let Some(m) = self.doc.stock.model.as_mut() else { return };
         ui_kit::card(ui, |ui| {
             ui.horizontal(|ui| {
@@ -1861,41 +1854,102 @@ impl CamApp {
             ui.label(RichText::new(tr!("{:.1} × {:.1} × {:.1} mm  ·  {} trójkątów", s[0], s[1], s[2], m.mesh.tris.len())).small().color(ui_kit::LABEL));
             if let (Some(r), Some(t)) = (&m.relief, &thumb) {
                 let size = t.size_vec2();
-                let k = (ui.available_width().min(240.0) / size.x).min(140.0 / size.y);
-                ui.add(egui::Image::new(t).fit_to_exact_size(size * k));
-                // ustawienia: zmiana przeciąganiem liczona po puszczeniu myszy
+                let k = (ui.available_width().min(240.0) / size.x).min(150.0 / size.y);
+                ui.add(egui::Image::new(t).fit_to_exact_size(size * k))
+                    .on_hover_text(tr!("Podgląd wysokości po filtrach: jaśniej = wyżej"));
+                // ustawienia: zmiana przeciąganiem liczona po puszczeniu myszy (podgląd od razu)
                 let mut p = self.relief_edit.unwrap_or(r.params);
-                let mut commit = false;
-                let mut editing = false;
-                egui::Grid::new("relief").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
-                    let mut row = |ui: &mut egui::Ui, label: &str, hint: &str, v: &mut f64, range: std::ops::RangeInclusive<f64>, speed: f64| {
-                        ui_kit::label(ui, label);
-                        let resp = ui.add(egui::DragValue::new(v).range(range).speed(speed).suffix(" mm").max_decimals(3)).on_hover_text(hint);
-                        if resp.dragged() || resp.has_focus() {
-                            editing = true;
-                        }
-                        if (resp.changed() && !resp.dragged()) || resp.drag_stopped() || resp.lost_focus() {
-                            commit = true;
-                        }
-                        ui.end_row();
-                    };
-                    row(ui, tr!("Szerokość (X)"), tr!("Wysokość (Y) wynika z proporcji zdjęcia"), &mut p.width, 1.0..=5000.0, 0.5);
-                    row(ui, tr!("Głębokość"), tr!("Różnica wysokości między najciemniejszym a najjaśniejszym miejscem"), &mut p.depth, 0.0..=200.0, 0.05);
-                    row(ui, tr!("Podstawa"), tr!("Materiał pod najniższym miejscem płaskorzeźby"), &mut p.base, 0.0..=500.0, 0.1);
-                    row(ui, tr!("Wygładzanie"), tr!("Rozmycie zdjęcia — usuwa szum i drobne ziarno; większe = łagodniejsze kształty"), &mut p.smooth, 0.0..=10.0, 0.02);
-                    row(ui, tr!("Dokładność siatki"), tr!("Odstęp punktów siatki: mniejszy = więcej szczegółów, ale wolniej (najwyżej 1000 punktów na dłuższym boku)"), &mut p.cell, 0.02..=5.0, 0.01);
+                // Cell: zmieniane w funkcji wiersza i poza nią
+                let commit = std::cell::Cell::new(false);
+                let editing = std::cell::Cell::new(false);
+                // wiersz liczby; `k` — mnożnik wyświetlania (100 dla procentów)
+                let row = |ui: &mut egui::Ui, label: &str, hint: &str, v: &mut f64, range: std::ops::RangeInclusive<f64>, speed: f64, suffix: &str, k: f64| {
+                    ui_kit::label(ui, label);
+                    let mut shown = *v * k;
+                    let r = (*range.start() * k)..=(*range.end() * k);
+                    let resp = ui.add(egui::DragValue::new(&mut shown).range(r).speed(speed).suffix(suffix).max_decimals(3)).on_hover_text(hint);
+                    if resp.changed() {
+                        *v = shown / k;
+                    }
+                    if resp.dragged() || resp.has_focus() {
+                        editing.set(true);
+                    }
+                    if (resp.changed() && !resp.dragged()) || resp.drag_stopped() || resp.lost_focus() {
+                        commit.set(true);
+                    }
+                    ui.end_row();
+                };
+                egui::Grid::new("relief_size").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                    row(ui, tr!("Szerokość (X)"), tr!("Wysokość (Y) wynika z proporcji zdjęcia"), &mut p.width, 1.0..=5000.0, 0.5, " mm", 1.0);
                     ui_kit::label(ui, tr!("Wysokość (Y)"));
                     ui.label(format!("{:.1} mm", p.height(&r.image)));
                     ui.end_row();
+                    row(ui, tr!("Głębokość"), tr!("Różnica wysokości między najciemniejszym a najjaśniejszym miejscem"), &mut p.depth, 0.0..=200.0, 0.05, " mm", 1.0);
+                    row(ui, tr!("Podstawa"), tr!("Materiał pod najniższym miejscem płaskorzeźby"), &mut p.base, 0.0..=500.0, 0.1, " mm", 1.0);
+                    row(ui, tr!("Dokładność siatki"), tr!("Odstęp punktów siatki: mniejszy = więcej szczegółów, ale wolniej (najwyżej 1000 punktów na dłuższym boku)"), &mut p.cell, 0.02..=5.0, 0.01, " mm", 1.0);
                 });
-                if ui.checkbox(&mut p.invert, tr!("Ciemne wyżej (odwróć)")).on_hover_text(tr!("Zwykle jasne miejsca są wyżej; zaznacz dla zdjęć, w których wypukłe jest ciemne")).changed() {
-                    commit = true;
-                }
                 let cell = p.effective_cell(&r.image);
                 if cell > p.cell + 1e-9 {
                     ui.label(RichText::new(tr!("Siatka co {:.3} mm (najwyżej 1000 punktów na boku)", cell)).small().color(ui_kit::LABEL));
                 }
-                if commit && !editing {
+                egui::CollapsingHeader::new(tr!("Obraz")).id_salt("relief_image").show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        if ui.small_button(tr!("Auto poziomy")).on_hover_text(tr!("Najciemniejsze miejsca na dno, najjaśniejsze na górę — pełna głębokość bez pojedynczych skrajnych pikseli")).clicked() {
+                            let (lo, hi) = cam_io::auto_levels(&r.image, &p);
+                            (p.black, p.white) = (lo, hi);
+                            commit.set(true);
+                        }
+                        if ui.small_button(tr!("Bez filtrów")).on_hover_text(tr!("Przywraca obraz bez zmian (rozmiar i głębokość zostają)")).clicked() {
+                            let d = cam_io::ReliefParams::default();
+                            p = cam_io::ReliefParams { width: p.width, depth: p.depth, base: p.base, cell: p.cell, smooth: 0.0, ..d };
+                            commit.set(true);
+                        }
+                    });
+                    egui::Grid::new("relief_image").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                        row(ui, tr!("Czarny punkt"), tr!("Jasność, od której jest najniżej — ciemniejsze miejsca też na dnie"), &mut p.black, 0.0..=1.0, 0.3, " %", 100.0);
+                        row(ui, tr!("Biały punkt"), tr!("Jasność, od której jest najwyżej — jaśniejsze miejsca też na górze"), &mut p.white, 0.0..=1.0, 0.3, " %", 100.0);
+                        row(ui, tr!("Gamma"), tr!("Poniżej 1 podnosi ciemne miejsca, powyżej 1 je obniża"), &mut p.gamma, 0.2..=5.0, 0.01, "", 1.0);
+                        row(ui, tr!("Odszumianie"), tr!("Mediana: usuwa pojedyncze plamki i ziarno, zostawia ostre krawędzie"), &mut p.denoise, 0.0..=3.0, 0.02, " mm", 1.0);
+                        row(ui, tr!("Wygładzanie"), tr!("Rozmycie zdjęcia — usuwa szum i drobne ziarno; większe = łagodniejsze kształty"), &mut p.smooth, 0.0..=10.0, 0.02, " mm", 1.0);
+                        row(ui, tr!("Wyostrzanie"), tr!("Wyraźniejsze drobne szczegóły (np. oczy, włosy); za mocne podkreśla też szum"), &mut p.sharpen, 0.0..=1.0, 0.3, " %", 100.0);
+                    });
+                    if ui.checkbox(&mut p.invert, tr!("Ciemne wyżej (odwróć)")).on_hover_text(tr!("Zwykle jasne miejsca są wyżej; zaznacz dla zdjęć, w których wypukłe jest ciemne")).changed() {
+                        commit.set(true);
+                    }
+                    if ui.checkbox(&mut p.mirror, tr!("Odbicie lustrzane")).on_hover_text(tr!("Lewo ↔ prawo, np. do stempla")).changed() {
+                        commit.set(true);
+                    }
+                });
+                egui::CollapsingHeader::new(tr!("Kształt")).id_salt("relief_shape").show(ui, |ui| {
+                    egui::Grid::new("relief_shape").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                        row(ui, tr!("Płaskie tło"), tr!("Wszystko niżej niż ten próg trafia płasko na podstawę — tło za postacią albo napisem"), &mut p.background, 0.0..=1.0, 0.3, " %", 100.0);
+                        ui_kit::label(ui, tr!("Schodki"));
+                        let resp = ui
+                            .add(egui::DragValue::new(&mut p.steps).range(0..=30).speed(0.1).custom_formatter(|v, _| if v < 2.0 { tr!("gładko").to_string() } else { format!("{v:.0}") }))
+                            .on_hover_text(tr!("Liczba poziomów wysokości, jak warstwice na mapie (0 = gładko)"));
+                        if resp.dragged() || resp.has_focus() {
+                            editing.set(true);
+                        }
+                        if (resp.changed() && !resp.dragged()) || resp.drag_stopped() || resp.lost_focus() {
+                            commit.set(true);
+                        }
+                        ui.end_row();
+                        row(ui, tr!("Ramka — szerokość"), tr!("Płaska ramka wokół płaskorzeźby (0 = bez ramki)"), &mut p.frame_width, 0.0..=200.0, 0.1, " mm", 1.0);
+                        row(ui, tr!("Ramka — wysokość"), tr!("Wysokość ramki nad podstawą"), &mut p.frame_height, 0.0..=200.0, 0.05, " mm", 1.0);
+                    });
+                    if ui.checkbox(&mut p.oval, tr!("Owal")).on_hover_text(tr!("Tylko owal wpisany w prostokąt (wewnątrz ramki), reszta na podstawie — np. portret")).changed() {
+                        commit.set(true);
+                    }
+                });
+                egui::CollapsingHeader::new(tr!("Kadrowanie")).id_salt("relief_crop").show(ui, |ui| {
+                    egui::Grid::new("relief_crop").num_columns(2).spacing([10.0, 4.0]).show(ui, |ui| {
+                        let hint = tr!("Część zdjęcia obcięta z tej strony (najwyżej 45 %)");
+                        for (n, label) in [(0, tr!("Z lewej")), (1, tr!("Z prawej")), (2, tr!("Z góry")), (3, tr!("Z dołu"))] {
+                            row(ui, label, hint, &mut p.crop[n], 0.0..=0.45, 0.2, " %", 100.0);
+                        }
+                    });
+                });
+                if commit.get() && !editing.get() {
                     relief_apply = Some(p);
                     self.relief_edit = None;
                 } else if p != r.params {

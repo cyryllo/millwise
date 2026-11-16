@@ -251,6 +251,39 @@ struct ReliefFile {
     smooth: f64,
     invert: bool,
     cell: f64,
+    // filtry (od 0.8; brak w pliku — wartości neutralne)
+    #[serde(default)]
+    crop: [f64; 4],
+    #[serde(default)]
+    mirror: bool,
+    #[serde(default)]
+    denoise: f64,
+    #[serde(default)]
+    sharpen: f64,
+    #[serde(default)]
+    black: f64,
+    #[serde(default = "one")]
+    white: f64,
+    #[serde(default = "one")]
+    gamma: f64,
+    #[serde(default)]
+    background: f64,
+    #[serde(default)]
+    steps: u32,
+    #[serde(default)]
+    oval: bool,
+    #[serde(default)]
+    frame_width: f64,
+    #[serde(default = "five")]
+    frame_height: f64,
+}
+
+fn one() -> f64 {
+    1.0
+}
+
+fn five() -> f64 {
+    5.0
 }
 
 impl Serialize for Model3D {
@@ -265,6 +298,18 @@ impl Serialize for Model3D {
             smooth: r.params.smooth,
             invert: r.params.invert,
             cell: r.params.cell,
+            crop: r.params.crop,
+            mirror: r.params.mirror,
+            denoise: r.params.denoise,
+            sharpen: r.params.sharpen,
+            black: r.params.black,
+            white: r.params.white,
+            gamma: r.params.gamma,
+            background: r.params.background,
+            steps: r.params.steps,
+            oval: r.params.oval,
+            frame_width: r.params.frame_width,
+            frame_height: r.params.frame_height,
         });
         ModelFile {
             name: self.name.clone(),
@@ -297,6 +342,18 @@ impl<'de> Deserialize<'de> for Model3D {
                     smooth: r.smooth,
                     invert: r.invert,
                     cell: r.cell,
+                    crop: r.crop,
+                    mirror: r.mirror,
+                    denoise: r.denoise,
+                    sharpen: r.sharpen,
+                    black: r.black,
+                    white: r.white,
+                    gamma: r.gamma,
+                    background: r.background,
+                    steps: r.steps,
+                    oval: r.oval,
+                    frame_width: r.frame_width,
+                    frame_height: r.frame_height,
                 };
                 Model3D::from_relief(f.name, image, params)
             }
@@ -401,7 +458,7 @@ mod tests {
     fn relief_model_saved_as_image() {
         // 4 × 2: ciemna lewa połowa, jasna prawa
         let img = GrayImage { width: 4, height: 2, pixels: vec![0, 0, 255, 255, 0, 0, 255, 255] };
-        let p = ReliefParams { width: 40.0, depth: 5.0, base: 2.0, smooth: 0.0, invert: false, cell: 1.0 };
+        let p = ReliefParams { width: 40.0, depth: 5.0, base: 2.0, smooth: 0.0, cell: 1.0, steps: 4, frame_width: 2.0, ..Default::default() };
         let mut m = Model3D::from_relief("foto.png".into(), img, p);
         assert_eq!(m.size(), [40.0, 20.0, 7.0]);
         m.set_relief_params(ReliefParams { depth: 8.0, ..p });
@@ -415,6 +472,11 @@ mod tests {
         assert_eq!(back.relief.as_ref().unwrap().params, m.relief.as_ref().unwrap().params);
         assert_eq!(back.mesh.tris, m.mesh.tris);
         assert_eq!(back.top_allowance, 1.0);
+        // projekt z 0.7.x (bez filtrów) — filtry neutralne
+        let old = r#"{"name":"a.png","relief":{"image_width":2,"image_height":2,"gray_base64":"AP8A/w==","width":10.0,"depth":1.0,"base":1.0,"smooth":0.0,"invert":false,"cell":1.0},"units":1.0,"scale":1.0,"rot":[[1,0,0],[0,1,0],[0,0,1]],"top_allowance":0.0,"pos":[0.0,0.0]}"#;
+        let m: Model3D = serde_json::from_str(old).unwrap();
+        let p = m.relief.unwrap().params;
+        assert_eq!((p.white, p.gamma, p.steps, p.frame_width), (1.0, 1.0, 0, 0.0));
     }
 
     #[test]

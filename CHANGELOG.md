@@ -20,6 +20,15 @@ Version numbers:
   finishing, cut-out, simulation. The project keeps the photo itself (in
   grey, at most 1600 px on the longer side) and its settings, not the
   mesh, so it stays small and the relief can be changed later.
+- **Filters for the relief**, with a live preview of the heights in the
+  model card (brighter = higher) while you change them:
+  - *Image:* black and white point (with „Auto levels”), gamma, denoise
+    (median — removes specks, keeps edges), smoothing, sharpen, invert,
+    mirror (e.g. for a stamp), „No filters” to start again;
+  - *Shape:* flat background below a threshold, steps (a number of height
+    levels, like contour lines), an oval mask for portraits, a flat frame
+    of a given width and height;
+  - *Crop* on each side.
 
 ### Fixed
 

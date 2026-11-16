@@ -80,7 +80,11 @@ drewnie (jedna paczka = jedno wydanie):
       detalami (co najmniej średnica freza), obroty (o 90° albo dowolne),
       kilka sztuk tego samego detalu, otwory i wnęki wewnątrz większych
       detali. Operacje idą razem z detalami; gdy nie mieszczą się na jednej
-      płycie — kolejne płyty.
+      płycie — kolejne płyty. Na bibliotece
+      [jagua-rs](https://github.com/JeroenGar/jagua-rs) (Rust, MPL-2.0 —
+      zgodna z GPL; układanie nieregularnych kształtów, też na arkuszach o
+      stałym rozmiarze); przed startem sprawdzić licencje i użycie jako
+      biblioteki.
 - [ ] Kieszeń o stałym kącie opasania (pełne HSM / trochoidalna) — teraz jest
       uproszczona odmiana: mały krok i zaokrąglone pętle.
 
