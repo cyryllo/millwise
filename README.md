@@ -2,16 +2,21 @@
 
 **Po polsku:** [README_pl.md](README_pl.md) · **Changes:** [CHANGELOG.md](CHANGELOG.md) · **For developers:** [DEVELOPMENT.md](DEVELOPMENT.md)
 
-> **Early development — not ready for use.** Millwise is at a very early stage
-> (version 0.8.0). It changes every day and the G-code it writes has not been
-> tested on real machines. **Please do not use it to run a CNC machine yet.**
-> A first test version for Linux can be downloaded (see below). Feedback and
-> ideas are welcome in the issues.
+> **Early development — a test version.** Millwise is at an early stage
+> (version 0.8.0) and changes every day. First runs of its G-code on a real
+> router (FluidNC controller) went well, but the dimensions have not been
+> measured yet, LinuxCNC has not been tried on a machine and the 3D machining
+> has not been checked on a machine. Always check the G-code before running
+> it — you use the program at your own risk. Feedback and ideas are welcome
+> in the issues.
 
 Millwise is a free CAM program for 3-axis CNC routers and mills. It turns DXF
-drawings and STL models into toolpaths and writes G-code for **GRBL /
-FluidNC** and **LinuxCNC**. It is written in Rust and runs on Linux (a Windows version is
-not planned for now). The user interface is in Polish and English.
+drawings, STL models and photos (as reliefs) into toolpaths and writes G-code
+for **GRBL / FluidNC** and **LinuxCNC**. It is written in Rust and runs on
+Linux (a Windows version is not planned for now). The user interface is in
+Polish and English.
+
+**Website and user guide with pictures:** https://cyryllo.github.io/millwise/
 
 ![Millwise main window](docs/screenshot.png)
 
@@ -87,9 +92,10 @@ not planned for now). The user interface is in Polish and English.
 
 ## Planned
 
-Waterlines only on steep areas with parallel passes on the gentle ones, 3D
-on side B, toolpaths drawn by the graphics card in the 2D view, Linux
-packages. See [TODO.md](TODO.md) (in Polish) and the changelog.
+Engraving on 3D surfaces, a warning when the tool holder would rub the
+material, pencil and rest roughing, 3D machining on side B, nesting of 2D
+parts on the sheet, Linux packages. See [TODO.md](TODO.md) (in Polish) and
+the changelog.
 
 ## Download (Linux)
 

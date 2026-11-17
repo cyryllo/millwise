@@ -2,16 +2,21 @@
 
 **English:** [README.md](README.md) · **Zmiany:** [CHANGELOG.md](CHANGELOG.md) · **Dla programistów:** [DEVELOPMENT.md](DEVELOPMENT.md)
 
-> **Wczesny etap rozwoju — jeszcze nie do użytku.** Millwise jest na bardzo
-> wczesnym etapie (wersja 0.8.0). Zmienia się codziennie, a tworzony G-code
-> nie był testowany na prawdziwych maszynach. **Na razie nie zalecamy używania
-> go do sterowania frezarką.** Pierwszą wersję testową dla Linuksa można
-> pobrać (niżej). Uwagi i pomysły chętnie przyjmujemy w zgłoszeniach (Issues).
+> **Wczesny etap rozwoju — wersja testowa.** Millwise jest na wczesnym etapie
+> (wersja 0.8.0) i zmienia się codziennie. Pierwsze próby jego G-code na
+> prawdziwej frezarce (sterownik FluidNC) przebiegły dobrze, ale wymiary nie
+> były jeszcze mierzone, LinuxCNC nie był sprawdzany na maszynie, a obróbka 3D
+> nie była sprawdzana na maszynie. Zawsze sprawdzaj G-code przed
+> uruchomieniem — używasz programu na własną odpowiedzialność. Uwagi i
+> pomysły chętnie przyjmujemy w zgłoszeniach (Issues).
 
-Millwise to darmowy program CAM dla 3-osiowych frezarek CNC. Z rysunków DXF
-i modeli STL tworzy ścieżki narzędzia i zapisuje G-code dla **GRBL /
-FluidNC** oraz **LinuxCNC**. Jest napisany w Rust i działa na Linuksie (wersji dla Windows na
-razie nie planujemy). Interfejs jest po polsku i po angielsku.
+Millwise to darmowy program CAM dla 3-osiowych frezarek CNC. Z rysunków DXF,
+modeli STL i zdjęć (jako płaskorzeźby) tworzy ścieżki narzędzia i zapisuje
+G-code dla **GRBL / FluidNC** oraz **LinuxCNC**. Jest napisany w Rust i działa
+na Linuksie (wersji dla Windows na razie nie planujemy). Interfejs jest po
+polsku i po angielsku.
+
+**Strona i instrukcja obsługi z obrazkami:** https://cyryllo.github.io/millwise/pl/
 
 ![Główne okno Millwise](docs/screenshot.png)
 
@@ -86,9 +91,10 @@ razie nie planujemy). Interfejs jest po polsku i po angielsku.
 
 ## Plany
 
-Warstwice tylko na stromych miejscach z równoległą na łagodnych, obróbka 3D
-na stronie B, ścieżki w widoku 2D rysowane przez kartę graficzną, paczki dla
-Linuksa. Szczegóły w [TODO.md](TODO.md) i w CHANGELOG.
+Grawer na powierzchniach 3D, ostrzeżenie o ocieraniu uchwytu narzędzia o
+materiał, przejście ołówkowe i ponowna zgrubna, obróbka 3D na stronie B,
+nesting detali 2D na płycie, paczki dla Linuksa. Szczegóły w
+[TODO.md](TODO.md) i w CHANGELOG.
 
 ## Pobieranie (Linux)
 

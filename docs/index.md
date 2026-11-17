@@ -3,7 +3,7 @@ layout: default
 lang: en
 other_lang: pl/
 wide: true
-description: "Millwise is free CAM software for 3-axis CNC routers and mills. From DXF drawings and STL models to G-code for GRBL, FluidNC and LinuxCNC, with 2D and 3D machining and a simulation on the graphics card. For Linux."
+description: "Millwise is free CAM software for 3-axis CNC routers and mills. From DXF drawings, STL models and photos to G-code for GRBL, FluidNC and LinuxCNC, with 2D and 3D machining and a simulation on the graphics card. For Linux."
 ---
 {% assign img = '/img/en/' | relative_url %}
 
@@ -11,7 +11,7 @@ description: "Millwise is free CAM software for 3-axis CNC routers and mills. Fr
   <img src="{{ '/assets/logo.svg' | relative_url }}" alt="Millwise logo">
   <div>
     <h1>Millwise</h1>
-    <p>Free CAM for 3-axis CNC routers and mills. From a drawing or a 3D model to G-code in one window.</p>
+    <p>Free CAM for 3-axis CNC routers and mills. From a drawing, a 3D model or a photo to G-code in one window.</p>
     <p class="badges"><span>Linux</span><span>Free &amp; open source</span><span>GRBL · FluidNC · LinuxCNC</span><span>2D and 3D machining</span><span>English · Polski</span></p>
   </div>
 </div>
@@ -22,15 +22,16 @@ description: "Millwise is free CAM software for 3-axis CNC routers and mills. Fr
   <a class="button" href="{{ site.repo }}">Source code</a>
 </div>
 
-<div class="notice"><strong>Early development.</strong> Millwise changes every day. The first G-code runs on a real router (FluidNC) went well, but the dimensions have not been measured yet and the 3D machining has not been checked on a machine. Always check the G-code before you run it, and use the program at your own risk.</div>
+<div class="notice"><strong>Early development (version 0.8).</strong> Millwise changes every day. The first G-code runs on a real router (FluidNC) went well, but the dimensions have not been measured yet and the 3D machining has not been checked on a machine. Always check the G-code before you run it, and use the program at your own risk.</div>
 
 <div class="shot"><a href="{{ img }}main.png"><img src="{{ img }}main.png" alt="Millwise main window: operations on the left, the drawing with toolpaths in the middle, the machine and stock on the right"></a></div>
 
-<p class="lead">Millwise turns <strong>DXF drawings</strong> and <strong>STL models</strong> into toolpaths and writes G-code for <strong>GRBL / FluidNC</strong> and <strong>LinuxCNC</strong>. Pick a tool and an operation, click the curves, watch the whole job in the simulation and export the program: profiles, pockets, holes, engraving and V-carving in 2D, and roughing and finishing of 3D models.</p>
+<p class="lead">Millwise turns <strong>DXF drawings</strong>, <strong>STL models</strong> and <strong>photos</strong> into toolpaths and writes G-code for <strong>GRBL / FluidNC</strong> and <strong>LinuxCNC</strong>. Pick a tool and an operation, click the curves, watch the whole job in the simulation and export the program: profiles, pockets, holes, engraving and V-carving in 2D, and roughing and finishing of 3D models, reliefs from photos and raised shapes from your curves.</p>
 
 <div class="stats">
   <div><strong>5</strong><span>2D operations: profile, pocket, drilling, engraving, V-carving</span></div>
-  <div><strong>4</strong><span>3D operations: roughing, finishing, rest, cut-out</span></div>
+  <div><strong>3</strong><span>ways to a 3D model: STL file, photo, shape from curves</span></div>
+  <div><strong>5</strong><span>3D finishing strategies: parallel, waterline, combined, spiral, radial</span></div>
   <div><strong>7</strong><span>tool types, 16 tools in the basic set</span></div>
   <div><strong>GPU</strong><span>material simulation on the graphics card</span></div>
   <div><strong>3</strong><span>controllers: GRBL, FluidNC, LinuxCNC</span></div>
@@ -55,11 +56,11 @@ description: "Millwise is free CAM software for 3-axis CNC routers and mills. Fr
 <div class="showcase reverse">
   <div class="shot-col"><a href="{{ img }}model3d.png"><img loading="lazy" src="{{ img }}model3d.png" alt="The 3D model tab: a model in the stock with roughing and finishing toolpaths"></a></div>
   <div class="text-col">
-    <h3>3D machining of STL models</h3>
+    <h3>3D machining</h3>
     <ul>
-      <li>Open an STL file — or a <strong>photo</strong>, which becomes a relief — the model sits in the stock (units, scale, 90° rotations, stock left above it) and has its own <strong>3D model</strong> tab.</li>
+      <li>Open an STL file: the model sits in the stock (units, scale, 90° rotations, stock left above it) and has its own <strong>3D model</strong> tab.</li>
       <li><strong>Roughing</strong> in Z levels around the model, with extra levels just above flat areas.</li>
-      <li><strong>Finishing</strong> with parallel passes or <strong>waterlines</strong> for steep walls; <strong>rest finishing</strong> only where a bigger cutter could not reach.</li>
+      <li><strong>Finishing</strong> with parallel passes, <strong>waterlines</strong> for steep walls, <strong>combined</strong> (both in one operation), <strong>spiral</strong> or <strong>radial</strong> for domes and rosettes; limited to a slope range if needed; <strong>rest finishing</strong> only where a bigger cutter could not reach.</li>
       <li><strong>Cut-out</strong> along the model silhouette with tabs; the silhouette and the outline at any height also as curves for 2D operations.</li>
       <li>Undercut warning; 3D toolpaths are computed in the background, the window keeps working.</li>
     </ul>
@@ -67,6 +68,19 @@ description: "Millwise is free CAM software for 3-axis CNC routers and mills. Fr
 </div>
 
 <div class="showcase">
+  <div class="shot-col"><a href="{{ img }}relief.png"><img loading="lazy" src="{{ img }}relief.png" alt="A relief made from a picture of the word CNC, with the photo and its settings in the model card"></a></div>
+  <div class="text-col">
+    <h3>Reliefs from photos, shapes from curves</h3>
+    <ul>
+      <li>Open a <strong>JPG, PNG or BMP</strong> image and it becomes a relief: bright places higher, dark ones lower. Width, depth and base in millimetres.</li>
+      <li><strong>Filters with a live preview</strong>: levels, gamma, denoise, smoothing, sharpen, flat background, steps, an oval for portraits, a frame, cropping.</li>
+      <li><strong>Shape from curves</strong>: select lettering or a logo and it becomes a raised 3D model standing on the curves — flat, rounded, bevelled or domed edges, or recessed.</li>
+      <li>Then roughing, finishing and cut-out like any model.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="showcase reverse">
   <div class="shot-col"><a href="{{ img }}sim3d.png"><img loading="lazy" src="{{ img }}sim3d.png" alt="Simulation on the graphics card: finishing half way over the roughed model"></a></div>
   <div class="text-col">
     <h3>See the job before the machine does</h3>
@@ -79,7 +93,7 @@ description: "Millwise is free CAM software for 3-axis CNC routers and mills. Fr
   </div>
 </div>
 
-<div class="showcase reverse">
+<div class="showcase">
   <div class="shot-col"><a href="{{ img }}tools.png"><img loading="lazy" src="{{ img }}tools.png" alt="The tool library with tools grouped by type and the tapered ball cutter selected"></a></div>
   <div class="text-col">
     <h3>A tool library shared by all projects</h3>
@@ -92,7 +106,7 @@ description: "Millwise is free CAM software for 3-axis CNC routers and mills. Fr
   </div>
 </div>
 
-<div class="showcase">
+<div class="showcase reverse">
   <div class="shot-col"><a href="{{ img }}machines.png"><img loading="lazy" src="{{ img }}machines.png" alt="The machines window: work area, homing corner, controller and limits"></a></div>
   <div class="text-col">
     <h3>Your machines, your G-code</h3>
@@ -104,7 +118,7 @@ description: "Millwise is free CAM software for 3-axis CNC routers and mills. Fr
   </div>
 </div>
 
-<div class="showcase reverse">
+<div class="showcase">
   <div class="shot-col small"><a href="{{ img }}automation.png"><img loading="lazy" src="{{ img }}automation.png" alt="The automation window: an operation for each layer, corners, tabs and order by tool"></a></div>
   <div class="text-col">
     <h3>Less clicking</h3>
@@ -147,7 +161,7 @@ chmod +x Millwise-*-x86_64.AppImage
 
 <div class="faq">
 <details><summary>Which machines does Millwise work with?</summary><p>3-axis CNC routers and mills with GRBL, FluidNC (GRBL-compatible G-code) or LinuxCNC. The G-code was tried first on a router with a FluidNC controller.</p></details>
-<details><summary>Which files can it open?</summary><p>DXF drawings (lines, arcs, circles, polylines, splines, ellipses, blocks), STL models (binary and text) and its own <code>.millwise</code> projects. Several files can be added to one project.</p></details>
+<details><summary>Which files can it open?</summary><p>DXF drawings (lines, arcs, circles, polylines, splines, ellipses, blocks), STL models (binary and text), photos and pictures (JPG, PNG, BMP — as reliefs) and its own <code>.millwise</code> projects. Several DXF files and projects can be added to one project; a project has one 3D model.</p></details>
 <details><summary>Is it really free?</summary><p>Yes: free software under the GPL-3.0 licence, no account, no ads, no limits. The source code is on <a href="{{ site.repo }}">GitHub</a>.</p></details>
 <details><summary>Does it send anything over the internet?</summary><p>No. Millwise works offline and sends nothing anywhere.</p></details>
 <details><summary>The window does not open, or it is very slow.</summary><p>Millwise picks OpenGL by itself on NVIDIA cards and when the default graphics fail. If the window still does not open, start it with <code>--gl</code>. On a weak graphics card turn off View → Material simulation on the graphics card (GPU).</p></details>

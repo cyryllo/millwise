@@ -3,7 +3,7 @@ layout: default
 lang: pl
 other_lang: guide.html
 title: Instrukcja
-description: "Jak pracować w Millwise krok po kroku, z obrazkami — od otwarcia rysunku DXF albo modelu STL do G-code dla maszyny."
+description: "Jak pracować w Millwise krok po kroku, z obrazkami — od otwarcia rysunku DXF, modelu STL albo zdjęcia do G-code dla maszyny."
 ---
 {% assign img = '/img/pl/' | relative_url %}
 
@@ -62,7 +62,8 @@ frezów i jedną przykładową maszynę. Zacznij od ustawienia własnej maszyny
 [![Główne okno]({{ img }}main.png)]({{ img }}main.png)
 
 - **Zakładki** u góry: **Projekt 2D** (rysunek i operacje), **Model 3D**
-  (gdy projekt ma model STL) i **Symulacja**. <kbd>Tab</kbd> przełącza między
+  (gdy projekt ma model 3D: plik STL, płaskorzeźbę ze zdjęcia albo kształt z
+  krzywych) i **Symulacja**. <kbd>Tab</kbd> przełącza między
   projektem 2D a symulacją.
 - **Pasek narzędzi** po lewej: duże przyciski grup (Zaznacz, Profil, Kieszeń,
   Wiercenie, Grawer, 3D, Zero), a obok warianty wybranej grupy.
@@ -86,7 +87,7 @@ rysunku zamyka ustawienia operacji.
 
 | Polecenie | Co robi |
 |---|---|
-| **Plik → Otwórz DXF / projekt** (<kbd>Ctrl</kbd>+<kbd>O</kbd>) | Otwiera rysunek DXF, model STL albo projekt `.millwise` jako nowy projekt. |
+| **Plik → Otwórz DXF / projekt** (<kbd>Ctrl</kbd>+<kbd>O</kbd>) | Otwiera rysunek DXF, model STL, zdjęcie (JPG, PNG, BMP — jako płaskorzeźbę) albo projekt `.millwise` jako nowy projekt. |
 | **Plik → Dodaj** (<kbd>Ctrl</kbd>+<kbd>I</kbd>) | Dokłada pliki do bieżącego projektu. Można wybrać kilka naraz albo upuścić pliki na okno. Nowe elementy stają obok dotychczasowych i są zaznaczone, więc od razu można je przesunąć. |
 | **Plik → Zapisz** (<kbd>Ctrl</kbd>+<kbd>S</kbd>) / **Zapisz jako** (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) | Zapisuje wszystko w jednym pliku `.millwise`: krzywe, modele, operacje, półfabrykat, kopie użytych narzędzi. |
 | **Plik → Eksportuj G-code** (<kbd>Ctrl</kbd>+<kbd>E</kbd>) | Zapisuje program dla maszyny, zobacz [Eksport G-code](#gcode). |
@@ -99,6 +100,10 @@ Warstwy rysunku zostają: można je ukrywać i używać w
 
 **STL.** Pliki binarne i tekstowe. Model ma własną zakładkę, zobacz
 [Obróbka 3D](#obrobka3d).
+
+**Zdjęcia.** Obrazy JPG, PNG i BMP stają się płaskorzeźbą, zobacz
+[Płaskorzeźba ze zdjęcia](#plaskorzezba). W projekcie jest jeden model 3D:
+nowy plik STL albo zdjęcie zastępuje poprzedni.
 
 <h2 id="maszyna">4. Maszyna, półfabrykat i zero</h2>
 
@@ -248,7 +253,9 @@ obrobisz od góry. Obróć model albo obrabiaj z dwóch stron.
 
 <div style="clear:both"></div>
 
-### Płaskorzeźba ze zdjęcia
+<h3 id="plaskorzezba">Płaskorzeźba ze zdjęcia</h3>
+
+[![Płaskorzeźba z obrazka z napisem CNC]({{ img }}relief.png)]({{ img }}relief.png)
 
 Zamiast pliku STL otwórz albo dodaj obraz **JPG, PNG lub BMP**, a Millwise
 zamieni go na model 3D: jasne miejsca są wyżej, ciemne niżej. Karta modelu
@@ -284,6 +291,8 @@ stożkowym, wycięcie. Najlepiej sprawdzają się zdjęcia z miękkim światłem
 jednolitym tłem; portret zwykle potrzebuje trochę wygładzania.
 
 ### Kształt z krzywych
+
+[![Kształt z krzywych przykładowego rysunku]({{ img }}shape.png)]({{ img }}shape.png)
 
 Zaznacz zamknięte krzywe w projekcie 2D — napis zrobiony narzędziem
 **Tekst**, logo z DXF, dowolny obrys — i kliknij **3D › Kształt**. Powstanie
@@ -403,7 +412,7 @@ Pierwsze uruchomienie zawsze sprawdź w powietrzu albo na odpadzie.
 
 | Klawisz | Działanie |
 |---|---|
-| <kbd>Ctrl</kbd>+<kbd>O</kbd> | Otwórz DXF, STL albo projekt |
+| <kbd>Ctrl</kbd>+<kbd>O</kbd> | Otwórz DXF, STL, zdjęcie albo projekt |
 | <kbd>Ctrl</kbd>+<kbd>I</kbd> | Dodaj pliki do projektu |
 | <kbd>Ctrl</kbd>+<kbd>S</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> | Zapisz / zapisz jako |
 | <kbd>Ctrl</kbd>+<kbd>E</kbd> | Eksportuj G-code |

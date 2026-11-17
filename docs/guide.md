@@ -3,7 +3,7 @@ layout: default
 lang: en
 other_lang: pl/guide.html
 title: User guide
-description: "How to use Millwise, step by step, with pictures: from opening a DXF drawing or an STL model to G-code for the machine."
+description: "How to use Millwise, step by step, with pictures: from opening a DXF drawing, an STL model or a photo to G-code for the machine."
 ---
 {% assign img = '/img/en/' | relative_url %}
 
@@ -62,7 +62,8 @@ example machine. Set up your own machine first (see
 [![The main window]({{ img }}main.png)]({{ img }}main.png)
 
 - **Tabs** at the top: **2D project** (the drawing and the operations),
-  **3D model** (shown when the project has an STL model) and
+  **3D model** (shown when the project has a 3D model: an STL file, a relief
+  from a photo or a shape from curves) and
   **Simulation**. <kbd>Tab</kbd> switches between the 2D project and the
   simulation.
 - **Toolbar** on the far left: big buttons for the groups (Select, Profile,
@@ -88,7 +89,7 @@ drawing closes the settings of the operation.
 
 | Command | What it does |
 |---|---|
-| **File → Open DXF / project** (<kbd>Ctrl</kbd>+<kbd>O</kbd>) | Opens a DXF drawing, an STL model or a `.millwise` project as a new project. |
+| **File → Open DXF / project** (<kbd>Ctrl</kbd>+<kbd>O</kbd>) | Opens a DXF drawing, an STL model, a photo (JPG, PNG, BMP — as a relief) or a `.millwise` project as a new project. |
 | **File → Add** (<kbd>Ctrl</kbd>+<kbd>I</kbd>) | Adds more files to the current project. You can pick several at once or drop files on the window. New elements are placed next to the old ones and stay selected, so you can move them right away. |
 | **File → Save** (<kbd>Ctrl</kbd>+<kbd>S</kbd>) / **Save as** (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd>) | Saves everything in one `.millwise` file: the curves, the models, the operations, the stock, copies of the tools used. |
 | **File → Export G-code** (<kbd>Ctrl</kbd>+<kbd>E</kbd>) | Writes the program for the machine, see [G-code export](#gcode). |
@@ -101,6 +102,10 @@ layers of the drawing are kept: you can hide them and use them in
 
 **STL.** Binary and text STL files. The model gets its own tab, see
 [3D machining](#ops3d).
+
+**Photos.** JPG, PNG and BMP images become a relief, see
+[Relief from a photo](#relief). A project has one 3D model: a new STL file
+or photo replaces the previous one.
 
 <h2 id="machine">4. Machine, stock and zero</h2>
 
@@ -250,7 +255,9 @@ machined from the top. Turn the model or machine it from two sides.
 
 <div style="clear:both"></div>
 
-### Relief from a photo
+<h3 id="relief">Relief from a photo</h3>
+
+[![A relief from a picture of the word CNC]({{ img }}relief.png)]({{ img }}relief.png)
 
 Open or add a **JPG, PNG or BMP** image instead of an STL file and Millwise
 turns it into a 3D model: bright places are higher, dark ones lower. The
@@ -287,6 +294,8 @@ ball cutter, cut-out. Photos with soft light and a plain background work
 best; a portrait usually needs some smoothing.
 
 ### Shape from curves
+
+[![A shape made from the curves of the sample drawing]({{ img }}shape.png)]({{ img }}shape.png)
 
 Select closed curves in the 2D project — lettering made with the **Text**
 tool, a logo from a DXF, any outline — and click **3D › Shape**. They become
@@ -401,7 +410,7 @@ Always check the first run in the air or on scrap.
 
 | Key | Action |
 |---|---|
-| <kbd>Ctrl</kbd>+<kbd>O</kbd> | Open a DXF, STL or project |
+| <kbd>Ctrl</kbd>+<kbd>O</kbd> | Open a DXF, STL, photo or project |
 | <kbd>Ctrl</kbd>+<kbd>I</kbd> | Add files to the project |
 | <kbd>Ctrl</kbd>+<kbd>S</kbd> / <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> | Save / save as |
 | <kbd>Ctrl</kbd>+<kbd>E</kbd> | Export G-code |

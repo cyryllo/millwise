@@ -3,7 +3,7 @@ layout: default
 lang: pl
 other_lang: ""
 wide: true
-description: "Millwise to darmowy program CAM do 3-osiowych frezarek CNC. Z rysunków DXF i modeli STL do G-code dla GRBL, FluidNC i LinuxCNC — obróbka 2D i 3D, symulacja na karcie graficznej. Dla Linuksa."
+description: "Millwise to darmowy program CAM do 3-osiowych frezarek CNC. Z rysunków DXF, modeli STL i zdjęć do G-code dla GRBL, FluidNC i LinuxCNC — obróbka 2D i 3D, symulacja na karcie graficznej. Dla Linuksa."
 ---
 {% assign img = '/img/pl/' | relative_url %}
 
@@ -11,7 +11,7 @@ description: "Millwise to darmowy program CAM do 3-osiowych frezarek CNC. Z rysu
   <img src="{{ '/assets/logo.svg' | relative_url }}" alt="Logo Millwise">
   <div>
     <h1>Millwise</h1>
-    <p>Darmowy CAM do 3-osiowych frezarek CNC. Od rysunku albo modelu 3D do G-code w jednym oknie.</p>
+    <p>Darmowy CAM do 3-osiowych frezarek CNC. Od rysunku, modelu 3D albo zdjęcia do G-code w jednym oknie.</p>
     <p class="badges"><span>Linux</span><span>Darmowy i otwarty</span><span>GRBL · FluidNC · LinuxCNC</span><span>Obróbka 2D i 3D</span><span>Polski · English</span></p>
   </div>
 </div>
@@ -22,15 +22,16 @@ description: "Millwise to darmowy program CAM do 3-osiowych frezarek CNC. Z rysu
   <a class="button" href="{{ site.repo }}">Kod źródłowy</a>
 </div>
 
-<div class="notice"><strong>Wczesna faza rozwoju.</strong> Millwise zmienia się z dnia na dzień. Pierwsze próby G-code na prawdziwej frezarce (FluidNC) przebiegły dobrze, ale dokładność wymiarów nie była jeszcze mierzona, a obróbka 3D nie była sprawdzana na maszynie. Zawsze sprawdzaj G-code przed uruchomieniem — używasz programu na własną odpowiedzialność.</div>
+<div class="notice"><strong>Wczesna faza rozwoju (wersja 0.8).</strong> Millwise zmienia się z dnia na dzień. Pierwsze próby G-code na prawdziwej frezarce (FluidNC) przebiegły dobrze, ale dokładność wymiarów nie była jeszcze mierzona, a obróbka 3D nie była sprawdzana na maszynie. Zawsze sprawdzaj G-code przed uruchomieniem — używasz programu na własną odpowiedzialność.</div>
 
 <div class="shot"><a href="{{ img }}main.png"><img src="{{ img }}main.png" alt="Główne okno Millwise: operacje po lewej, rysunek ze ścieżkami pośrodku, maszyna i półfabrykat po prawej"></a></div>
 
-<p class="lead">Millwise zamienia <strong>rysunki DXF</strong> i <strong>modele STL</strong> na ścieżki narzędzia i zapisuje G-code dla <strong>GRBL / FluidNC</strong> i <strong>LinuxCNC</strong>. Wybierasz frez i operację, klikasz krzywe, oglądasz całą obróbkę w symulacji i eksportujesz program: profile, kieszenie, otwory, grawer i V-carving w 2D oraz zgrubną i wykańczającą obróbkę modeli 3D.</p>
+<p class="lead">Millwise zamienia <strong>rysunki DXF</strong>, <strong>modele STL</strong> i <strong>zdjęcia</strong> na ścieżki narzędzia i zapisuje G-code dla <strong>GRBL / FluidNC</strong> i <strong>LinuxCNC</strong>. Wybierasz frez i operację, klikasz krzywe, oglądasz całą obróbkę w symulacji i eksportujesz program: profile, kieszenie, otwory, grawer i V-carving w 2D oraz zgrubną i wykańczającą obróbkę modeli 3D, płaskorzeźb ze zdjęć i wypukłych kształtów z twoich krzywych.</p>
 
 <div class="stats">
   <div><strong>5</strong><span>operacji 2D: profil, kieszeń, wiercenie, grawer, V-carving</span></div>
-  <div><strong>4</strong><span>operacje 3D: zgrubna, wykańczająca, resztki, wycięcie</span></div>
+  <div><strong>3</strong><span>sposoby na model 3D: plik STL, zdjęcie, kształt z krzywych</span></div>
+  <div><strong>5</strong><span>strategii wykańczania 3D: równoległa, warstwicowa, łączona, spiralna, promieniowa</span></div>
   <div><strong>7</strong><span>rodzajów frezów, 16 narzędzi w zestawie podstawowym</span></div>
   <div><strong>GPU</strong><span>symulacja materiału na karcie graficznej</span></div>
   <div><strong>3</strong><span>sterowniki: GRBL, FluidNC, LinuxCNC</span></div>
@@ -55,11 +56,11 @@ description: "Millwise to darmowy program CAM do 3-osiowych frezarek CNC. Z rysu
 <div class="showcase reverse">
   <div class="shot-col"><a href="{{ img }}model3d.png"><img loading="lazy" src="{{ img }}model3d.png" alt="Zakładka Model 3D: model w półfabrykacie ze ścieżkami zgrubnymi i wykańczającymi"></a></div>
   <div class="text-col">
-    <h3>Obróbka 3D modeli STL</h3>
+    <h3>Obróbka 3D</h3>
     <ul>
-      <li>Otwórz plik STL albo <strong>zdjęcie</strong>, z którego powstanie płaskorzeźba: model trafia do półfabrykatu (jednostki, skala, obroty o 90°, naddatek nad modelem) i ma własną zakładkę <strong>Model 3D</strong>.</li>
+      <li>Otwórz plik STL: model trafia do półfabrykatu (jednostki, skala, obroty o 90°, naddatek nad modelem) i ma własną zakładkę <strong>Model 3D</strong>.</li>
       <li><strong>Zgrubna</strong> warstwami Z wokół modelu, z dodatkowymi warstwami tuż nad płaskimi miejscami.</li>
-      <li><strong>Wykańczająca</strong> przejściami równoległymi albo <strong>warstwicowa</strong> na strome ściany; <strong>tylko resztki</strong> — tam, gdzie większy frez nie sięgnął.</li>
+      <li><strong>Wykańczająca</strong> przejściami równoległymi, <strong>warstwicowa</strong> na strome ściany, <strong>łączona</strong> (obie w jednej operacji), <strong>spiralna</strong> albo <strong>promieniowa</strong> do kopuł i rozet; w razie potrzeby ograniczona do zakresu nachylenia; <strong>tylko resztki</strong> — tam, gdzie większy frez nie sięgnął.</li>
       <li><strong>Wycięcie</strong> detalu po sylwetce modelu z mostkami; sylwetka i obrys na dowolnej wysokości także jako krzywe do operacji 2D.</li>
       <li>Ostrzeżenie o podcięciach; ścieżki 3D liczą się w tle, a okno cały czas działa.</li>
     </ul>
@@ -67,6 +68,19 @@ description: "Millwise to darmowy program CAM do 3-osiowych frezarek CNC. Z rysu
 </div>
 
 <div class="showcase">
+  <div class="shot-col"><a href="{{ img }}relief.png"><img loading="lazy" src="{{ img }}relief.png" alt="Płaskorzeźba z obrazka z napisem CNC, ze zdjęciem i ustawieniami w karcie modelu"></a></div>
+  <div class="text-col">
+    <h3>Płaskorzeźby ze zdjęć, kształty z krzywych</h3>
+    <ul>
+      <li>Otwórz obraz <strong>JPG, PNG albo BMP</strong>, a powstanie z niego płaskorzeźba: jasne miejsca wyżej, ciemne niżej. Szerokość, głębokość i podstawa w milimetrach.</li>
+      <li><strong>Filtry z podglądem na żywo</strong>: poziomy, gamma, odszumianie, wygładzanie, wyostrzanie, płaskie tło, schodki, owal do portretów, ramka, kadrowanie.</li>
+      <li><strong>Kształt z krzywych</strong>: zaznacz napis albo logo, a powstanie z niego wypukły model 3D stojący na krzywych — z krawędzią płaską, zaokrągloną, skośną albo kopułą, albo wklęsły.</li>
+      <li>Dalej zgrubna, wykańczająca i wycięcie jak przy każdym modelu.</li>
+    </ul>
+  </div>
+</div>
+
+<div class="showcase reverse">
   <div class="shot-col"><a href="{{ img }}sim3d.png"><img loading="lazy" src="{{ img }}sim3d.png" alt="Symulacja na karcie graficznej: wykańczanie w połowie, na modelu po obróbce zgrubnej"></a></div>
   <div class="text-col">
     <h3>Zobacz obróbkę, zanim zobaczy ją maszyna</h3>
@@ -79,7 +93,7 @@ description: "Millwise to darmowy program CAM do 3-osiowych frezarek CNC. Z rysu
   </div>
 </div>
 
-<div class="showcase reverse">
+<div class="showcase">
   <div class="shot-col"><a href="{{ img }}tools.png"><img loading="lazy" src="{{ img }}tools.png" alt="Biblioteka narzędzi z frezami pogrupowanymi według rodzaju, zaznaczony frez kulowy stożkowy"></a></div>
   <div class="text-col">
     <h3>Jedna biblioteka narzędzi dla wszystkich projektów</h3>
@@ -92,7 +106,7 @@ description: "Millwise to darmowy program CAM do 3-osiowych frezarek CNC. Z rysu
   </div>
 </div>
 
-<div class="showcase">
+<div class="showcase reverse">
   <div class="shot-col"><a href="{{ img }}machines.png"><img loading="lazy" src="{{ img }}machines.png" alt="Okno maszyn: pole robocze, narożnik bazowania, sterownik i limity"></a></div>
   <div class="text-col">
     <h3>Twoje maszyny, twój G-code</h3>
@@ -104,7 +118,7 @@ description: "Millwise to darmowy program CAM do 3-osiowych frezarek CNC. Z rysu
   </div>
 </div>
 
-<div class="showcase reverse">
+<div class="showcase">
   <div class="shot-col small"><a href="{{ img }}automation.png"><img loading="lazy" src="{{ img }}automation.png" alt="Okno automatyzacji: operacje dla każdej warstwy, uszka, mostki i kolejność według narzędzi"></a></div>
   <div class="text-col">
     <h3>Mniej klikania</h3>
@@ -147,7 +161,7 @@ chmod +x Millwise-*-x86_64.AppImage
 
 <div class="faq">
 <details><summary>Z jakimi maszynami działa Millwise?</summary><p>Z 3-osiowymi frezarkami CNC ze sterownikiem GRBL, FluidNC (G-code zgodny z GRBL) albo LinuxCNC. G-code był najpierw próbowany na frezarce ze sterownikiem FluidNC.</p></details>
-<details><summary>Jakie pliki otwiera?</summary><p>Rysunki DXF (linie, łuki, okręgi, polilinie, splajny, elipsy, bloki), modele STL (binarne i tekstowe) i własne projekty <code>.millwise</code>. Do jednego projektu można dodać kilka plików.</p></details>
+<details><summary>Jakie pliki otwiera?</summary><p>Rysunki DXF (linie, łuki, okręgi, polilinie, splajny, elipsy, bloki), modele STL (binarne i tekstowe), zdjęcia i obrazki (JPG, PNG, BMP — jako płaskorzeźby) i własne projekty <code>.millwise</code>. Do jednego projektu można dodać kilka plików DXF i projektów; model 3D jest w projekcie jeden.</p></details>
 <details><summary>Czy naprawdę jest darmowy?</summary><p>Tak: to wolne oprogramowanie na licencji GPL-3.0 — bez konta, reklam i ograniczeń. Kod źródłowy jest na <a href="{{ site.repo }}">GitHubie</a>.</p></details>
 <details><summary>Czy wysyła coś przez internet?</summary><p>Nie. Millwise działa bez sieci i niczego nigdzie nie wysyła.</p></details>
 <details><summary>Okno się nie otwiera albo wszystko działa bardzo wolno.</summary><p>Na kartach NVIDIA i wtedy, gdy domyślna grafika zawiedzie, Millwise sam wybiera OpenGL. Jeśli okno dalej się nie otwiera, uruchom program z opcją <code>--gl</code>. Na słabej karcie graficznej wyłącz Widok → Symulacja materiału na karcie graficznej (GPU).</p></details>
