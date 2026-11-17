@@ -586,7 +586,7 @@ dependencies = [
 
 [[package]]
 name = "cam-geom"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "cavalier_contours",
  "serde",
@@ -594,14 +594,14 @@ dependencies = [
 
 [[package]]
 name = "cam-i18n"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "cam-io"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "anyhow",
  "cam-geom",
@@ -612,7 +612,7 @@ dependencies = [
 
 [[package]]
 name = "cam-ops"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "cam-geom",
  "cam-i18n",
@@ -624,7 +624,7 @@ dependencies = [
 
 [[package]]
 name = "cam-post"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "cam-geom",
  "cam-i18n",
@@ -636,7 +636,7 @@ dependencies = [
 
 [[package]]
 name = "cam-sim"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "cam-geom",
  "cam-i18n",
@@ -1994,7 +1994,7 @@ dependencies = [
 
 [[package]]
 name = "millwise"
-version = "0.8.0"
+version = "0.8.1"
 dependencies = [
  "anyhow",
  "bytemuck",

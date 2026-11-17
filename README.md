@@ -3,7 +3,7 @@
 **Po polsku:** [README_pl.md](README_pl.md) · **Changes:** [CHANGELOG.md](CHANGELOG.md) · **For developers:** [DEVELOPMENT.md](DEVELOPMENT.md)
 
 > **Early development — a test version.** Millwise is at an early stage
-> (version 0.8.0) and changes every day. First runs of its G-code on a real
+> (version 0.8.1) and changes every day. First runs of its G-code on a real
 > router (FluidNC controller) went well, but the dimensions have not been
 > measured yet, LinuxCNC has not been tried on a machine and the 3D machining
 > has not been checked on a machine. Always check the G-code before running
@@ -20,7 +20,7 @@ Polish and English.
 
 ![Millwise main window](docs/screenshot.png)
 
-## What it does (0.8.0)
+## What it does (0.8.1)
 
 - **DXF import:** lines, arcs, circles, polylines with arcs, splines,
   ellipses and blocks; loose pieces are joined into contours, inches are
@@ -104,8 +104,8 @@ The [Releases](https://github.com/cyryllo/millwise/releases) page has an
 Ubuntu 22.04 or newer and other distributions of that age.
 
 ```sh
-chmod +x Millwise-0.8.0-x86_64.AppImage
-./Millwise-0.8.0-x86_64.AppImage
+chmod +x Millwise-0.8.1-x86_64.AppImage
+./Millwise-0.8.1-x86_64.AppImage
 ```
 
 Millwise chooses OpenGL by itself on NVIDIA cards and when the default

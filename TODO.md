@@ -76,6 +76,5 @@ drewnie (jedna paczka = jedno wydanie):
 
 **Paczki i program**
 
-- [ ] Budowanie AppImage w GitHub Actions.
 - [ ] Paczki dla Linuksa z CI (deb).
 - [ ] Sprawdzanie aktualizacji.

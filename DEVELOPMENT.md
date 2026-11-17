@@ -66,7 +66,8 @@ shown through `tr_dyn`. A new language = a new dictionary file and a
 
 ## Linux AppImage
 
-Built on this computer with Docker:
+Releases are built by GitHub (see below). To build one on this computer, with
+Docker:
 
 ```sh
 packaging/linux/build-appimage-docker.sh            # the last commit (HEAD)
@@ -98,6 +99,14 @@ tag `vX.Y.Z`.
 
 Before a release, refresh the list of bundled libraries:
 `python3 scripts/third_party.py` (writes `THIRD-PARTY.md`).
+
+The release description (Polish first, then English) goes to
+`packaging/release-notes/X.Y.Z.md`. Pushing the tag `vX.Y.Z` starts the GitHub
+workflow `.github/workflows/release.yml`: in an Ubuntu 22.04 container it runs
+the tests, builds the program and the AppImage, checks `--version`, and
+publishes the release (pre-release) with the AppImage and the description, to
+which it adds the SHA-256 of the file. The workflow stops when the tag and the
+version in `Cargo.toml` differ or the description is missing.
 
 ## License
 

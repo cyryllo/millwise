@@ -1,0 +1,84 @@
+# Wydanie: po wypchnięciu tagu vX.Y.Z GitHub buduje AppImage dla Linuksa i
+# publikuje wydanie (pre-release) z opisem z packaging/release-notes/X.Y.Z.md
+# i sumą kontrolną.
+#
+# Program jest kompilowany w kontenerze Ubuntu 22.04 (glibc 2.35) — tak jak
+# lokalnie packaging/linux/build-appimage-docker.sh — żeby działał także na
+# starszych systemach (Debian 12+, Ubuntu 22.04+).
+name: Wydanie
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  appimage:
+    name: AppImage (Linux x86_64)
+    runs-on: ubuntu-latest
+    container: ubuntu:22.04
+    env:
+      CARGO_TERM_COLOR: always
+      RUST_VERSION: "1.99.1"
+    steps:
+      - name: Narzędzia systemu
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            build-essential curl ca-certificates pkg-config file git
+      - uses: actions/checkout@v4
+      - name: Rust
+        run: |
+          curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain "$RUST_VERSION"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+      - name: Wersja z tagu = wersja programu
+        run: |
+          V="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          test "v$V" = "$GITHUB_REF_NAME" || { echo "Tag $GITHUB_REF_NAME, a Cargo.toml ma $V"; exit 1; }
+          echo "VERSION=$V" >> "$GITHUB_ENV"
+          test -f "packaging/release-notes/$V.md" || { echo "Brak packaging/release-notes/$V.md"; exit 1; }
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: linux-${{ hashFiles('Cargo.lock') }}
+      - name: Testy
+        run: cargo test --workspace --locked
+      - name: Program
+        run: cargo build --release --locked -p millwise
+      - name: AppImage
+        run: |
+          sh packaging/linux/build-appimage.sh target/release/millwise
+          OUT="dist/Millwise-$VERSION-x86_64.AppImage"
+          echo "Wymagana glibc: $(objdump -T target/release/millwise | grep -o 'GLIBC_[0-9.]*' | sort -V | tail -1)"
+          APPIMAGE_EXTRACT_AND_RUN=1 "$OUT" --version
+          # opis wydania: z repozytorium + suma kontrolna zbudowanego pliku
+          cp "packaging/release-notes/$VERSION.md" dist/notes.md
+          printf '\nSHA-256 `Millwise-%s-x86_64.AppImage`:\n`%s`\n' "$VERSION" "$(sha256sum "$OUT" | cut -d' ' -f1)" >> dist/notes.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage
+          path: |
+            dist/Millwise-*-x86_64.AppImage
+            dist/notes.md
+
+  release:
+    name: Wydanie na GitHubie
+    needs: appimage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: appimage
+          path: dist
+      - name: Publikacja (pre-release)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" "dist/Millwise-$V-x86_64.AppImage" \
+            --repo "$GITHUB_REPOSITORY" --prerelease --title "Millwise $V" --notes-file dist/notes.md
