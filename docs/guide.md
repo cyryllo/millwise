@@ -375,14 +375,18 @@ The **Simulation** tab (<kbd>Tab</kbd>) shows the whole program on the stock.
 
 There are two ways to show it:
 
-- **Solid (GPU)** or **Solid (CPU)**: the material is removed move by move.
-  With **View → Material simulation on the graphics card (GPU)** turned on
-  (the default), the graphics card does it and it stays smooth for programs
-  of any size. Without it, the processor computes an exact solid: fine for
-  2D work, slow for dense 3D finishing.
+- **Solid (CPU)** or **Solid (GPU)**: the material is removed move by move.
+  2D projects always get the exact solid computed by the processor — clean,
+  vertical walls. For 3D machining and very dense programs, with **View →
+  Material simulation on the graphics card (GPU)** turned on (the default),
+  the graphics card does it and it stays smooth for programs of any size;
+  without it the processor computes the exact solid, slowly for dense 3D
+  finishing.
 - **Toolpaths**: the target model with the moves already made in the colour
   of their operation, the layer being cut in yellow and the moves still to
-  come darker. Instant for any size; shows only the current operation.
+  come darker. Instant for any size. Finished operations stay visible; only
+  during a 3D operation the earlier 3D ones are hidden (roughing does not
+  cover finishing).
 
 [![3D simulation on the graphics card]({{ img }}sim3d.png)]({{ img }}sim3d.png)
 

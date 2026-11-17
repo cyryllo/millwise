@@ -6,6 +6,23 @@ Version numbers:
 - the **second number** goes up with every release that adds features;
 - the **third number** goes up for releases that only fix bugs.
 
+## Unreleased
+
+### Fixed
+
+- **Simulation of 2D projects with clean, vertical walls again.** With the
+  graphics card on, 2D projects were simulated on it too: the material is
+  drawn there from a height grid, so walls of pockets, holes and profiles
+  came out jagged, striped and slightly slanted. 2D projects now always get
+  the exact solid computed by the processor (as before 0.7); the graphics
+  card is used for 3D machining and very dense programs.
+- **No more thin dashed lines across the material** in the exact (processor)
+  simulation: the solid is split into tiles for speed, and the inner sides of
+  the tiles showed through the surface at their joints.
+- **Toolpaths view: paths of finished operations stay visible**, also at the
+  end of the program. Only during a 3D operation the earlier 3D operations
+  are hidden, so roughing does not cover finishing.
+
 ## 0.8.0 (2026-11-16)
 
 ### Added

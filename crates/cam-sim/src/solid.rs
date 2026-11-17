@@ -92,9 +92,15 @@ struct Tiles {
     ny: usize,
 }
 
+/// Kafelki zachodzą na sąsiadów o tyle [mm]: na styku stykających się krawędzi
+/// powstawały włoskowate szczeliny (widoczne jako przerywane linie na górze płyty).
+const TILE_OVERLAP: f64 = 0.02;
+
 impl Tiles {
     /// Kafelki dotykane przez prostokąt (x0, y0, x1, y1).
     fn touched(&self, bb: [f64; 4]) -> impl Iterator<Item = usize> + '_ {
+        // z zakładką: przejście tuż obok kafelka wcina się też w jego zakładkę
+        let bb = [bb[0] - TILE_OVERLAP, bb[1] - TILE_OVERLAP, bb[2] + TILE_OVERLAP, bb[3] + TILE_OVERLAP];
         let cl = |v: f64, n: usize| (v.floor().max(0.0) as usize).min(n - 1);
         let (i0, i1) = (cl((bb[0] - self.x0) / self.size, self.nx), cl((bb[2] - self.x0) / self.size, self.nx));
         let (j0, j1) = (cl((bb[1] - self.y0) / self.size, self.ny), cl((bb[3] - self.y0) / self.size, self.ny));
@@ -115,6 +121,9 @@ pub struct SolidSim {
     cur: (usize, State),
     /// Siatki kafelków (bryła, z której powstała siatka).
     meshes: Vec<Option<(Arc<Manifold>, Arc<SimMesh>)>>,
+    /// Wewnętrzne boki każdego kafelka (płaszczyzny x albo y na styku z sąsiadem) —
+    /// pomijane w siatce do wyświetlania.
+    inner: Vec<Vec<(usize, f64)>>,
     top: f64,
     bottom: f64,
     /// Bryła przerosła limit trójkątów (liczba trójkątów) — przeliczenie przerwane.
@@ -153,11 +162,21 @@ impl SolidSim {
         let size = (w.max(h) / 10.0).max(8.0);
         let (nx, ny) = (((w / size).ceil() as usize).max(1), ((h / size).ceil() as usize).max(1));
         let tiles = Tiles { x0: min.x, y0: min.y, size, nx, ny };
+        let mut inner = vec![Vec::new(); nx * ny];
         let state: State = (0..nx * ny)
             .map(|k| {
                 let (i, j) = (k % nx, k / nx);
                 let lo = P3::new(min.x + i as f64 * size, min.y + j as f64 * size, min.z);
                 let hi = P3::new((lo.x + size).min(max.x), (lo.y + size).min(max.y), max.z);
+                // zakładka na sąsiadów (nie poza półfabrykat)
+                let lo = P3::new((lo.x - TILE_OVERLAP).max(min.x), (lo.y - TILE_OVERLAP).max(min.y), lo.z);
+                let hi = P3::new((hi.x + TILE_OVERLAP).min(max.x), (hi.y + TILE_OVERLAP).min(max.y), hi.z);
+                // boki wewnątrz półfabrykatu (nie na jego brzegu)
+                for (axis, v, edge) in [(0, lo.x, min.x), (0, hi.x, max.x), (1, lo.y, min.y), (1, hi.y, max.y)] {
+                    if (v - edge).abs() > 1e-9 {
+                        inner[k].push((axis, v));
+                    }
+                }
                 Arc::new(stock(lo, hi))
             })
             .collect();
@@ -168,6 +187,7 @@ impl SolidSim {
             keys: vec![(0, state.clone())],
             cur: (0, state),
             meshes: vec![None; nx * ny],
+            inner,
             too_big: None,
             top: max.z,
             bottom: min.z,
@@ -309,7 +329,7 @@ impl SolidSim {
             let mesh = match cached {
                 Some(m) => m,
                 None => {
-                    let m = Arc::new(mesh_of(solid, top, bottom));
+                    let m = Arc::new(mesh_without_planes(solid, top, bottom, &self.inner[k]));
                     // pamiętamy tylko siatki stanu bieżącego (nie chwilowego, z częścią ruchu)
                     if self.cur.1.get(k).is_some_and(|c| Arc::ptr_eq(c, solid)) {
                         self.meshes[k] = Some((solid.clone(), m.clone()));
@@ -332,7 +352,15 @@ impl SolidSim {
 
     /// Objętość materiału w chwili `t` [mm³].
     pub fn volume_at(&mut self, t: f64) -> f64 {
-        self.state_at(t).iter().map(|s| s.volume()).sum()
+        // każdy kafelek tylko we własnym obszarze — bez zakładki na sąsiadów
+        let state = self.state_at(t);
+        let (tl, bottom, top) = (&self.tiles, self.bottom, self.top);
+        let core = |k: usize| {
+            let (i, j) = (k % tl.nx, k / tl.nx);
+            let lo = P3::new(tl.x0 + i as f64 * tl.size, tl.y0 + j as f64 * tl.size, bottom - 1.0);
+            stock(lo, P3::new(lo.x + tl.size, lo.y + tl.size, top + 1.0))
+        };
+        state.iter().enumerate().map(|(k, s)| s.intersection(&core(k)).volume()).sum()
     }
 
     /// Liczba trójkątów bryły w chwili `t`.
@@ -370,6 +398,31 @@ fn union_tree(mut v: Vec<Manifold>) -> Manifold {
         v = pairs.into_par_iter().map(f).collect();
     }
     v.pop().unwrap_or_else(Manifold::new)
+}
+
+/// Jak `mesh_of`, bez trójkątów leżących na podanych płaszczyznach (oś 0 = x, 1 = y):
+/// wewnętrzne boki kafelka, które na styku z sąsiadem przebijałyby przez powierzchnię
+/// materiału jako cienkie przerywane linie.
+fn mesh_without_planes(m: &Manifold, top: f32, bottom: f32, planes: &[(usize, f64)]) -> SimMesh {
+    let full = mesh_of(m, top, bottom);
+    if planes.is_empty() {
+        return full;
+    }
+    let on_plane = |tri: &[SimVertex]| {
+        planes.iter().any(|&(axis, v)| tri.iter().all(|p| (p.pos[axis] as f64 - v).abs() < 1e-3))
+    };
+    let mut out = SimMesh::default();
+    for t in full.indices.chunks(3) {
+        let tri = [full.verts[t[0] as usize], full.verts[t[1] as usize], full.verts[t[2] as usize]];
+        if on_plane(&tri) {
+            continue;
+        }
+        for v in tri {
+            out.verts.push(v);
+            out.indices.push((out.verts.len() - 1) as u32);
+        }
+    }
+    out
 }
 
 /// Bryła → siatka z normalnymi wygładzonymi tylko w obrębie łagodnych krawędzi (< 35°).

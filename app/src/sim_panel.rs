@@ -242,6 +242,8 @@ pub struct SimState {
     /// Wykańczanie równoległe (Some(true)), warstwami (Some(false)) albo łączone (None —
     /// rozpoznawane po ostatnim ruchu: zmiana wysokości = przejście równoległe).
     raster: Vec<Option<bool>>,
+    /// Operacja 3D (zgrubna, wykańczająca) — dla każdej operacji osi czasu.
+    op3d: Vec<bool>,
     /// Linie postępu (wykonane i ostatnia warstwa) dla czasu `progress_time`.
     progress_lines: Vec<(P3, P3, Color32)>,
     progress_time: f64,
@@ -306,6 +308,7 @@ impl Default for SimState {
             too_big: None,
             timeline: Vec::new(),
             raster: Vec::new(),
+            op3d: Vec::new(),
             progress_lines: Vec::new(),
             progress_time: f64::NAN,
             progress_serial: 0,
@@ -338,8 +341,6 @@ impl SimState {
     pub fn sync(&mut self, ctx: &egui::Context, doc: &Document, lib: &ToolLibrary, machine: &Machine) {
         self.sides = doc.stock.two_sided.is_some() && doc.ops.iter().any(|o| o.enabled && o.side == cam_ops::Side::B);
         let side_b = self.sides && self.side == cam_ops::Side::B;
-        // „Bryła”: karta graficzna, gdy włączona w ustawieniach, inaczej procesor
-        let material = if self.gpu_enabled { Engine::Gpu } else { Engine::Solid };
         let moves: usize = doc
             .ops
             .iter()
@@ -348,6 +349,13 @@ impl SimState {
             .filter_map(|(_, c)| c.as_ref())
             .map(|c| c.result.toolpath.moves.len())
             .sum();
+        // „Bryła”: projekty 2D — dokładna bryła z procesora (proste, pionowe ściany; karta
+        // graficzna rysuje materiał z siatki wysokości, przez co ściany wychodzą lekko
+        // skośne); karta graficzna — przy obróbce 3D i bardzo gęstych programach, gdzie
+        // procesor liczyłby za długo
+        let has_3d = doc.ops.iter().any(|op| op.enabled && (!self.sides || op.side == self.side) && cam_ops::needs_model(&op.kind));
+        let gpu_needed = has_3d || moves > DENSE_MOVES || self.too_big.is_some();
+        let material = if self.gpu_enabled && gpu_needed { Engine::Gpu } else { Engine::Solid };
         // na procesorze bardzo gęsty program liczyłby się minutami — wtedy same ścieżki
         self.dense = (!self.gpu_enabled && moves > DENSE_MOVES).then_some(moves);
         self.engine = match self.choice {
@@ -380,6 +388,7 @@ impl SimState {
         self.ops.clear();
         self.timeline.clear();
         self.raster.clear();
+        self.op3d.clear();
         self.progress_lines.clear();
         self.progress_time = f64::NAN;
         let Some(area) = doc.stock_box() else { return };
@@ -395,6 +404,7 @@ impl SimState {
             }
             data.push((ToolShape::new(&tool.kind, tool.diameter), cache.result.toolpath.polyline_with_feed(0.01)));
             self.ops.push((i, op.name.clone()));
+            self.op3d.push(cam_ops::needs_model(&op.kind));
             self.raster.push(match &op.kind {
                 cam_ops::OpKind::Finish3D(p) => match p.strategy {
                     cam_ops::Finish3DStrategy::Raster | cam_ops::Finish3DStrategy::Spiral | cam_ops::Finish3DStrategy::Radial => Some(true),
@@ -583,11 +593,14 @@ impl SimState {
             }
         }
         let hot = Color32::from_rgb(255, 225, 60);
-        // tylko bieżąca operacja — ścieżki wcześniejszych (np. zgrubnej) nie zasłaniają
+        // ścieżki zakończonych operacji zostają (także na końcu); tylko podczas operacji 3D
+        // nie widać wcześniejszych operacji 3D — np. zgrubna nie zasłania wykańczającej
         let cur_op = tl[last].op;
+        let cur3d = self.op3d.get(cur_op).copied().unwrap_or(false);
         for i in 1..=last {
             let p = tl[i];
-            if p.rapid || p.op != cur_op {
+            let hidden = p.op != cur_op && cur3d && self.op3d.get(p.op).copied().unwrap_or(false);
+            if p.rapid || hidden {
                 continue;
             }
             let (a, b) = seg(i);
@@ -623,7 +636,16 @@ impl SimState {
                 show_model: self.show_model,
                 side: self.sides.then_some(self.side),
                 progress: (!gpu).then_some((&self.progress_lines[..], (self.sim_serial, self.progress_serial))),
-                only_op: if gpu { None } else { self.timeline_pos().and_then(|(k, _)| self.ops.get(self.timeline[k].op)).map(|o| o.0) },
+                // przyszłe ścieżki (przyciemnione): podczas operacji 3D tylko jej własne
+                only_op: if gpu {
+                    None
+                } else {
+                    self.timeline_pos()
+                        .map(|(k, _)| self.timeline[k].op)
+                        .filter(|&o| self.op3d.get(o).copied().unwrap_or(false))
+                        .and_then(|o| self.ops.get(o))
+                        .map(|o| o.0)
+                },
                 gpu: gpu.then(|| crate::view3d::gpu_sim::GpuSimInput {
                     timeline: &self.timeline,
                     tools: &self.gpu_tools,
@@ -735,8 +757,10 @@ impl SimState {
         ui.horizontal(|ui| {
             ui.label(tr!("Widok"));
             let material = matches!(self.engine, Engine::Gpu | Engine::Solid);
-            let label = if self.gpu_enabled { tr!("Bryła (GPU)") } else { tr!("Bryła (CPU)") };
-            let hover = if self.gpu_enabled {
+            // nazwa według silnika, który faktycznie liczy (projekt 2D — procesor)
+            let on_gpu = if material { self.engine == Engine::Gpu } else { self.gpu_enabled };
+            let label = if on_gpu { tr!("Bryła (GPU)") } else { tr!("Bryła (CPU)") };
+            let hover = if on_gpu {
                 tr!("Ubytek materiału liczy i rysuje karta graficzna — płynnie przy każdej wielkości programu")
             } else {
                 tr!("Dokładna bryła liczona na procesorze — czyste ściany, sprawdzanie kolizji; przy dużych programach wolno")
@@ -752,7 +776,7 @@ impl SimState {
                 self.choice = Some(false);
             }
         });
-        if self.engine == Engine::Solid {
+        if self.engine == Engine::Solid && !self.gpu_enabled {
             ui.label(
                 RichText::new(tr!("Bryła liczona na procesorze — przy dużych programach wolno. Szybciej: Widok › Symulacja materiału na karcie graficznej (GPU)."))
                     .small()

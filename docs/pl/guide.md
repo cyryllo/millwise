@@ -376,14 +376,18 @@ półfabrykacie.
 
 Są dwa sposoby pokazania:
 
-- **Bryła (GPU)** albo **Bryła (CPU)**: materiał jest zdejmowany ruch po
-  ruchu. Gdy **Widok → Symulacja materiału na karcie graficznej (GPU)** jest
-  włączona (domyślnie), robi to karta graficzna i działa płynnie przy każdej
-  wielkości programu. Bez niej procesor liczy dokładną bryłę — dobrze dla
-  obróbki 2D, wolno dla gęstego wykańczania 3D.
+- **Bryła (CPU)** albo **Bryła (GPU)**: materiał jest zdejmowany ruch po
+  ruchu. Projekty 2D zawsze dostają dokładną bryłę liczoną przez procesor —
+  czyste, pionowe ściany. Przy obróbce 3D i bardzo gęstych programach, gdy
+  **Widok → Symulacja materiału na karcie graficznej (GPU)** jest włączona
+  (domyślnie), robi to karta graficzna i działa płynnie przy każdej wielkości
+  programu; bez niej procesor liczy dokładną bryłę — wolno przy gęstym
+  wykańczaniu 3D.
 - **Ścieżki**: model docelowy, wykonane ruchy w kolorze swojej operacji,
   obrabiana warstwa na żółto, a przyszłe ruchy przyciemnione. Natychmiast przy
-  każdej wielkości; pokazuje tylko bieżącą operację.
+  każdej wielkości. Zakończone operacje zostają widoczne; tylko podczas
+  operacji 3D wcześniejsze operacje 3D są ukryte (zgrubna nie zasłania
+  wykańczającej).
 
 [![Symulacja 3D na karcie graficznej]({{ img }}sim3d.png)]({{ img }}sim3d.png)
 
