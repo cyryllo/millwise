@@ -1,5 +1,6 @@
 //! Test kompletności tłumaczeń: każdy napis w `tr!("…")` w kodzie programu
-//! musi mieć wpis w słowniku angielskim, z tymi samymi miejscami na wartości.
+//! musi mieć wpis w słownikach angielskim i chińskim, z tymi samymi miejscami
+//! na wartości.
 
 #[cfg(test)]
 mod tests {
@@ -71,14 +72,17 @@ mod tests {
     }
 
     #[test]
-    fn every_translated_text_has_an_english_entry() {
+    fn every_translated_text_has_entries_in_all_dictionaries() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
         let mut files = Vec::new();
         rust_files(&root.join("app/src"), &mut files);
         for c in ["cam-io", "cam-ops", "cam-post", "cam-sim", "cam-geom"] {
             rust_files(&root.join("crates").join(c).join("src"), &mut files);
         }
-        let en: HashMap<String, String> = serde_json::from_str(cam_i18n::EN_JSON).unwrap();
+        let dictionaries: [(&str, HashMap<String, String>); 2] = [
+            ("en", serde_json::from_str(cam_i18n::EN_JSON).unwrap()),
+            ("zh", serde_json::from_str(cam_i18n::ZH_JSON).unwrap()),
+        ];
         let mut missing = Vec::new();
         let mut checked = 0;
         for f in files {
@@ -98,13 +102,19 @@ mod tests {
                 let Some(lit) = trimmed.strip_prefix('"') else { continue };
                 let Some(key) = parse_literal(lit) else { continue };
                 checked += 1;
-                match en.get(&key) {
-                    None => missing.push(format!("{}: brak tłumaczenia: {key:?}", f.display())),
-                    Some(v) if placeholders(v) != placeholders(&key) => {
-                        missing.push(format!("{}: inne miejsca na wartości: {key:?} → {v:?}", f.display()))
+                for (name, dict) in &dictionaries {
+                    match dict.get(&key) {
+                        None => missing.push(format!("{} [{}]: brak tłumaczenia: {key:?}", f.display(), name)),
+                        Some(v) if placeholders(v) != placeholders(&key) => missing.push(format!(
+                            "{} [{}]: inne miejsca na wartości: {key:?} → {v:?}",
+                            f.display(),
+                            name
+                        )),
+                        Some(v) if v.trim().is_empty() => {
+                            missing.push(format!("{} [{}]: puste tłumaczenie: {key:?}", f.display(), name))
+                        }
+                        _ => {}
                     }
-                    Some(v) if v.trim().is_empty() => missing.push(format!("{}: puste tłumaczenie: {key:?}", f.display())),
-                    _ => {}
                 }
             }
         }

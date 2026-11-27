@@ -28,6 +28,27 @@ pub static FIRST_FRAME: AtomicBool = AtomicBool::new(false);
 /// Zmienna środowiskowa dziecka uruchomionego ponownie z OpenGL (żeby nie zapętlić).
 const FALLBACK_ENV: &str = "MILLWISE_GL_FALLBACK";
 
+/// Wbudowane fonty egui nie zawierają glyfów CJK. Dokładamy chiński font jako
+/// ostatni zapasowy dla obu rodzin, żeby napisy po chińsku się nie zamieniały
+/// w kwadraty. Font jest podzbiorem Noto Sans CJK SC (licencja w OFL.txt).
+fn add_cjk_font(cc: &eframe::CreationContext<'_>) {
+    use eframe::egui::{FontData, FontFamily, FontInsert, FontPriority, InsertFontFamily};
+    cc.egui_ctx.add_font(FontInsert::new(
+        "Millwise CJK",
+        FontData::from_static(include_bytes!("../../assets/fonts/millwise-cjk-subset.otf")),
+        vec![
+            InsertFontFamily {
+                family: FontFamily::Proportional,
+                priority: FontPriority::Lowest,
+            },
+            InsertFontFamily {
+                family: FontFamily::Monospace,
+                priority: FontPriority::Lowest,
+            },
+        ],
+    ));
+}
+
 /// Wybór grafiki (wgpu): `--gl` / `--vulkan`, potem zapamiętany wybór, potem
 /// sterownik NVIDIA → OpenGL (Vulkan na NVIDIA pod Linuksem często nie otwiera okna).
 /// Zmienna WGPU_BACKEND ustawiona przez użytkownika ma pierwszeństwo.
@@ -113,7 +134,14 @@ fn main() -> eframe::Result<()> {
         ..Default::default()
     };
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-        eframe::run_native("Millwise", options, Box::new(move |cc| Ok(Box::new(app::CamApp::new(cc, files)))))
+        eframe::run_native(
+            "Millwise",
+            options,
+            Box::new(move |cc| {
+                add_cjk_font(cc);
+                Ok(Box::new(app::CamApp::new(cc, files)))
+            }),
+        )
     }));
     let failed_before_window = !FIRST_FRAME.load(Ordering::SeqCst) && !matches!(result, Ok(Ok(())));
     if failed_before_window {
