@@ -1,6 +1,6 @@
 # <img src="assets/icon/millwise.svg" width="48" alt="" align="center"> Millwise
 
-**English:** [README.md](README.md) · **Zmiany:** [CHANGELOG.md](CHANGELOG.md) · **Dla programistów:** [DEVELOPMENT.md](DEVELOPMENT.md)
+**中文:** [README_zh.md](README_zh.md) · **English:** [README.md](README.md) · **Zmiany:** [CHANGELOG.md](CHANGELOG.md) · **Dla programistów:** [DEVELOPMENT.md](DEVELOPMENT.md)
 
 > **Wczesny etap rozwoju — wersja testowa.** Millwise jest na wczesnym etapie
 > (wersja 0.8.1) i zmienia się codziennie. Pierwsze próby jego G-code na
@@ -14,7 +14,7 @@ Millwise to darmowy program CAM dla 3-osiowych frezarek CNC. Z rysunków DXF,
 modeli STL i zdjęć (jako płaskorzeźby) tworzy ścieżki narzędzia i zapisuje
 G-code dla **GRBL / FluidNC** oraz **LinuxCNC**. Jest napisany w Rust i działa
 na Linuksie (wersji dla Windows na razie nie planujemy). Interfejs jest po
-polsku i po angielsku.
+chińsku, polsku i po angielsku.
 
 **Strona i instrukcja obsługi z obrazkami:** https://cyryllo.github.io/millwise/pl/
 

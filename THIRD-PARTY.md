@@ -7,6 +7,10 @@ Pełne teksty licencji znajdują się w repozytoriach bibliotek.
 Wbudowane czcionki interfejsu (egui / epaint_default_fonts): Ubuntu Font Licence 1.0,
 SIL Open Font License 1.1 (Hack, Noto Emoji, emoji-icon-font).
 
+Wbudowany chiński font interfejsu (`assets/fonts/millwise-cjk-subset.otf`):
+podzbiór Noto Sans CJK SC zawierający znaki używane w tłumaczeniach,
+SIL Open Font License 1.1 (pełna licencja: `assets/fonts/OFL.txt`).
+
 Liczba bibliotek: 418
 
 | Biblioteka | Wersja | Licencja | Źródło |

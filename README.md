@@ -1,6 +1,6 @@
 # <img src="assets/icon/millwise.svg" width="48" alt="" align="center"> Millwise
 
-**Po polsku:** [README_pl.md](README_pl.md) · **Changes:** [CHANGELOG.md](CHANGELOG.md) · **For developers:** [DEVELOPMENT.md](DEVELOPMENT.md)
+**中文:** [README_zh.md](README_zh.md) · **Po polsku:** [README_pl.md](README_pl.md) · **Changes:** [CHANGELOG.md](CHANGELOG.md) · **For developers:** [DEVELOPMENT.md](DEVELOPMENT.md)
 
 > **Early development — a test version.** Millwise is at an early stage
 > (version 0.8.1) and changes every day. First runs of its G-code on a real
@@ -14,7 +14,7 @@ Millwise is a free CAM program for 3-axis CNC routers and mills. It turns DXF
 drawings, STL models and photos (as reliefs) into toolpaths and writes G-code
 for **GRBL / FluidNC** and **LinuxCNC**. It is written in Rust and runs on
 Linux (a Windows version is not planned for now). The user interface is in
-Polish and English.
+Chinese, Polish and English.
 
 **Website and user guide with pictures:** https://cyryllo.github.io/millwise/
 
